@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:waas/widget/main_page.dart';
 import 'package:waas/widget/signup_page.dart';
+import 'package:waas/assets/constants.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -14,7 +15,7 @@ class LoginPage extends StatefulWidget {
 class _LoginPageState extends State<LoginPage> {
   final TextEditingController emailController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
-  bool _isLoading = false; 
+  bool _isLoading = false;
 
   Future<void> login() async {
     if (emailController.text.trim().isEmpty ||
@@ -26,13 +27,13 @@ class _LoginPageState extends State<LoginPage> {
     }
 
     setState(() {
-      _isLoading = true; 
+      _isLoading = true;
     });
 
     try {
       print('Attempting login with email: ${emailController.text.trim()}');
       final response = await http.post(
-        Uri.parse('http://192.168.164.53:3000/login'),
+        Uri.parse('$apiBaseUrl/login'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'email': emailController.text.trim(),
@@ -87,9 +88,8 @@ class _LoginPageState extends State<LoginPage> {
             decoration: const BoxDecoration(
               image: DecorationImage(
                 image: AssetImage('lib/assets/bin_funny.webp'),
-                fit:
-                    BoxFit.cover,
-                opacity: 0.7, 
+                fit: BoxFit.cover,
+                opacity: 0.7,
               ),
             ),
           ),

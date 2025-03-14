@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:waas/widget/login.dart';
+import 'package:waas/assets/constants.dart';
 import 'dart:convert';
 
 class SignUpPage extends StatefulWidget {
@@ -19,24 +20,6 @@ class _SignUpPageState extends State<SignUpPage> {
   bool _isLoading = false;
 
   Future<void> signUp() async {
-    if (emailController.text.trim().isEmpty ||
-        passwordController.text.trim().isEmpty ||
-        confirmPasswordController.text.trim().isEmpty ||
-        nameController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please fill in all fields')),
-      );
-      return;
-    }
-
-    if (passwordController.text.trim() !=
-        confirmPasswordController.text.trim()) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Passwords do not match')));
-      return;
-    }
-
     setState(() {
       _isLoading = true;
     });
@@ -44,7 +27,7 @@ class _SignUpPageState extends State<SignUpPage> {
     try {
       print('Attempting signup with email: ${emailController.text.trim()}');
       final response = await http.post(
-        Uri.parse('http://192.168.164.53:3000/signup'),
+        Uri.parse('$apiBaseUrl/signup'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'name': nameController.text.trim(),
@@ -67,17 +50,20 @@ class _SignUpPageState extends State<SignUpPage> {
           MaterialPageRoute(builder: (context) => const LoginPage()),
         );
       } else {
-        final errorMessage =
-            jsonDecode(response.body)['message'] ?? 'Signup failed';
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(errorMessage)));
+        // Handle non-JSON responses
+        if (response.headers['content-type']?.contains('text/html') == true) {
+          throw Exception('Server error: ${response.body}');
+        } else {
+          final errorMessage =
+              jsonDecode(response.body)['message'] ?? 'Signup failed';
+          throw Exception(errorMessage);
+        }
       }
     } catch (e) {
       print('Error during signup: $e');
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('Network error: $e')));
+      ).showSnackBar(SnackBar(content: Text('Signup failed: $e')));
     } finally {
       if (mounted) {
         setState(() {

@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:waas/widget/main_page.dart';
+import 'package:waas/widget/login.dart';
 import 'colors/colors.dart';
 
 void main() {
   runApp(const MyApp());
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatelessWidget{
   const MyApp({super.key});
 
   @override
@@ -45,7 +45,7 @@ class MyApp extends StatelessWidget {
           ),
         ),
       ),
-      home: MainPage(email: 'user@example.com'), // Replace with your home page
+      home: LoginPage(), 
     );
   }
 }

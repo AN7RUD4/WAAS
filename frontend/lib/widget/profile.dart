@@ -67,7 +67,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
             // Change Password Button
             ElevatedButton(
-              style: ButtonStyle(),//backgroundColor: AppColors.backgroundColor),
+              style: ButtonStyle(),
               onPressed: () {
                 Navigator.push(
                   context,
@@ -80,7 +80,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
             // View Report History Button
             ElevatedButton(
-              style: ButtonStyle(),//backgroundColor:AppColors.backgroundColor),
+              style: ButtonStyle(),
               onPressed: () {
                 Navigator.push(
                   context,
