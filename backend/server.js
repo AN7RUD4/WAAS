@@ -22,8 +22,8 @@ app.use('/uploads', express.static('uploads'));
 
 // Initialize PostgreSQL pool
 const pool = new Pool({
-    connectionString: process.env.DATABASE_URL, // Use your PostgreSQL connection string
-    ssl: { rejectUnauthorized: false }, // Required for Render or other cloud services
+    connectionString: process.env.DATABASE_URL, 
+    ssl: { rejectUnauthorized: false }, 
 });
 
 // Test database connection
