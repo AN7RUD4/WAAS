@@ -15,24 +15,29 @@ app.use(cors());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
+const { Pool } = require('pg');
+const port = process.env.PORT || 5000;
+
 // Serve uploaded images statically
 app.use("/uploads", express.static("uploads"));
 
-const db = mysql.createPool({
-    host: 'localhost',
-    user: 'root',
-    password: 'Anusucha@01',
-    database: 'WasteManagementDB'
+
+const pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: { rejectUnauthorized: false }  
 });
 
-db.getConnection((err, connection) => {
-    if (err) {
-        console.error('Database connection failed:', err);
-        return;
+
+app.get('/test-db', async (req, res) => {
+    try {
+        const result = await pool.query('SELECT NOW()');
+        res.json({ message: 'Database connected!', time: result.rows[0].now });
+    } catch (error) {
+        console.error('Database connection error:', error);
+        res.status(500).json({ error: 'Database connection failed' });
     }
-    console.log('Connected to MySQL database');
-    connection.release();
 });
+
 
 app.post('/login', (req, res) => {
     const { email, password } = req.body;
