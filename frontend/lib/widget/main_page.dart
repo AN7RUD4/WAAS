@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:user_samp/user/home_page.dart';
-import 'package:user_samp/widget/bottom_nav.dart';
-import 'package:user_samp/widget/profile.dart';
-import 'package:user_samp/worker/home_worker.dart';
-import 'package:user_samp/worker/pick_map.dart';
+import 'package:waas/user/home_page.dart';
+import 'package:waas/widget/bottom_nav.dart';
+import 'package:waas/widget/profile.dart';
+import 'package:waas/worker/home_worker.dart';
+import 'package:waas/worker/pick_map.dart';
 
 class MainPage extends StatelessWidget {
   final String email; // Add email parameter

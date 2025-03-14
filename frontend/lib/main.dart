@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:user_samp/widget/main_page.dart';
+import 'package:waas/widget/main_page.dart';
 import 'colors/colors.dart';
 
 void main() {

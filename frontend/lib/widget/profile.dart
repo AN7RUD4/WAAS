@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:user_samp/colors/colors.dart';
+import 'package:waas/colors/colors.dart';
 
 class ProfilePage extends StatefulWidget {
   @override
