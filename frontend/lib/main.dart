@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'user/main_page.dart';
+import 'package:user_samp/widget/main_page.dart';
+import 'colors/colors.dart';
 
 void main() {
   runApp(const MyApp());
@@ -11,97 +12,40 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Login Page',
+      title: 'Waste Management App',
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-        useMaterial3: true,
+        primaryColor: AppColors.primaryColor,
+        colorScheme: ColorScheme.light(
+          primary: AppColors.primaryColor,
+          secondary: AppColors.secondaryColor,
+          background: AppColors.backgroundColor,
+          onBackground: AppColors.textColor,
+          error: AppColors.errorColor,
+        ),
+        appBarTheme: const AppBarTheme(
+          backgroundColor: AppColors.backgroundColor,
+          foregroundColor: AppColors.textColor,
+          elevation: 0,
+        ),
+        textTheme: const TextTheme(
+          bodyLarge: TextStyle(color: AppColors.textColor),
+          bodyMedium: TextStyle(color: AppColors.textColor),
+          titleLarge: TextStyle(
+            color: AppColors.textColor,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.secondaryColor, // Blue
+            foregroundColor: Colors.white, // White text
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+        ),
       ),
-      home: const LoginPage(),
+      home: MainPage(email: 'user@example.com'), // Replace with your home page
     );
   }
 }
-
-class LoginPage extends StatelessWidget {
-  const LoginPage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final size = MediaQuery.of(context).size;
-
-    return Scaffold(
-      body: Stack(
-        children: [
-          Positioned.fill(
-            child: Image.asset(
-              'lib/assets/waas_img2.png', // Replace with your image path
-              fit: BoxFit.cover,
-            ),
-          ),
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20.0),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    'Waste Alert Accumulation System',
-                    style: TextStyle(
-                      fontSize: 28,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white, // Adjust for visibility
-                    ),
-                  ),
-                  const SizedBox(height: 30),
-                  Container(
-                    padding: EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: Colors.white
-                          .withOpacity(0.8), // Semi-transparent background
-                      borderRadius: BorderRadius.circular(15),
-                    ),
-                    child: Column(
-                      children: [
-                        TextField(
-                          decoration: InputDecoration(
-                            labelText: 'Email',
-                            border: OutlineInputBorder(),
-                            prefixIcon: Icon(Icons.email),
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-                        TextField(
-                          obscureText: true,
-                          decoration: InputDecoration(
-                            labelText: 'Password',
-                            border: OutlineInputBorder(),
-                            prefixIcon: Icon(Icons.lock),
-                          ),
-                        ),
-                        const SizedBox(height: 30),
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            onPressed: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(builder: (context) =>  MainPage()),
-                              );
-                              // Handle login logic here
-                            },
-                            child: Text('Login'),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-
