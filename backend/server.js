@@ -38,7 +38,7 @@ app.get('/test-db', async (req, res) => {
 });
 
 // Login endpoint
-app.post('/login', async (req, res) => {
+app.post('/api/login', async (req, res) => {
     const { email, password } = req.body;
 
     // Validate input
@@ -72,7 +72,7 @@ app.post('/login', async (req, res) => {
 });
 
 // Signup endpoint
-app.post('/signup', async (req, res) => {
+app.post('api/signup', async (req, res) => {
     console.log('Signup request received:', req.body);
 
     const { name, email, password } = req.body;

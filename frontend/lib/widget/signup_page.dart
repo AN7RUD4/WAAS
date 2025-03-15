@@ -27,7 +27,9 @@ class _SignUpPageState extends State<SignUpPage> {
     try {
       print('Attempting signup with email: ${emailController.text.trim()}');
       final response = await http.post(
-        Uri.parse('$apiBaseUrl/signup'),
+        Uri.parse(
+          "postgresql://postgres.hrzroqrgkvzhomsosqzl:7H.6k2wS*F\$q2zY@aws-0-ap-south-1.pooler.supabase.com:6543/postgres/api/signup",
+        ),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'name': nameController.text.trim(),
