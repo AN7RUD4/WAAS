@@ -14,8 +14,7 @@ class SignUpPage extends StatefulWidget {
 class _SignUpPageState extends State<SignUpPage> {
   final TextEditingController emailController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
-  final TextEditingController confirmPasswordController =
-      TextEditingController();
+  final TextEditingController confirmPasswordController = TextEditingController();
   final TextEditingController nameController = TextEditingController();
   bool _isLoading = false;
 
@@ -25,17 +24,18 @@ class _SignUpPageState extends State<SignUpPage> {
     });
 
     try {
+      Map<String, dynamic> jsonData = {
+        'name': nameController.text.trim(),
+        'email': emailController.text.trim(),
+        'password': passwordController.text.trim(),
+      };
       print('Attempting signup with email: ${emailController.text.trim()}');
       final response = await http.post(
         Uri.parse(
-          "postgresql://postgres.hrzroqrgkvzhomsosqzl:7H.6k2wS*F\$q2zY@aws-0-ap-south-1.pooler.supabase.com:6543/postgres/api/signup",
+          '$apiBaseUrl/signup'
         ),
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'name': nameController.text.trim(),
-          'email': emailController.text.trim(),
-          'password': passwordController.text.trim(),
-        }),
+        body: jsonEncode(jsonData),
       );
 
       print('Response status: ${response.statusCode}');

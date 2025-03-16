@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:waas/widget/login.dart';
+import 'package:waas/widget/signup_page.dart';
 import 'colors/colors.dart';
 
 void main() {
   runApp(const MyApp());
 }
 
-class MyApp extends StatelessWidget{
+class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
   @override
@@ -45,7 +46,12 @@ class MyApp extends StatelessWidget{
           ),
         ),
       ),
-      home: LoginPage(), 
+      home: LoginPage(),
+
+      routes: {
+        '/signup': (context) => SignUpPage(),
+        '/login': (context) => LoginPage(),
+      },
     );
   }
 }

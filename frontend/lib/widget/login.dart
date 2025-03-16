@@ -16,6 +16,7 @@ class _LoginPageState extends State<LoginPage> {
   final TextEditingController emailController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
   bool _isLoading = false;
+  var temp;
 
   Future<void> login() async {
     if (emailController.text.trim().isEmpty ||
@@ -31,14 +32,15 @@ class _LoginPageState extends State<LoginPage> {
     });
 
     try {
+      Map<String, dynamic> jsonData = {
+        'email': emailController.text.trim(),
+        'password': passwordController.text.trim(),
+      };
       print('Attempting login with email: ${emailController.text.trim()}');
       final response = await http.post(
         Uri.parse('$apiBaseUrl/login'),
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'email': emailController.text.trim(),
-          'password': passwordController.text.trim(),
-        }),
+        body: jsonEncode(jsonData),
       );
 
       print('Response status: ${response.statusCode}');
