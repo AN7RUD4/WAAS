@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:waas/widget/main_page.dart';
-import 'package:waas/widget/signup_page.dart';
+// import 'package:waas/widget/signup_page.dart';
 import 'package:waas/assets/constants.dart';
 
 class LoginPage extends StatefulWidget {
@@ -169,7 +169,7 @@ class _LoginPageState extends State<LoginPage> {
                     const SizedBox(height: 20),
                     TextButton(
                       onPressed: () {
-                        Navigator.of(context).pushReplacementNamed('/Signup');
+                        Navigator.of(context).pushReplacementNamed('/signup');
                       },
                       child: const Text(
                         "Don't have an account? Sign Up",

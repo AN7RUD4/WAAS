@@ -1,6 +1,7 @@
-// app.js
+// server.js
 const express = require('express');
 const authRouter = require('./routes/auth');
+const cors = require('cors');
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -8,6 +9,12 @@ const port = process.env.PORT || 5000;
 // Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(cors()); 
+
+// Root route for testing
+app.get('/', (req, res) => {
+  res.json({ message: 'Server is running' });
+});
 
 // Routes
 app.use('/api', authRouter);

@@ -15,7 +15,8 @@ class _SignUpPageState extends State<SignUpPage> {
   final _formKey = GlobalKey<FormState>();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-  final TextEditingController _confirmPasswordController = TextEditingController();
+  final TextEditingController _confirmPasswordController =
+      TextEditingController();
   final TextEditingController _nameController = TextEditingController();
   bool _isLoading = false;
 
@@ -26,7 +27,7 @@ class _SignUpPageState extends State<SignUpPage> {
 
     try {
       final response = await http.post(
-        Uri.parse('$apiBaseUrl/api/signup'),
+        Uri.parse('https://waas-9pr6.onrender.com/api/signup'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'name': _nameController.text.trim(),
@@ -50,9 +51,9 @@ class _SignUpPageState extends State<SignUpPage> {
         throw Exception(responseData['message'] ?? 'Signup failed');
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Signup failed: ${e.toString()}')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Signup failed: ${e.toString()}')));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -86,9 +87,13 @@ class _SignUpPageState extends State<SignUpPage> {
                         const SizedBox(height: 20),
                         TextFormField(
                           controller: _nameController,
-                          decoration: _inputDecoration('Full Name', Icons.person),
-                          validator: (value) =>
-                              value!.isEmpty ? 'Name is required' : null,
+                          decoration: _inputDecoration(
+                            'Full Name',
+                            Icons.person,
+                          ),
+                          validator:
+                              (value) =>
+                                  value!.isEmpty ? 'Name is required' : null,
                         ),
                         const SizedBox(height: 20),
                         TextFormField(
@@ -108,16 +113,23 @@ class _SignUpPageState extends State<SignUpPage> {
                           controller: _passwordController,
                           obscureText: true,
                           decoration: _inputDecoration('Password', Icons.lock),
-                          validator: (value) =>
-                              value!.isEmpty ? 'Password is required' : null,
+                          validator:
+                              (value) =>
+                                  value!.isEmpty
+                                      ? 'Password is required'
+                                      : null,
                         ),
                         const SizedBox(height: 20),
                         TextFormField(
                           controller: _confirmPasswordController,
                           obscureText: true,
-                          decoration: _inputDecoration('Confirm Password', Icons.lock),
+                          decoration: _inputDecoration(
+                            'Confirm Password',
+                            Icons.lock,
+                          ),
                           validator: (value) {
-                            if (value!.isEmpty) return 'Please confirm password';
+                            if (value!.isEmpty)
+                              return 'Please confirm password';
                             if (value != _passwordController.text) {
                               return 'Passwords do not match';
                             }
@@ -136,22 +148,23 @@ class _SignUpPageState extends State<SignUpPage> {
                                 borderRadius: BorderRadius.circular(15),
                               ),
                             ),
-                            child: _isLoading
-                                ? const SizedBox(
-                                    width: 20,
-                                    height: 20,
-                                    child: CircularProgressIndicator(
-                                      color: Colors.white,
-                                      strokeWidth: 2,
+                            child:
+                                _isLoading
+                                    ? const SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                        color: Colors.white,
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                    : const Text(
+                                      'Sign Up',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white,
+                                      ),
                                     ),
-                                  )
-                                : const Text(
-                                    'Sign Up',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.white,
-                                    ),
-                                  ),
                           ),
                         ),
                         const SizedBox(height: 20),
@@ -159,7 +172,9 @@ class _SignUpPageState extends State<SignUpPage> {
                           onPressed: () {
                             Navigator.pushReplacement(
                               context,
-                              MaterialPageRoute(builder: (context) => const LoginPage()),
+                              MaterialPageRoute(
+                                builder: (context) => const LoginPage(),
+                              ),
                             );
                           },
                           child: const Text(
@@ -182,9 +197,7 @@ class _SignUpPageState extends State<SignUpPage> {
   InputDecoration _inputDecoration(String label, IconData icon) {
     return InputDecoration(
       labelText: label,
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(15),
-      ),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)),
       prefixIcon: Icon(icon),
       filled: true,
       fillColor: Colors.white.withOpacity(0.8),
