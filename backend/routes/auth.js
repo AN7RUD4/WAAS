@@ -5,9 +5,9 @@ const bcryptjs = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const router = express.Router();
 
-// Database configuration
+// Database configuration (Updated to WasteManagementDB)
 const pool = new Pool({
-  connectionString: 'postgresql://postgres.hrzroqrgkvzhomsosqzl:7H.6k2wS*F$q2zY@aws-0-ap-south-1.pooler.supabase.com:6543/postgres',
+  connectionString: 'postgresql://postgres.hrzroqrgkvzhomsosqzl:7H.6k2wS*F$q2zY@aws-0-ap-south-1.pooler.supabase.com:6543/WasteManagementDB',
   ssl: { rejectUnauthorized: false },
 });
 
@@ -30,7 +30,7 @@ router.post('/signup', validateSignup, async (req, res) => {
 
     // Check if user exists
     const existingUser = await pool.query(
-      'SELECT * FROM "users" WHERE email = $1',
+      'SELECT * FROM users WHERE email = $1',
       [email]
     );
 
@@ -41,15 +41,19 @@ router.post('/signup', validateSignup, async (req, res) => {
     // Hash password
     const hashedPassword = await bcryptjs.hash(password, 10);
 
-    // Insert new user
+    // Insert new user (role is required, set to 'user'; location and status are optional)
     const newUser = await pool.query(
-      'INSERT INTO "users" (name, email, password) VALUES ($1, $2, $3) RETURNING id, name, email',
-      [name, email, hashedPassword]
+      'INSERT INTO users (name, email, password, role) VALUES ($1, $2, $3, $4) RETURNING userID, name, email',
+      [name, email, hashedPassword, 'user'] // Default role as 'user'
     );
 
     res.status(201).json({
       message: 'User created successfully',
-      user: newUser.rows[0]
+      user: {
+        id: newUser.rows[0].userID, // Use userID instead of id
+        name: newUser.rows[0].name,
+        email: newUser.rows[0].email
+      }
     });
   } catch (error) {
     console.error('Signup error:', error);
@@ -63,7 +67,7 @@ router.post('/login', async (req, res) => {
     const { email, password } = req.body;
 
     const user = await pool.query(
-      'SELECT * FROM "users" WHERE email = $1',
+      'SELECT * FROM users WHERE email = $1',
       [email]
     );
 
@@ -76,11 +80,15 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ message: 'Invalid credentials' });
     }
 
-    const token = jwt.sign({ id: user.rows[0].id }, process.env.JWT_SECRET || 'passwordKey');
+    const token = jwt.sign(
+      { id: user.rows[0].userID }, // Use userID instead of id
+      process.env.JWT_SECRET || 'passwordKey',
+      { expiresIn: '1h' }
+    );
     res.json({
       token,
       user: {
-        id: user.rows[0].id,
+        id: user.rows[0].userID, // Use userID
         name: user.rows[0].name,
         email: user.rows[0].email
       }
