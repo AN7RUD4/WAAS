@@ -6,7 +6,7 @@ const jwt = require("jsonwebtoken");
 router.post()
 
 // Signup endpoint
-authRouter.post("/api/Signup", async (req, res) => {
+authRouter.post("/signup", async (req, res) => {
     try {
         const { name, username, password } = req.body;
 
@@ -36,7 +36,7 @@ authRouter.post("/api/Signup", async (req, res) => {
 });
 
 // Login endpoint
-authRouter.post("/api/Login", async (req, res) => {
+authRouter.post("/api/login", async (req, res) => {
     try {
         const { username, password } = req.body;
 

@@ -16,7 +16,6 @@ class _LoginPageState extends State<LoginPage> {
   final TextEditingController emailController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
   bool _isLoading = false;
-  var temp;
 
   Future<void> login() async {
     if (emailController.text.trim().isEmpty ||
@@ -170,12 +169,7 @@ class _LoginPageState extends State<LoginPage> {
                     const SizedBox(height: 20),
                     TextButton(
                       onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const SignUpPage(),
-                          ),
-                        );
+                        Navigator.of(context).pushReplacementNamed('/Signup');
                       },
                       child: const Text(
                         "Don't have an account? Sign Up",

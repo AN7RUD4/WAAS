@@ -14,7 +14,8 @@ class SignUpPage extends StatefulWidget {
 class _SignUpPageState extends State<SignUpPage> {
   final TextEditingController emailController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
-  final TextEditingController confirmPasswordController = TextEditingController();
+  final TextEditingController confirmPasswordController =
+      TextEditingController();
   final TextEditingController nameController = TextEditingController();
   bool _isLoading = false;
 
@@ -31,9 +32,7 @@ class _SignUpPageState extends State<SignUpPage> {
       };
       print('Attempting signup with email: ${emailController.text.trim()}');
       final response = await http.post(
-        Uri.parse(
-          '$apiBaseUrl/signup'
-        ),
+        Uri.parse('$apiBaseUrl/signup'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode(jsonData),
       );
@@ -47,10 +46,7 @@ class _SignUpPageState extends State<SignUpPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Account created successfully')),
         );
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => const LoginPage()),
-        );
+        Navigator.of(context).pushReplacementNamed('/Login');
       } else {
         // Handle non-JSON responses
         if (response.headers['content-type']?.contains('text/html') == true) {
