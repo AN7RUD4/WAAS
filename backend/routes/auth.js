@@ -30,7 +30,7 @@ router.post('/signup', validateSignup, async (req, res) => {
 
     // Check if user exists
     const existingUser = await pool.query(
-      'SELECT * FROM "User" WHERE email = $1',
+      'SELECT * FROM "user" WHERE email = $1',
       [email]
     );
 
@@ -43,7 +43,7 @@ router.post('/signup', validateSignup, async (req, res) => {
 
     // Insert new user
     const newUser = await pool.query(
-      'INSERT INTO "User" (name, email, password) VALUES ($1, $2, $3) RETURNING id, name, email',
+      'INSERT INTO "user" (name, email, password) VALUES ($1, $2, $3) RETURNING id, name, email',
       [name, email, hashedPassword]
     );
 
@@ -63,7 +63,7 @@ router.post('/login', async (req, res) => {
     const { email, password } = req.body;
 
     const user = await pool.query(
-      'SELECT * FROM "User" WHERE email = $1',
+      'SELECT * FROM "user" WHERE email = $1',
       [email]
     );
 
