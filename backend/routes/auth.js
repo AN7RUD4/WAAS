@@ -7,7 +7,7 @@ const router = express.Router();
 
 // Database configuration (Updated to WasteManagementDB)
 const pool = new Pool({
-  connectionString: 'postgresql://postgres.hrzroqrgkvzhomsosqzl:7H.6k2wS*F$q2zY@aws-0-ap-south-1.pooler.supabase.com:6543/WasteManagementDB',
+  connectionString: 'postgresql://postgres.hrzroqrgkvzhomsosqzl:7H.6k2wS*F$q2zY@aws-0-ap-south-1.pooler.supabase.com:6543/postgres',
   ssl: { rejectUnauthorized: false },
 });
 
@@ -50,7 +50,7 @@ router.post('/signup', validateSignup, async (req, res) => {
     res.status(201).json({
       message: 'User created successfully',
       user: {
-        id: newUser.rows[0].userID, // Use userID instead of id
+        id: newUser.rows[0].userID,
         name: newUser.rows[0].name,
         email: newUser.rows[0].email
       }
