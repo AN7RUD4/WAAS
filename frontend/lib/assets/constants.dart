@@ -1,1 +1,1 @@
-const apiBaseUrl = 'https://waas-9pr6.onrender.com';
+const apiBaseUrl = 'https://waas-9pr6.onrender.com/api';

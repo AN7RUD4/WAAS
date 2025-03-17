@@ -5,7 +5,6 @@ const bcryptjs = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const router = express.Router();
 
-// Database configuration (Updated to WasteManagementDB)
 const pool = new Pool({
   connectionString: 'postgresql://postgres.hrzroqrgkvzhomsosqzl:7H.6k2wS*F$q2zY@aws-0-ap-south-1.pooler.supabase.com:6543/postgres',
   ssl: { rejectUnauthorized: false },
@@ -38,10 +37,8 @@ router.post('/signup', validateSignup, async (req, res) => {
       return res.status(400).json({ message: 'Email already exists' });
     }
 
-    // Hash password
     const hashedPassword = await bcryptjs.hash(password, 10);
 
-    // Insert new user (role is required, set to 'user'; location and status are optional)
     const newUser = await pool.query(
       'INSERT INTO users (name, email, password, role) VALUES ($1, $2, $3, $4) RETURNING userID, name, email',
       [name, email, hashedPassword, 'user'] // Default role as 'user'
@@ -81,7 +78,7 @@ router.post('/login', async (req, res) => {
     }
 
     const token = jwt.sign(
-      { id: user.rows[0].userID }, // Use userID instead of id
+      { id: user.rows[0].userID },
       process.env.JWT_SECRET || 'passwordKey',
       { expiresIn: '1h' }
     );
