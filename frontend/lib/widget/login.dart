@@ -49,7 +49,7 @@ class _LoginPageState extends State<LoginPage> {
         print('Login successful: $data');
 
         // Save the token to SharedPreferences
-        final token = data['token']; // Assuming the backend returns a 'token' field
+        final token = data['token'];
         if (token != null) {
           final prefs = await SharedPreferences.getInstance();
           await prefs.setString('token', token);
@@ -58,11 +58,13 @@ class _LoginPageState extends State<LoginPage> {
           throw Exception('No token received from server');
         }
 
-        // Navigate to MainPage with userID or email
+        final userID = data['users']?['userID'] as int? ?? (throw Exception('No userID in response'));
+        final role = data['users']?['role'] as String? ?? (throw Exception('No role in response'));
+
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
-            builder: (context) => MainPage( userID: data['user']['userID'], role: data['user']['role']),
+            builder: (context) => MainPage( userID: userID, role: role),
           ),
         );
       } else {
@@ -151,12 +153,12 @@ class _LoginPageState extends State<LoginPage> {
                                 ),
                               )
                             : const Text(
-                                  'Login',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white,
-                                  ),
+                                'Login',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
                                 ),
+                              ),
                       ),
                     ),
                     const SizedBox(height: 20),

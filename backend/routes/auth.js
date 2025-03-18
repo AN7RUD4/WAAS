@@ -122,7 +122,7 @@ router.post('/login', validateLogin, async (req, res) => {
     }
 
     const token = jwt.sign(
-      { userID: user.userID, email: user.email }, // Use userID instead of id
+      { userID: user.userID, email: user.email }, 
       process.env.JWT_SECRET || 'passwordKey',
       { expiresIn: '1h' }
     );

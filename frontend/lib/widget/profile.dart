@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:waas/assets/constants.dart';
 import 'package:waas/colors/colors.dart';
 
 class ProfilePage extends StatefulWidget {
@@ -52,7 +53,7 @@ class _ProfilePageState extends State<ProfilePage>
       if (token == null) throw Exception('No token found');
 
       final response = await http.get(
-        Uri.parse('http://192.168.164.53:3000/api/profile/${widget.userID}'),
+        Uri.parse('$apiBaseUrl/profile/${widget.userID}'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
@@ -284,7 +285,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
       if (token == null) throw Exception('No token found');
 
       final response = await http.put(
-        Uri.parse('http://192.168.164.53:3000/api/profile/updateProfile'),
+        Uri.parse('$apiBaseUrl/profile/updateProfile'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
@@ -433,7 +434,7 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
       if (token == null) throw Exception('No token found');
 
       final response = await http.put(
-        Uri.parse('http://192.168.164.53:3000/api/profile/changePassword'),
+        Uri.parse('$apiBaseUrl/profile/changePassword'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',

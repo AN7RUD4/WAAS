@@ -27,7 +27,7 @@ class _SignUpPageState extends State<SignUpPage> {
 
     try {
       final response = await http.post(
-        Uri.parse('https://waas-9pr6.onrender.com/api/signup'),
+        Uri.parse('$apiBaseUrl/signup'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'name': _nameController.text.trim(),
