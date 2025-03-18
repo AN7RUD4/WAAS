@@ -18,8 +18,7 @@ class _LoginPageState extends State<LoginPage> {
   bool _isLoading = false;
 
   Future<void> login() async {
-    if (emailController.text.trim().isEmpty ||
-        passwordController.text.trim().isEmpty) {
+    if (emailController.text.trim().isEmpty || passwordController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please enter both email and password')),
       );
@@ -59,12 +58,11 @@ class _LoginPageState extends State<LoginPage> {
           throw Exception('No token received from server');
         }
 
-        final userID =
-            data['users']?['userid'] as int? ??
-            (throw Exception('No userID in response'));
-        final role =
-            data['users']?['role'] as String? ??
-            (throw Exception('No role in response'));
+        // Extract userid and role from the 'user' object
+        final user = data['user'];
+        if (user == null) throw Exception('No user data in response');
+        final userID = user['userid'] as int? ?? (throw Exception('No userid in response')); // Use 'userid' (lowercase)
+        final role = user['role'] as String? ?? (throw Exception('No role in response'));
 
         Navigator.pushReplacement(
           context,
@@ -73,17 +71,12 @@ class _LoginPageState extends State<LoginPage> {
           ),
         );
       } else {
-        final errorMessage =
-            jsonDecode(response.body)['message'] ?? 'Login failed';
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(errorMessage)));
+        final errorMessage = jsonDecode(response.body)['message'] ?? 'Login failed';
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(errorMessage)));
       }
     } catch (e) {
       print('Error during login: $e');
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Network error: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Network error: $e')));
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -153,23 +146,22 @@ class _LoginPageState extends State<LoginPage> {
                             borderRadius: BorderRadius.circular(15),
                           ),
                         ),
-                        child:
-                            _isLoading
-                                ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                    color: Colors.white,
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                                : const Text(
-                                  'Login',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white,
-                                  ),
+                        child: _isLoading
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                  strokeWidth: 2,
                                 ),
+                              )
+                            : const Text(
+                                'Login',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
+                              ),
                       ),
                     ),
                     const SizedBox(height: 20),

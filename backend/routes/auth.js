@@ -107,7 +107,7 @@ router.post('/login', validateLogin, async (req, res) => {
     const { email, password } = req.body;
 
     const userResult = await client.query(
-      'SELECT userID, name, email, password FROM users WHERE email = $1',
+      'SELECT userid, name, email, password, role FROM users WHERE email = $1',
       [email]
     );
 
@@ -122,22 +122,25 @@ router.post('/login', validateLogin, async (req, res) => {
     }
 
     const token = jwt.sign(
-      { userID: user.userID, email: user.email }, 
+      { userid: user.userid, email: user.email }, // Use 'userid' to match database
       process.env.JWT_SECRET || 'passwordKey',
       { expiresIn: '1h' }
     );
 
     await client.query('COMMIT');
 
-    res.json({
+    const responseData = {
       message: 'Login successful',
       token,
       user: {
-        userID: user.userID,
+        userid: user.userid, // Use 'userid' to match database
         name: user.name,
-        email: user.email
+        email: user.email,
+        role: user.role // Ensure role is included if it exists
       }
-    });
+    };
+    console.log('Login response:', responseData);
+    res.json(responseData);
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('Login error:', error.message);
@@ -147,7 +150,6 @@ router.post('/login', validateLogin, async (req, res) => {
   }
 });
 
-// Profile endpoint (protected by JWT)
 router.get('/profile/:userID', authenticateToken, async (req, res) => {
   const client = await pool.connect();
   try {
@@ -155,7 +157,7 @@ router.get('/profile/:userID', authenticateToken, async (req, res) => {
 
     const { userID } = req.params;
     const user = await client.query(
-      'SELECT userID, name, email FROM users WHERE userID = $1',
+      'SELECT userid, name, email FROM users WHERE userid = $1', // Use 'userid'
       [userID]
     );
 
@@ -167,7 +169,7 @@ router.get('/profile/:userID', authenticateToken, async (req, res) => {
 
     res.status(200).json({
       user: {
-        userID: user.rows[0].userID,
+        userid: user.rows[0].userid, // Use 'userid'
         name: user.rows[0].name,
         email: user.rows[0].email
       }
@@ -183,7 +185,7 @@ router.get('/profile/:userID', authenticateToken, async (req, res) => {
 
 // Add CORS configuration
 router.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*'); // Adjust for production (e.g., specific origin)
+  res.header('Access-Control-Allow-Origin', '*'); 
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE');
   res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   next();
