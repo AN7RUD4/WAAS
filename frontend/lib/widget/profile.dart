@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:waas/assets/constants.dart';
 import 'package:waas/colors/colors.dart';
+// import 'package:waas/widget/settings_page.dart'; // Create this new page
 
 class ProfilePage extends StatefulWidget {
   final int userID;
@@ -17,6 +18,8 @@ class _ProfilePageState extends State<ProfilePage>
     with SingleTickerProviderStateMixin {
   String name = "Username";
   String email = "username@example.com";
+  String? profileImageUrl =
+      'https://via.placeholder.com/150'; // Placeholder image
   bool _isLoading = false;
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
@@ -63,182 +66,259 @@ class _ProfilePageState extends State<ProfilePage>
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         setState(() {
-          name = data['user']['name'];
-          email = data['user']['email'];
+          name = data['user']['name'] ?? 'Username';
+          email = data['user']['email'] ?? 'username@example.com';
+          // Assuming backend could return a profile image URL in the future
+          profileImageUrl = data['user']['profileImageUrl'] ?? profileImageUrl;
         });
         _animationController.forward();
       } else {
         throw Exception('Failed to load profile: ${response.body}');
       }
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(e.toString())));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
+      );
     } finally {
       setState(() => _isLoading = false);
     }
   }
 
+  Future<void> _logout() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('token');
+    Navigator.pushReplacementNamed(context, '/login'); // Navigate to LoginPage
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text(
-          'Profile',
-          style: TextStyle(
-            fontSize: 24,
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
+      body: Stack(
+        children: [
+          // Background with gradient
+          Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [AppColors.primaryColor, Colors.blueAccent],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+            ),
           ),
-        ),
-        backgroundColor: AppColors.primaryColor,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh, color: Colors.white),
-            onPressed: _fetchProfile,
-          ),
-        ],
-      ),
-      body:
           _isLoading
               ? const Center(
-                child: CircularProgressIndicator(color: AppColors.primaryColor),
+                child: CircularProgressIndicator(
+                  color: Colors.white,
+                  strokeWidth: 3,
+                ),
               )
-              : FadeTransition(
-                opacity: _fadeAnimation,
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: SingleChildScrollView(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Card(
-                          elevation: 4,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
+              : SingleChildScrollView(
+                child: Column(
+                  children: [
+                    // Profile Header
+                    Container(
+                      padding: const EdgeInsets.all(20.0),
+                      child: Column(
+                        children: [
+                          GestureDetector(
+                            onTap: () {
+                              // TODO: Implement image upload functionality
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Image upload coming soon!'),
+                                ),
+                              );
+                            },
+                            child: CircleAvatar(
+                              radius: 60,
+                              backgroundImage: NetworkImage(profileImageUrl!),
+                              child: const Icon(
+                                Icons.camera_alt,
+                                size: 30,
+                                color: Colors.white,
+                              ),
+                            ),
                           ),
-                          child: Column(
-                            children: [
-                              ListTile(
-                                leading: const Icon(
-                                  Icons.person,
-                                  color: AppColors.primaryColor,
-                                ),
-                                title: const Text(
-                                  "Name",
-                                  style: TextStyle(color: AppColors.textColor),
-                                ),
-                                subtitle: Text(
-                                  name,
-                                  style: const TextStyle(
-                                    fontSize: 18,
-                                    color: AppColors.textColor,
-                                  ),
-                                ),
-                              ),
-                              const Divider(),
-                              ListTile(
-                                leading: const Icon(
-                                  Icons.email,
-                                  color: AppColors.primaryColor,
-                                ),
-                                title: const Text(
-                                  "Email",
-                                  style: TextStyle(color: AppColors.textColor),
-                                ),
-                                subtitle: Text(
-                                  email,
-                                  style: const TextStyle(
-                                    fontSize: 18,
-                                    color: AppColors.textColor,
-                                  ),
-                                ),
-                              ),
-                            ],
+                          const SizedBox(height: 10),
+                          Text(
+                            name,
+                            style: const TextStyle(
+                              fontSize: 28,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 20),
-                        _buildButton(
-                          context: context,
-                          label: 'Edit Profile',
-                          onPressed: () async {
-                            final result = await Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder:
-                                    (context) => EditProfilePage(
-                                      userID: widget.userID,
-                                      currentName: name,
-                                      currentEmail: email,
-                                    ),
-                              ),
-                            );
-                            if (result != null) {
-                              setState(() {
-                                name = result['name'];
-                                email = result['email'];
-                              });
-                            }
-                          },
-                        ),
-                        const SizedBox(height: 20),
-                        _buildButton(
-                          context: context,
-                          label: 'Change Password',
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder:
-                                    (context) => ChangePasswordPage(
-                                      userID: widget.userID,
-                                    ),
-                              ),
-                            );
-                          },
-                        ),
-                        const SizedBox(height: 20),
-                        _buildButton(
-                          context: context,
-                          label: 'View Report History',
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const ReportHistoryPage(),
-                              ),
-                            );
-                          },
-                        ),
-                      ],
+                          Text(
+                            email,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              color: Colors.white70,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
+                    // Profile Details Card
+                    Container(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Card(
+                        elevation: 8,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(15),
+                        ),
+                        color: Colors.white,
+                        child: Column(
+                          children: [
+                            ListTile(
+                              leading: const Icon(
+                                Icons.person,
+                                color: AppColors.primaryColor,
+                              ),
+                              title: const Text(
+                                "Name",
+                                style: TextStyle(color: AppColors.textColor),
+                              ),
+                              subtitle: Text(
+                                name,
+                                style: const TextStyle(
+                                  fontSize: 18,
+                                  color: AppColors.textColor,
+                                ),
+                              ),
+                            ),
+                            const Divider(),
+                            ListTile(
+                              leading: const Icon(
+                                Icons.email,
+                                color: AppColors.primaryColor,
+                              ),
+                              title: const Text(
+                                "Email",
+                                style: TextStyle(color: AppColors.textColor),
+                              ),
+                              subtitle: Text(
+                                email,
+                                style: const TextStyle(
+                                  fontSize: 18,
+                                  color: AppColors.textColor,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    // Action Buttons
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                      child: Column(
+                        children: [
+                          _buildButton(
+                            context: context,
+                            label: 'Edit Profile',
+                            icon: Icons.edit,
+                            onPressed: () async {
+                              final result = await Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder:
+                                      (context) => EditProfilePage(
+                                        userID: widget.userID,
+                                        currentName: name,
+                                        currentEmail: email,
+                                      ),
+                                ),
+                              );
+                              if (result != null) {
+                                setState(() {
+                                  name = result['name'];
+                                  email = result['email'];
+                                });
+                              }
+                            },
+                          ),
+                          const SizedBox(height: 10),
+                          _buildButton(
+                            context: context,
+                            label: 'Change Password',
+                            icon: Icons.lock,
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder:
+                                      (context) => ChangePasswordPage(
+                                        userID: widget.userID,
+                                      ),
+                                ),
+                              );
+                            },
+                          ),
+                          const SizedBox(height: 10),
+                          _buildButton(
+                            context: context,
+                            label: 'View Report History',
+                            icon: Icons.history,
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder:
+                                      (context) => const ReportHistoryPage(),
+                                ),
+                              );
+                            },
+                          ),
+                          const SizedBox(height: 10),
+                          _buildButton(
+                            context: context,
+                            label: 'Logout',
+                            icon: Icons.logout,
+                            onPressed: _logout,
+                            backgroundColor: Colors.redAccent,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ),
+        ],
+      ),
     );
   }
+}
 
-  Widget _buildButton({
-    required BuildContext context,
-    required String label,
-    required VoidCallback onPressed,
-  }) {
-    return ElevatedButton(
-      style: ElevatedButton.styleFrom(
-        backgroundColor: AppColors.primaryColor,
-        foregroundColor: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        padding: const EdgeInsets.symmetric(vertical: 16),
-        minimumSize: const Size(double.infinity, 50),
-        elevation: 2,
-      ),
-      onPressed: onPressed,
-      child: Text(
-        label,
-        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-      ),
-    );
-  }
+Widget _buildButton({
+  required BuildContext context,
+  required String label,
+  required IconData icon,
+  required VoidCallback onPressed,
+  Color backgroundColor = AppColors.primaryColor,
+}) {
+  return ElevatedButton(
+    style: ElevatedButton.styleFrom(
+      backgroundColor: backgroundColor,
+      foregroundColor: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+      elevation: 4,
+      minimumSize: const Size(double.infinity, 50),
+    ),
+    onPressed: onPressed,
+    child: Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(icon, size: 20),
+        const SizedBox(width: 10),
+        Text(
+          label,
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+        ),
+      ],
+    ),
+  );
 }
 
 // Edit Profile Page
@@ -285,7 +365,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
       if (token == null) throw Exception('No token found');
 
       final response = await http.put(
-        Uri.parse('https://your-backend.onrender.com/api/profile/updateProfile'), // Update URL
+        Uri.parse('$apiBaseUrl/profile/updateProfile'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
@@ -310,10 +390,10 @@ class _EditProfilePageState extends State<EditProfilePage> {
           'email': emailController.text.trim(),
         });
       } else {
-        // Handle non-200 status codes
         try {
           final errorData = jsonDecode(response.body);
-          final errorMessage = errorData['message'] ?? 'Failed to update profile';
+          final errorMessage =
+              errorData['message'] ?? 'Failed to update profile';
           throw Exception(errorMessage);
         } catch (parseError) {
           throw Exception('Invalid server response: ${response.body}');
@@ -321,9 +401,9 @@ class _EditProfilePageState extends State<EditProfilePage> {
       }
     } catch (e) {
       print('Error during update profile: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString())),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
     } finally {
       setState(() => _isLoading = false);
     }
@@ -376,7 +456,8 @@ class _EditProfilePageState extends State<EditProfilePage> {
                 ),
                 keyboardType: TextInputType.emailAddress,
                 validator: (value) {
-                  if (value == null || !RegExp(r'\S+@\S+\.\S+').hasMatch(value)) {
+                  if (value == null ||
+                      !RegExp(r'\S+@\S+\.\S+').hasMatch(value)) {
                     return 'Please enter a valid email';
                   }
                   return null;
@@ -384,26 +465,28 @@ class _EditProfilePageState extends State<EditProfilePage> {
               ),
               const SizedBox(height: 20),
               _isLoading
-                  ? const CircularProgressIndicator(color: AppColors.primaryColor)
+                  ? const CircularProgressIndicator(
+                    color: AppColors.primaryColor,
+                  )
                   : ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primaryColor,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        minimumSize: const Size(double.infinity, 50),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primaryColor,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                      onPressed: _updateProfile,
-                      child: const Text(
-                        'Save',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      minimumSize: const Size(double.infinity, 50),
+                    ),
+                    onPressed: _updateProfile,
+                    child: const Text(
+                      'Save',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
+                  ),
             ],
           ),
         ),
