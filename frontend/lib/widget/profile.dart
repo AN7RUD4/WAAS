@@ -285,7 +285,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
       if (token == null) throw Exception('No token found');
 
       final response = await http.put(
-        Uri.parse('$apiBaseUrl/profile/updateProfile'),
+        Uri.parse('https://your-backend.onrender.com/api/profile/updateProfile'), // Update URL
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
@@ -297,7 +297,11 @@ class _EditProfilePageState extends State<EditProfilePage> {
         }),
       );
 
+      print('Response status: ${response.statusCode}');
+      print('Response body: ${response.body}');
+
       if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Profile updated successfully')),
         );
@@ -306,14 +310,20 @@ class _EditProfilePageState extends State<EditProfilePage> {
           'email': emailController.text.trim(),
         });
       } else {
-        final error =
-            jsonDecode(response.body)['message'] ?? 'Failed to update profile';
-        throw Exception(error);
+        // Handle non-200 status codes
+        try {
+          final errorData = jsonDecode(response.body);
+          final errorMessage = errorData['message'] ?? 'Failed to update profile';
+          throw Exception(errorMessage);
+        } catch (parseError) {
+          throw Exception('Invalid server response: ${response.body}');
+        }
       }
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(e.toString())));
+      print('Error during update profile: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString())),
+      );
     } finally {
       setState(() => _isLoading = false);
     }
@@ -366,8 +376,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
                 ),
                 keyboardType: TextInputType.emailAddress,
                 validator: (value) {
-                  if (value == null ||
-                      !RegExp(r'\S+@\S+\.\S+').hasMatch(value)) {
+                  if (value == null || !RegExp(r'\S+@\S+\.\S+').hasMatch(value)) {
                     return 'Please enter a valid email';
                   }
                   return null;
@@ -375,28 +384,26 @@ class _EditProfilePageState extends State<EditProfilePage> {
               ),
               const SizedBox(height: 20),
               _isLoading
-                  ? const CircularProgressIndicator(
-                    color: AppColors.primaryColor,
-                  )
+                  ? const CircularProgressIndicator(color: AppColors.primaryColor)
                   : ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primaryColor,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primaryColor,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        minimumSize: const Size(double.infinity, 50),
                       ),
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      minimumSize: const Size(double.infinity, 50),
-                    ),
-                    onPressed: _updateProfile,
-                    child: const Text(
-                      'Save',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
+                      onPressed: _updateProfile,
+                      child: const Text(
+                        'Save',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
-                  ),
             ],
           ),
         ),

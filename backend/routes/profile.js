@@ -58,49 +58,45 @@ const validatePasswordChange = (req, res, next) => {
   next();
 };
 
-// Update Name and Email
-router.put('/updateProfile', authenticateToken, validateProfileUpdate, async (req, res) => {
-  const client = await pool.connect();
-  try {
-    const { name, email } = req.body;
-    const userID = req.user.id; // From JWT token
-
-    await client.query('BEGIN'); // Start transaction
-
-    // Check if email is already taken by another user
-    const emailCheck = await client.query(
-      'SELECT userID FROM users WHERE email = $1 AND userid != $2',
-      [email, userID]
-    );
-    if (emailCheck.rows.length > 0) {
-      throw new Error('Email already in use by another user');
+// Update profile endpoint
+router.put('/profile/updateProfile', authenticateToken, async (req, res) => {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+  
+      const { userID, name, email } = req.body;
+      if (!userID || !name || !email) {
+        throw new Error('userID, name, and email are required');
+      }
+  
+      const updateResult = await client.query(
+        'UPDATE users SET name = $1, email = $2 WHERE userid = $3 RETURNING userid, name, email',
+        [name, email, userID]
+      );
+  
+      if (updateResult.rows.length === 0) {
+        throw new Error('User not found');
+      }
+  
+      await client.query('COMMIT');
+  
+      const updatedUser = updateResult.rows[0];
+      res.status(200).json({
+        message: 'Profile updated successfully',
+        user: {
+          userid: updatedUser.userid,
+          name: updatedUser.name,
+          email: updatedUser.email
+        }
+      });
+    } catch (error) {
+      await client.query('ROLLBACK');
+      console.error('Update profile error:', error.message);
+      res.status(400).json({ message: error.message || 'Server error updating profile' });
+    } finally {
+      client.release();
     }
-
-    const query = 'UPDATE users SET name = $1, email = $2 WHERE userid = $3 RETURNING userid, name, email';
-    const result = await client.query(query, [name, email, userID]);
-
-    if (result.rows.length === 0) {
-      throw new Error('User not found');
-    }
-
-    await client.query('COMMIT'); // Commit transaction
-
-    res.status(200).json({
-      message: 'Profile updated successfully',
-      user: {
-        id: result.rows[0].userID,
-        name: result.rows[0].name,
-        email: result.rows[0].email,
-      },
-    });
-  } catch (err) {
-    await client.query('ROLLBACK'); // Rollback on error
-    console.error('Error updating profile:', err);
-    res.status(500).json({ message: err.message || 'Server error updating profile' });
-  } finally {
-    client.release();
-  }
-});
+  });
 
 // Update Password
 router.put('/changePassword', authenticateToken, validatePasswordChange, async (req, res) => {
