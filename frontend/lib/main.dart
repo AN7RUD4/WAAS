@@ -38,8 +38,8 @@ class MyApp extends StatelessWidget {
         ),
         elevatedButtonTheme: ElevatedButtonThemeData(
           style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.secondaryColor, // Blue
-            foregroundColor: Colors.white, // White text
+            backgroundColor: AppColors.secondaryColor, 
+            foregroundColor: Colors.white,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(8),
             ),

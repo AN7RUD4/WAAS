@@ -69,14 +69,14 @@ router.put('/updateProfile', authenticateToken, validateProfileUpdate, async (re
 
     // Check if email is already taken by another user
     const emailCheck = await client.query(
-      'SELECT userID FROM users WHERE email = $1 AND userID != $2',
+      'SELECT userID FROM users WHERE email = $1 AND userid != $2',
       [email, userID]
     );
     if (emailCheck.rows.length > 0) {
       throw new Error('Email already in use by another user');
     }
 
-    const query = 'UPDATE users SET name = $1, email = $2 WHERE userID = $3 RETURNING userID, name, email';
+    const query = 'UPDATE users SET name = $1, email = $2 WHERE userid = $3 RETURNING userid, name, email';
     const result = await client.query(query, [name, email, userID]);
 
     if (result.rows.length === 0) {
@@ -112,7 +112,7 @@ router.put('/changePassword', authenticateToken, validatePasswordChange, async (
     await client.query('BEGIN'); // Start transaction
 
     const hashedPassword = await bcrypt.hash(newPassword, 10);
-    const query = 'UPDATE users SET password = $1 WHERE userID = $2 RETURNING userID';
+    const query = 'UPDATE users SET password = $1 WHERE userid = $2 RETURNING userid';
     const result = await client.query(query, [hashedPassword, userID]);
 
     if (result.rows.length === 0) {
