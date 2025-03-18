@@ -13,7 +13,7 @@ class MainPage extends StatelessWidget {
     : _pages = [
         email.toLowerCase().startsWith('w') ? WorkerApp() : UserApp(),
         MapScreen(),
-        ProfilePage(),
+        ProfilePage(userID: 1),
       ];
 
   @override

@@ -1,6 +1,7 @@
 // server.js
 const express = require('express');
 const authRouter = require('./routes/auth');
+const profileRouter = require('./routes/profile');
 const cors = require('cors');
 
 const app = express();
@@ -18,6 +19,7 @@ app.get('/', (req, res) => {
 
 // Routes
 app.use('/api', authRouter);
+app.use('api/profile',profileRouter)
 
 // Error handling middleware
 app.use((err, req, res, next) => {
