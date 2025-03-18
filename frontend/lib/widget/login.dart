@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:waas/widget/main_page.dart';
-// import 'package:waas/widget/signup_page.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:waas/assets/constants.dart';
 
 class LoginPage extends StatefulWidget {
@@ -18,20 +18,17 @@ class _LoginPageState extends State<LoginPage> {
   bool _isLoading = false;
 
   Future<void> login() async {
-    if (emailController.text.trim().isEmpty ||
-        passwordController.text.trim().isEmpty) {
+    if (emailController.text.trim().isEmpty || passwordController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please enter both email and password')),
       );
       return;
     }
 
-    setState(() {
-      _isLoading = true;
-    });
+    setState(() => _isLoading = true);
 
     try {
-      Map<String, dynamic> jsonData = {
+      final jsonData = {
         'email': emailController.text.trim(),
         'password': passwordController.text.trim(),
       };
@@ -50,30 +47,34 @@ class _LoginPageState extends State<LoginPage> {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         print('Login successful: $data');
+
+        // Save the token to SharedPreferences
+        final token = data['token']; // Assuming the backend returns a 'token' field
+        if (token != null) {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('token', token);
+          print('Token saved: $token');
+        } else {
+          throw Exception('No token received from server');
+        }
+
+        // Navigate to MainPage with userID or email
         Navigator.pushReplacement(
-          // Use pushReplacement to replace LoginPage
           context,
           MaterialPageRoute(
-            builder: (context) => MainPage(email: data['user']['email']),
+            builder: (context) => MainPage( userID: data['user']['userID'], role: data['user']['role']),
           ),
         );
       } else {
-        final errorMessage =
-            jsonDecode(response.body)['message'] ?? 'Login failed';
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(errorMessage)));
+        final errorMessage = jsonDecode(response.body)['message'] ?? 'Login failed';
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(errorMessage)));
       }
     } catch (e) {
       print('Error during login: $e');
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Network error: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Network error: $e')));
     } finally {
       if (mounted) {
-        setState(() {
-          _isLoading = false; // Hide loading indicator
-        });
+        setState(() => _isLoading = false);
       }
     }
   }
@@ -83,7 +84,6 @@ class _LoginPageState extends State<LoginPage> {
     return Scaffold(
       body: Stack(
         children: [
-          // Background image
           Container(
             height: 400,
             decoration: const BoxDecoration(
@@ -94,7 +94,6 @@ class _LoginPageState extends State<LoginPage> {
               ),
             ),
           ),
-          // Login form
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20.0),
@@ -114,9 +113,7 @@ class _LoginPageState extends State<LoginPage> {
                         filled: true,
                         fillColor: Colors.white.withOpacity(0.8),
                       ),
-                      keyboardType:
-                          TextInputType
-                              .emailAddress, // Better keyboard for email
+                      keyboardType: TextInputType.emailAddress,
                     ),
                     const SizedBox(height: 20),
                     TextField(
@@ -136,10 +133,7 @@ class _LoginPageState extends State<LoginPage> {
                     SizedBox(
                       width: 200,
                       child: ElevatedButton(
-                        onPressed:
-                            _isLoading
-                                ? null
-                                : login, // Disable button while loading
+                        onPressed: _isLoading ? null : login,
                         style: ElevatedButton.styleFrom(
                           padding: const EdgeInsets.symmetric(vertical: 15),
                           backgroundColor: Colors.lightBlue,
@@ -147,17 +141,16 @@ class _LoginPageState extends State<LoginPage> {
                             borderRadius: BorderRadius.circular(15),
                           ),
                         ),
-                        child:
-                            _isLoading
-                                ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                    color: Colors.white,
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                                : const Text(
+                        child: _isLoading
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Text(
                                   'Login',
                                   style: TextStyle(
                                     fontWeight: FontWeight.bold,

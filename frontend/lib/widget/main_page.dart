@@ -6,12 +6,13 @@ import 'package:waas/worker/home_worker.dart';
 import 'package:waas/worker/pick_map.dart';
 
 class MainPage extends StatelessWidget {
-  final String email; // Add email parameter
+  final String role; // Add email parameter
   final List<Widget> _pages; // Define pages list
+  int userID;
 
-  MainPage({super.key, required this.email})
+  MainPage({super.key, required this.userID, required this.role})
     : _pages = [
-        email.toLowerCase().startsWith('w') ? WorkerApp() : UserApp(),
+        role == 'worker' ? WorkerApp() : UserApp(),
         MapScreen(),
         ProfilePage(userID: 1),
       ];

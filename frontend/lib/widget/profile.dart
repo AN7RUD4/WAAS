@@ -52,9 +52,7 @@ class _ProfilePageState extends State<ProfilePage>
       if (token == null) throw Exception('No token found');
 
       final response = await http.get(
-        Uri.parse(
-          'http://192.168.164.53:3000/api/auth/profile/${widget.userID}',
-        ),
+        Uri.parse('http://192.168.164.53:3000/api/profile/${widget.userID}'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
