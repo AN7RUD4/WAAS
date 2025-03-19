@@ -1,327 +1,183 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:waas/assets/constants.dart';
-import 'package:waas/colors/colors.dart';
-// import 'package:waas/widget/settings_page.dart'; // Create this new page
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'dart:convert';
+
+
+
+class ApiService {
+  static const String baseUrl = 'http://localhost:3000/api';
+  static const storage = FlutterSecureStorage();
+
+  static Future<String?> getToken() async {
+    return await storage.read(key: 'jwt_token');
+  }
+
+  Future<Map<String, dynamic>> getProfile() async {
+    final token = await getToken();
+    final response = await http.get(
+      Uri.parse('$baseUrl/profile'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+
+    if (response.statusCode == 200) {
+      return json.decode(response.body);
+    } else {
+      throw Exception('Failed to load profile: ${response.body}');
+    }
+  }
+
+  Future<Map<String, dynamic>> updateProfile(String name, String email) async {
+    final token = await getToken();
+    final response = await http.put(
+      Uri.parse('$baseUrl/profile'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+      body: json.encode({'name': name, 'email': email}),
+    );
+
+    if (response.statusCode == 200) {
+      return json.decode(response.body);
+    } else {
+      throw Exception('Failed to update profile: ${response.body}');
+    }
+  }
+
+  Future<void> changePassword(String newPassword) async {
+    final token = await getToken();
+    final response = await http.put(
+      Uri.parse('$baseUrl/change-password'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+      body: json.encode({'newPassword': newPassword}),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Failed to change password: ${response.body}');
+    }
+  }
+}
 
 class ProfilePage extends StatefulWidget {
-  final int userID;
-  const ProfilePage({super.key, required this.userID});
-
   @override
   _ProfilePageState createState() => _ProfilePageState();
 }
 
-class _ProfilePageState extends State<ProfilePage>
-    with SingleTickerProviderStateMixin {
-  String name = "Username";
-  String email = "username@example.com";
-  String? profileImageUrl =
-      'https://via.placeholder.com/150'; // Placeholder image
-  bool _isLoading = false;
+class _ProfilePageState extends State<ProfilePage> {
+  String name = "Loading...";
+  String email = "Loading...";
+  final apiService = ApiService();
 
   @override
   void initState() {
     super.initState();
-
-    _fetchProfile();
+    _loadProfile();
   }
 
-  @override
-  void dispose() {
-    super.dispose();
-  }
-
-  Future<String?> _getToken() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('token');
-  }
-
-  Future<void> _fetchProfile() async {
-    setState(() => _isLoading = true);
+  Future<void> _loadProfile() async {
     try {
-      final token = await _getToken();
-      if (token == null) throw Exception('No token found');
-
-      final response = await http.get(
-        Uri.parse('$apiBaseUrl/profile/${widget.userID}'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-      );
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        setState(() {
-          name = data['user']['name'] ?? 'Username';
-          email = data['user']['email'] ?? 'username@example.com';
-          // Assuming backend could return a profile image URL in the future
-          profileImageUrl = data['user']['profileImageUrl'] ?? profileImageUrl;
-        });
-      } else {
-        throw Exception('Failed to load profile: ${response.body}');
-      }
+      final profile = await apiService.getProfile();
+      setState(() {
+        name = profile['name'];
+        email = profile['email'];
+      });
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
+        SnackBar(content: Text("Failed to load profile: $e")),
       );
-    } finally {
-      setState(() => _isLoading = false);
     }
-  }
-
-  Future<void> _logout() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('token');
-    Navigator.pushReplacementNamed(context, '/login'); // Navigate to LoginPage
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Stack(
-        children: [
-          // Background with gradient
-          Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                colors: [AppColors.primaryColor, Colors.blueAccent],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
+      appBar: AppBar(
+        title: Text('Profile Page', style: TextStyle(fontSize: 30, fontWeight: FontWeight.bold)),
+        backgroundColor: Colors.green,
+        actions: [
+          IconButton(
+            icon: Icon(Icons.edit, size: 30),
+            onPressed: () async {
+              final updatedData = await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => EditProfilePage(
+                    currentName: name,
+                    currentEmail: email,
+                  ),
+                ),
+              );
+
+              if (updatedData != null) {
+                setState(() {
+                  name = updatedData['name'];
+                  email = updatedData['email'];
+                });
+                await _loadProfile(); // Refresh from database
+              }
+            },
+          ),
+        ],
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Card(
+              elevation: 2,
+              child: Column(
+                children: [
+                  ListTile(
+                    leading: Icon(Icons.person),
+                    title: Text("Name"),
+                    subtitle: Text(name, style: TextStyle(fontSize: 18)),
+                  ),
+                  Divider(),
+                  ListTile(
+                    leading: Icon(Icons.email),
+                    title: Text("Email"),
+                    subtitle: Text(email, style: TextStyle(fontSize: 18)),
+                  ),
+                ],
               ),
             ),
-          ),
-          _isLoading
-              ? const Center(
-                child: CircularProgressIndicator(
-                  color: Colors.white,
-                  strokeWidth: 3,
-                ),
-              )
-              : SingleChildScrollView(
-                child: Column(
-                  children: [
-                    // Profile Header
-                    Container(
-                      padding: const EdgeInsets.all(20.0),
-                      child: Column(
-                        children: [
-                          GestureDetector(
-                            onTap: () {
-                              // TODO: Implement image upload functionality
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Image upload coming soon!'),
-                                ),
-                              );
-                            },
-                            child: CircleAvatar(
-                              radius: 60,
-                              backgroundImage: NetworkImage(profileImageUrl!),
-                              child: const Icon(
-                                Icons.camera_alt,
-                                size: 30,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-                          Text(
-                            name,
-                            style: const TextStyle(
-                              fontSize: 28,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
-                          ),
-                          Text(
-                            email,
-                            style: const TextStyle(
-                              fontSize: 16,
-                              color: Colors.white70,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    // Profile Details Card
-                    Container(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Card(
-                        elevation: 8,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(15),
-                        ),
-                        color: Colors.white,
-                        child: Column(
-                          children: [
-                            ListTile(
-                              leading: const Icon(
-                                Icons.person,
-                                color: AppColors.primaryColor,
-                              ),
-                              title: const Text(
-                                "Name",
-                                style: TextStyle(color: AppColors.textColor),
-                              ),
-                              subtitle: Text(
-                                name,
-                                style: const TextStyle(
-                                  fontSize: 18,
-                                  color: AppColors.textColor,
-                                ),
-                              ),
-                            ),
-                            const Divider(),
-                            ListTile(
-                              leading: const Icon(
-                                Icons.email,
-                                color: AppColors.primaryColor,
-                              ),
-                              title: const Text(
-                                "Email",
-                                style: TextStyle(color: AppColors.textColor),
-                              ),
-                              subtitle: Text(
-                                email,
-                                style: const TextStyle(
-                                  fontSize: 18,
-                                  color: AppColors.textColor,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    // Action Buttons
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                      child: Column(
-                        children: [
-                          _buildButton(
-                            context: context,
-                            label: 'Edit Profile',
-                            icon: Icons.edit,
-                            onPressed: () async {
-                              final result = await Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder:
-                                      (context) => EditProfilePage(
-                                        userID: widget.userID,
-                                        currentName: name,
-                                        currentEmail: email,
-                                      ),
-                                ),
-                              );
-                              if (result != null) {
-                                setState(() {
-                                  name = result['name'];
-                                  email = result['email'];
-                                });
-                              }
-                            },
-                          ),
-                          const SizedBox(height: 10),
-                          _buildButton(
-                            context: context,
-                            label: 'Change Password',
-                            icon: Icons.lock,
-                            onPressed: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder:
-                                      (context) => ChangePasswordPage(
-                                        userID: widget.userID,
-                                      ),
-                                ),
-                              );
-                            },
-                          ),
-                          const SizedBox(height: 10),
-                          _buildButton(
-                            context: context,
-                            label: 'View Report History',
-                            icon: Icons.history,
-                            onPressed: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder:
-                                      (context) => const ReportHistoryPage(),
-                                ),
-                              );
-                            },
-                          ),
-                          const SizedBox(height: 10),
-                          _buildButton(
-                            context: context,
-                            label: 'Logout',
-                            icon: Icons.logout,
-                            onPressed: _logout,
-                            backgroundColor: Colors.redAccent,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-        ],
+            SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => ChangePasswordPage()),
+                ).then((_) => _loadProfile()); // Refresh after password change
+              },
+              child: Text('Change Password'),
+            ),
+            SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => ReportHistoryPage()),
+                );
+              },
+              child: Text("View Report History"),
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
-Widget _buildButton({
-  required BuildContext context,
-  required String label,
-  required IconData icon,
-  required VoidCallback onPressed,
-  Color backgroundColor = AppColors.primaryColor,
-}) {
-  return ElevatedButton(
-    style: ElevatedButton.styleFrom(
-      backgroundColor: backgroundColor,
-      foregroundColor: Colors.white,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-      elevation: 4,
-      minimumSize: const Size(double.infinity, 50),
-    ),
-    onPressed: onPressed,
-    child: Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Icon(icon, size: 20),
-        const SizedBox(width: 10),
-        Text(
-          label,
-          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-        ),
-      ],
-    ),
-  );
-}
-
-// Edit Profile Page
 class EditProfilePage extends StatefulWidget {
-  final int userID;
   final String currentName;
   final String currentEmail;
 
-  const EditProfilePage({
-    super.key,
-    required this.userID,
-    required this.currentName,
-    required this.currentEmail,
-  });
+  EditProfilePage({required this.currentName, required this.currentEmail});
 
   @override
   _EditProfilePageState createState() => _EditProfilePageState();
@@ -330,8 +186,7 @@ class EditProfilePage extends StatefulWidget {
 class _EditProfilePageState extends State<EditProfilePage> {
   late TextEditingController nameController;
   late TextEditingController emailController;
-  bool _isLoading = false;
-  final _formKey = GlobalKey<FormState>();
+  final apiService = ApiService();
 
   @override
   void initState() {
@@ -340,348 +195,149 @@ class _EditProfilePageState extends State<EditProfilePage> {
     emailController = TextEditingController(text: widget.currentEmail);
   }
 
-  Future<String?> _getToken() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('token');
-  }
-
-  Future<void> _updateProfile() async {
-    if (!_formKey.currentState!.validate()) return;
-
-    setState(() => _isLoading = true);
-    try {
-      final token = await _getToken();
-      if (token == null) throw Exception('No token found');
-
-      final response = await http.put(
-        Uri.parse('$apiBaseUrl/profile/updateProfile'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-        body: jsonEncode({
-          'userID': widget.userID,
-          'name': nameController.text.trim(),
-          'email': emailController.text.trim(),
-        }),
-      );
-
-      print('Response status: ${response.statusCode}');
-      print('Response body: ${response.body}');
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Profile updated successfully')),
-        );
-        Navigator.pop(context, {
-          'name': nameController.text.trim(),
-          'email': emailController.text.trim(),
-        });
-      } else {
-        try {
-          final errorData = jsonDecode(response.body);
-          final errorMessage =
-              errorData['message'] ?? 'Failed to update profile';
-          throw Exception(errorMessage);
-        } catch (parseError) {
-          throw Exception('Invalid server response: ${response.body}');
-        }
-      }
-    } catch (e) {
-      print('Error during update profile: $e');
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(e.toString())));
-    } finally {
-      setState(() => _isLoading = false);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          'Edit Profile',
-          style: TextStyle(color: Colors.white),
-        ),
-        backgroundColor: AppColors.primaryColor,
+        title: Text("Edit Profile"),
+        backgroundColor: Colors.green,
       ),
       body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.start,
-            children: [
-              TextFormField(
-                controller: nameController,
-                decoration: InputDecoration(
-                  labelText: "Name",
-                  labelStyle: const TextStyle(color: AppColors.textColor),
-                  border: const OutlineInputBorder(),
-                  focusedBorder: OutlineInputBorder(
-                    borderSide: BorderSide(color: AppColors.primaryColor),
-                  ),
-                ),
-                validator: (value) {
-                  if (value == null || value.trim().length < 2) {
-                    return 'Name must be at least 2 characters long';
-                  }
-                  return null;
-                },
+        padding: EdgeInsets.all(16.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.start,
+          children: [
+            TextField(
+              controller: nameController,
+              decoration: InputDecoration(
+                labelText: "Name",
+                border: OutlineInputBorder(),
               ),
-              const SizedBox(height: 20),
-              TextFormField(
-                controller: emailController,
-                decoration: InputDecoration(
-                  labelText: "Email",
-                  labelStyle: const TextStyle(color: AppColors.textColor),
-                  border: const OutlineInputBorder(),
-                  focusedBorder: OutlineInputBorder(
-                    borderSide: BorderSide(color: AppColors.primaryColor),
-                  ),
-                ),
-                keyboardType: TextInputType.emailAddress,
-                validator: (value) {
-                  if (value == null ||
-                      !RegExp(r'\S+@\S+\.\S+').hasMatch(value)) {
-                    return 'Please enter a valid email';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 20),
-              _isLoading
-                  ? const CircularProgressIndicator(
-                    color: AppColors.primaryColor,
-                  )
-                  : ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primaryColor,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      minimumSize: const Size(double.infinity, 50),
-                    ),
-                    onPressed: _updateProfile,
-                    child: const Text(
-                      'Save',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class ChangePasswordPage extends StatefulWidget {
-  final int userID;
-  const ChangePasswordPage({super.key, required this.userID});
-
-  @override
-  _ChangePasswordPageState createState() => _ChangePasswordPageState();
-}
-
-class _ChangePasswordPageState extends State<ChangePasswordPage> {
-  final TextEditingController newPasswordController = TextEditingController();
-  final TextEditingController confirmPasswordController =
-      TextEditingController();
-  bool _isLoading = false;
-  final _formKey = GlobalKey<FormState>();
-
-  Future<String?> _getToken() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('token');
-  }
-
-  Future<void> _changePassword() async {
-    if (!_formKey.currentState!.validate()) return;
-
-    setState(() => _isLoading = true);
-    try {
-      final token = await _getToken();
-      if (token == null) throw Exception('No token found');
-
-      final response = await http.put(
-        Uri.parse('$apiBaseUrl/profile/changePassword'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-        body: jsonEncode({
-          'userID': widget.userID,
-          'newPassword': newPasswordController.text.trim(),
-        }),
-      );
-
-      if (response.statusCode == 200) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Password updated successfully'),
-            backgroundColor: Colors.green,
-            duration: Duration(seconds: 2),
-          ),
-        );
-        Navigator.pop(context);
-      } else {
-        final error =
-            jsonDecode(response.body)['message'] ?? 'Failed to update password';
-        throw Exception(error);
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(e.toString()),
-          backgroundColor: Colors.red,
-          duration: Duration(seconds: 2),
-        ),
-      );
-    } finally {
-      setState(() => _isLoading = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text(
-          'Change Password',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-        ),
-        backgroundColor: AppColors.primaryColor,
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Form(
-          key: _formKey,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.start,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                TextFormField(
-                  controller: newPasswordController,
-                  obscureText: true,
-                  decoration: InputDecoration(
-                    labelText: "New Password",
-                    labelStyle: const TextStyle(color: AppColors.textColor),
-                    border: const OutlineInputBorder(),
-                    focusedBorder: OutlineInputBorder(
-                      borderSide: BorderSide(color: AppColors.primaryColor),
-                    ),
-                    errorBorder: const OutlineInputBorder(
-                      borderSide: BorderSide(color: Colors.red),
-                    ),
-                  ),
-                  validator: (value) {
-                    if (value == null || value.trim().isEmpty) {
-                      return 'Please enter a new password';
-                    }
-                    if (value.length < 8) {
-                      return 'Password must be at least 8 characters long';
-                    }
-                    if (!RegExp(r'(?=.*[A-Z])(?=.*[0-9])').hasMatch(value)) {
-                      return 'Password must contain at least one uppercase letter and one number';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 20),
-                TextFormField(
-                  controller: confirmPasswordController,
-                  obscureText: true,
-                  decoration: InputDecoration(
-                    labelText: "Confirm Password",
-                    labelStyle: const TextStyle(color: AppColors.textColor),
-                    border: const OutlineInputBorder(),
-                    focusedBorder: OutlineInputBorder(
-                      borderSide: BorderSide(color: AppColors.primaryColor),
-                    ),
-                    errorBorder: const OutlineInputBorder(
-                      borderSide: BorderSide(color: Colors.red),
-                    ),
-                  ),
-                  validator: (value) {
-                    if (value == null || value.trim().isEmpty) {
-                      return 'Please confirm your password';
-                    }
-                    if (value != newPasswordController.text) {
-                      return 'Passwords do not match';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 30),
-                _isLoading
-                    ? const Center(
-                      child: CircularProgressIndicator(
-                        color: AppColors.primaryColor,
-                      ),
-                    )
-                    : ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primaryColor,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        minimumSize: const Size(double.infinity, 50),
-                        elevation: 2,
-                      ),
-                      onPressed: _changePassword,
-                      child: const Text(
-                        'Save',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-              ],
             ),
-          ),
+            SizedBox(height: 20),
+            TextField(
+              controller: emailController,
+              decoration: InputDecoration(
+                labelText: "Email",
+                border: OutlineInputBorder(),
+              ),
+            ),
+            SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: () async {
+                try {
+                  await apiService.updateProfile(
+                    nameController.text,
+                    emailController.text,
+                  );
+                  Navigator.pop(context, {
+                    'name': nameController.text,
+                    'email': emailController.text,
+                  });
+                } catch (e) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text("Failed to update profile: $e")),
+                  );
+                }
+              },
+              child: Text("Save"),
+            ),
+          ],
         ),
       ),
     );
   }
 }
 
-// Report History Page (unchanged for now)
-class ReportHistoryPage extends StatelessWidget {
-  const ReportHistoryPage({super.key});
+class ChangePasswordPage extends StatelessWidget {
+  final TextEditingController newPasswordController = TextEditingController();
+  final TextEditingController confirmPasswordController = TextEditingController();
+  final apiService = ApiService();
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          'Report History',
-          style: TextStyle(color: Colors.white),
-        ),
-        backgroundColor: AppColors.primaryColor,
+        title: Text("Change Password"),
+        backgroundColor: Colors.green,
       ),
-      body: const Center(
+      body: Padding(
+        padding: EdgeInsets.all(16.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.start,
+          children: [
+            TextField(
+              controller: newPasswordController,
+              obscureText: true,
+              decoration: InputDecoration(
+                labelText: "New Password",
+                border: OutlineInputBorder(),
+              ),
+            ),
+            SizedBox(height: 20),
+            TextField(
+              controller: confirmPasswordController,
+              obscureText: true,
+              decoration: InputDecoration(
+                labelText: "Confirm Password",
+                border: OutlineInputBorder(),
+              ),
+            ),
+            SizedBox(height: 30),
+            ElevatedButton(
+              onPressed: () async {
+                String newPassword = newPasswordController.text;
+                String confirmPassword = confirmPasswordController.text;
+
+                if (newPassword.isEmpty || confirmPassword.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text("Please fill in both fields")),
+                  );
+                  return;
+                }
+
+                if (newPassword != confirmPassword) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text("Passwords do not match")),
+                  );
+                  return;
+                }
+
+                try {
+                  await apiService.changePassword(newPassword);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text("Password Changed Successfully")),
+                  );
+                  Navigator.pop(context);
+                } catch (e) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text("Failed to change password: $e")),
+                  );
+                }
+              },
+              child: Text("Save"),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class ReportHistoryPage extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text("Report History"),
+        backgroundColor: Colors.green,
+      ),
+      body: Center(
         child: Text(
           "Report History Page",
-          style: TextStyle(
-            fontSize: 24,
-            fontWeight: FontWeight.bold,
-            color: AppColors.textColor,
-          ),
+          style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
         ),
-      ),
-    );
-  }
+     ),
+);
+}
 }

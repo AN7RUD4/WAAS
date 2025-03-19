@@ -32,15 +32,15 @@ wasteRouter.post('/bin-fill', authenticateToken, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const { location, availableTime } = req.body;
-    if (!location || !availableTime) return res.status(400).json({ message: 'Location and available time are required' });
+    const { location } = req.body;
+    if (!location ) return res.status(400).json({ message: 'Location and available time are required' });
     const [lat, long] = location.split(',').map(Number);
     if (isNaN(lat) || isNaN(long)) throw new Error('Invalid location format. Expected: "lat,long"');
     const result = await client.query(
-      `INSERT INTO collectionrequests (userid, location, status, datetime, availabletime) 
+      `INSERT INTO collectionrequests (userid, location, status, datetime) 
        VALUES ($1, ST_GeomFromText('POINT(${long} ${lat})', 4326), $2, NOW(), $3) 
-       RETURNING requestid, ST_AsText(location) as location, status, availabletime`,
-      [req.user.userid, 'pending', availableTime]
+       RETURNING requestid, ST_AsText(location) as location, status`,
+      [req.user.userid, 'pending']
     );
     await client.query('COMMIT');
     res.status(201).json({
@@ -101,7 +101,7 @@ wasteRouter.get('/collection-requests', authenticateToken, async (req, res) => {
   try {
     await client.query('BEGIN');
     const collectionRequests = await client.query(
-      `SELECT requestid, ST_AsText(location) as location, status, datetime, availabletime 
+      `SELECT requestid, ST_AsText(location) as location, status, datetime 
        FROM collectionrequests WHERE userid = $1 ORDER BY datetime DESC`,
       [req.user.userid]
     );
@@ -138,7 +138,7 @@ wasteRouter.use((req, res, next) => {
   next();
 });
 
-app.use('/api/waste', wasteRouter);
+app.use('/waste', wasteRouter);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
