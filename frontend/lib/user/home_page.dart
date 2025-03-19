@@ -210,8 +210,7 @@ class UserApp extends StatelessWidget {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder:
-                                (context) => const CollectionRequestsPage(),
+                            builder: (context) => const CollectionRequestsPage(),
                           ),
                         );
                       },
@@ -328,7 +327,7 @@ class _ReportPageState extends State<ReportPage> {
 
       var request = http.MultipartRequest(
         'POST',
-        Uri.parse('$apiBaseUrl/api/report-waste'),
+        Uri.parse('$apiBaseUrl/waste/report-waste'), // Updated to /waste/report-waste
       );
       request.headers['Authorization'] = 'Bearer $token';
       request.fields['location'] = locationController.text;
@@ -360,9 +359,7 @@ class _ReportPageState extends State<ReportPage> {
       }
     } catch (e) {
       print('Error during submit report: $e');
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(e.toString())));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
     } finally {
       setState(() => _isLoading = false);
     }
@@ -376,58 +373,57 @@ class _ReportPageState extends State<ReportPage> {
         backgroundColor: AppColors.accentColor,
       ),
       backgroundColor: AppColors.backgroundColor,
-      body:
-          _isLoading
-              ? const Center(child: CircularProgressIndicator())
-              : Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      "Take a Picture",
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.textColor,
-                      ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    "Take a Picture",
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textColor,
                     ),
-                    const SizedBox(height: 10),
-                    Center(
-                      child: Column(
-                        children: [
-                          _image == null
-                              ? const Text(
+                  ),
+                  const SizedBox(height: 10),
+                  Center(
+                    child: Column(
+                      children: [
+                        _image == null
+                            ? const Text(
                                 "No Image Taken",
                                 style: TextStyle(color: AppColors.textColor),
                               )
-                              : Image.file(_image!, height: 200),
-                          const SizedBox(height: 10),
-                          buildButton(
-                            "Open Camera",
-                            AppColors.buttonColor,
-                            _takePicture,
-                          ),
-                        ],
-                      ),
+                            : Image.file(_image!, height: 200),
+                        const SizedBox(height: 10),
+                        buildButton(
+                          "Open Camera",
+                          AppColors.buttonColor,
+                          _takePicture,
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 20),
-                    buildTextField(
-                      "Location",
-                      locationController,
-                      readOnly: true,
+                  ),
+                  const SizedBox(height: 20),
+                  buildTextField(
+                    "Location",
+                    locationController,
+                    readOnly: true,
+                  ),
+                  const SizedBox(height: 20),
+                  Center(
+                    child: buildButton(
+                      "Submit Report",
+                      AppColors.accentColor,
+                      _submitReport,
                     ),
-                    const SizedBox(height: 20),
-                    Center(
-                      child: buildButton(
-                        "Submit Report",
-                        AppColors.accentColor,
-                        _submitReport,
-                      ),
-                    ),
-                  ],
-                ),
+                  ),
+                ],
               ),
+            ),
     );
   }
 }
@@ -527,7 +523,7 @@ class _BinFillPageState extends State<BinFillPage> {
       if (token == null) throw Exception('No token found');
 
       final response = await http.post(
-        Uri.parse('$apiBaseUrl/api/bin-fill'),
+        Uri.parse('$apiBaseUrl/waste/bin-fill'), // Updated to /waste/bin-fill
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
@@ -559,9 +555,7 @@ class _BinFillPageState extends State<BinFillPage> {
       }
     } catch (e) {
       print('Error during submit bin fill: $e');
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(e.toString())));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
     } finally {
       setState(() => _isLoading = false);
     }
@@ -575,51 +569,50 @@ class _BinFillPageState extends State<BinFillPage> {
         backgroundColor: AppColors.accentColor,
       ),
       backgroundColor: AppColors.backgroundColor,
-      body:
-          _isLoading
-              ? const Center(child: CircularProgressIndicator())
-              : Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    buildTextField(
-                      "User Location",
-                      locationController,
-                      readOnly: true,
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  buildTextField(
+                    "User Location",
+                    locationController,
+                    readOnly: true,
+                  ),
+                  const SizedBox(height: 20),
+                  const Text(
+                    "Bin Fill Level",
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textColor,
                     ),
-                    const SizedBox(height: 20),
-                    const Text(
-                      "Bin Fill Level",
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.textColor,
-                      ),
+                  ),
+                  buildCheckbox(
+                    "80% Bin Fill",
+                    is80Checked,
+                    () => _updateCheckbox(true),
+                  ),
+                  buildCheckbox(
+                    "100% Bin Fill",
+                    is100Checked,
+                    () => _updateCheckbox(false),
+                  ),
+                  const SizedBox(height: 20),
+                  buildTextField("Available Time", timeController),
+                  const SizedBox(height: 20),
+                  Center(
+                    child: buildButton(
+                      "Submit",
+                      AppColors.accentColor,
+                      _submitBinFill,
                     ),
-                    buildCheckbox(
-                      "80% Bin Fill",
-                      is80Checked,
-                      () => _updateCheckbox(true),
-                    ),
-                    buildCheckbox(
-                      "100% Bin Fill",
-                      is100Checked,
-                      () => _updateCheckbox(false),
-                    ),
-                    const SizedBox(height: 20),
-                    buildTextField("Available Time", timeController),
-                    const SizedBox(height: 20),
-                    Center(
-                      child: buildButton(
-                        "Submit",
-                        AppColors.accentColor,
-                        _submitBinFill,
-                      ),
-                    ),
-                  ],
-                ),
+                  ),
+                ],
               ),
+            ),
     );
   }
 
@@ -668,7 +661,7 @@ class _CollectionRequestsPageState extends State<CollectionRequestsPage> {
       if (token == null) throw Exception('No token found');
 
       final response = await http.get(
-        Uri.parse('$apiBaseUrl/api/collection-requests'),
+        Uri.parse('$apiBaseUrl/waste/collection-requests'), // Updated to /waste/collection-requests
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
@@ -700,9 +693,7 @@ class _CollectionRequestsPageState extends State<CollectionRequestsPage> {
       }
     } catch (e) {
       print('Error during fetch requests: $e');
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(e.toString())));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
     } finally {
       setState(() => _isLoading = false);
     }
@@ -716,29 +707,28 @@ class _CollectionRequestsPageState extends State<CollectionRequestsPage> {
         backgroundColor: AppColors.accentColor,
       ),
       backgroundColor: AppColors.backgroundColor,
-      body:
-          _isLoading
-              ? const Center(child: CircularProgressIndicator())
-              : Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      "Collection Requests",
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.textColor,
-                      ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    "Collection Requests",
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textColor,
                     ),
-                    const SizedBox(height: 10),
-                    collectionRequests.isEmpty
-                        ? const Text(
+                  ),
+                  const SizedBox(height: 10),
+                  collectionRequests.isEmpty
+                      ? const Text(
                           "No collection requests found.",
                           style: TextStyle(color: AppColors.textColor),
                         )
-                        : Expanded(
+                      : Expanded(
                           child: ListView.builder(
                             itemCount: collectionRequests.length,
                             itemBuilder: (context, index) {
@@ -754,8 +744,7 @@ class _CollectionRequestsPageState extends State<CollectionRequestsPage> {
                                     ),
                                   ),
                                   subtitle: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
+                                    crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
                                       Text("Location: ${request['location']}"),
                                       Text("Status: ${request['status']}"),
@@ -770,22 +759,22 @@ class _CollectionRequestsPageState extends State<CollectionRequestsPage> {
                             },
                           ),
                         ),
-                    const SizedBox(height: 20),
-                    const Text(
-                      "Garbage Reports",
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.textColor,
-                      ),
+                  const SizedBox(height: 20),
+                  const Text(
+                    "Garbage Reports",
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textColor,
                     ),
-                    const SizedBox(height: 10),
-                    garbageReports.isEmpty
-                        ? const Text(
+                  ),
+                  const SizedBox(height: 10),
+                  garbageReports.isEmpty
+                      ? const Text(
                           "No garbage reports found.",
                           style: TextStyle(color: AppColors.textColor),
                         )
-                        : Expanded(
+                      : Expanded(
                           child: ListView.builder(
                             itemCount: garbageReports.length,
                             itemBuilder: (context, index) {
@@ -801,22 +790,18 @@ class _CollectionRequestsPageState extends State<CollectionRequestsPage> {
                                     ),
                                   ),
                                   subtitle: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
+                                    crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
                                       Text("Location: ${report['location']}"),
                                       Text("Status: ${report['status']}"),
                                       Text("Time: ${report['datetime']}"),
                                       report['imageurl'] != null
                                           ? Image.network(
-                                            report['imageurl'],
-                                            height: 100,
-                                            errorBuilder:
-                                                (context, error, stackTrace) =>
-                                                    const Text(
-                                                      "Image unavailable",
-                                                    ),
-                                          )
+                                              report['imageurl'],
+                                              height: 100,
+                                              errorBuilder: (context, error, stackTrace) =>
+                                                  const Text("Image unavailable"),
+                                            )
                                           : const Text("No Image"),
                                     ],
                                   ),
@@ -825,9 +810,9 @@ class _CollectionRequestsPageState extends State<CollectionRequestsPage> {
                             },
                           ),
                         ),
-                  ],
-                ),
+                ],
               ),
+            ),
     );
   }
 }
