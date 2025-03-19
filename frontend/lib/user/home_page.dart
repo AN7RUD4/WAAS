@@ -327,7 +327,7 @@ class _ReportPageState extends State<ReportPage> {
 
       var request = http.MultipartRequest(
         'POST',
-        Uri.parse('$apiBaseUrl/waste/report-waste'), // Updated to /waste/report-waste
+        Uri.parse('$apiBaseUrl/user/report-waste'), // Updated to /user/report-waste
       );
       request.headers['Authorization'] = 'Bearer $token';
       request.fields['location'] = locationController.text;
@@ -523,7 +523,7 @@ class _BinFillPageState extends State<BinFillPage> {
       if (token == null) throw Exception('No token found');
 
       final response = await http.post(
-        Uri.parse('$apiBaseUrl/waste/bin-fill'), // Updated to /waste/bin-fill
+        Uri.parse('$apiBaseUrl/user/bin-fill'), // Updated to /user/bin-fill
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
@@ -661,7 +661,7 @@ class _CollectionRequestsPageState extends State<CollectionRequestsPage> {
       if (token == null) throw Exception('No token found');
 
       final response = await http.get(
-        Uri.parse('$apiBaseUrl/waste/collection-requests'), // Updated to /waste/collection-requests
+        Uri.parse('$apiBaseUrl/user/collection-requests'), // Updated to /user/collection-requests
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
@@ -750,7 +750,7 @@ class _CollectionRequestsPageState extends State<CollectionRequestsPage> {
                                       Text("Status: ${request['status']}"),
                                       Text("Time: ${request['datetime']}"),
                                       Text(
-                                        "Available Time: ${request['availabletime']}",
+                                        "Available Time: ${request['availabletime'] ?? 'N/A'}",
                                       ),
                                     ],
                                   ),

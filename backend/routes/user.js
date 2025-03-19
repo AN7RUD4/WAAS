@@ -1,10 +1,9 @@
+const express = require('express');
 const { Pool } = require('pg');
 const jwt = require('jsonwebtoken');
 const multer = require('multer');
-const app = require('express');
 
-const wasteRouter = app.Router();
-app.use('/waste', wasteRouter);
+const userRouter = express.Router();
 
 const pool = new Pool({
   connectionString: 'postgresql://postgres.hrzroqrgkvzhomsosqzl:7H.6k2wS*F$q2zY@aws-0-ap-south-1.pooler.supabase.com:6543/postgres',
@@ -31,19 +30,19 @@ const storage = multer.diskStorage({
 const upload = multer({ storage: storage });
 
 // Bin Fill endpoint
-wasteRouter.post('/bin-fill', authenticateToken, async (req, res) => {
+userRouter.post('/bin-fill', authenticateToken, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const { location } = req.body;
-    if (!location ) return res.status(400).json({ message: 'Location and available time are required' });
+    const { location, availableTime } = req.body;
+    if (!location || !availableTime) return res.status(400).json({ message: 'Location and available time are required' });
     const [lat, long] = location.split(',').map(Number);
     if (isNaN(lat) || isNaN(long)) throw new Error('Invalid location format. Expected: "lat,long"');
     const result = await client.query(
-      `INSERT INTO collectionrequests (userid, location, status, datetime) 
+      `INSERT INTO collectionrequests (userid, location, status, datetime, availabletime) 
        VALUES ($1, ST_GeomFromText('POINT(${long} ${lat})', 4326), $2, NOW(), $3) 
-       RETURNING requestid, ST_AsText(location) as location, status`,
-      [req.user.userid, 'pending']
+       RETURNING requestid, ST_AsText(location) as location, status, availabletime`,
+      [req.user.userid, 'pending', availableTime]
     );
     await client.query('COMMIT');
     res.status(201).json({
@@ -65,7 +64,7 @@ wasteRouter.post('/bin-fill', authenticateToken, async (req, res) => {
 });
 
 // Report Waste endpoint
-wasteRouter.post('/report-waste', authenticateToken, upload.single('image'), async (req, res) => {
+userRouter.post('/report-waste', authenticateToken, upload.single('image'), async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -99,12 +98,12 @@ wasteRouter.post('/report-waste', authenticateToken, upload.single('image'), asy
 });
 
 // Collection Requests endpoint
-wasteRouter.get('/collection-requests', authenticateToken, async (req, res) => {
+userRouter.get('/collection-requests', authenticateToken, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     const collectionRequests = await client.query(
-      `SELECT requestid, ST_AsText(location) as location, status, datetime 
+      `SELECT requestid, ST_AsText(location) as location, status, datetime, availabletime 
        FROM collectionrequests WHERE userid = $1 ORDER BY datetime DESC`,
       [req.user.userid]
     );
@@ -133,19 +132,12 @@ wasteRouter.get('/collection-requests', authenticateToken, async (req, res) => {
   }
 });
 
-wasteRouter.use((req, res) => res.status(404).json({ message: 'Route not found' }));
-wasteRouter.use((req, res, next) => {
+userRouter.use((req, res) => res.status(404).json({ message: 'Route not found' }));
+userRouter.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE');
   res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   next();
 });
 
-// Error handling middleware
-app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({ message: 'Internal Server Error' });
-});
-
-
-module.exports = app;
+module.exports = userRouter;
