@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../colors/colors.dart'; // Import your theme colors
 import 'package:waas/assets/constants.dart';
 
+// Utility widget for buttons
 Widget buildButton(String text, Color color, VoidCallback onPressed) {
   return ElevatedButton(
     style: ElevatedButton.styleFrom(
@@ -20,6 +21,7 @@ Widget buildButton(String text, Color color, VoidCallback onPressed) {
   );
 }
 
+// Utility widget for text fields
 Widget buildTextField(
   String label,
   TextEditingController controller, {
@@ -53,6 +55,7 @@ Widget buildTextField(
   );
 }
 
+// Main user dashboard page
 class UserApp extends StatelessWidget {
   const UserApp({super.key});
 
@@ -202,6 +205,24 @@ class UserApp extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 16),
+                    ElevatedButton(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder:
+                                (context) => const CollectionRequestsPage(),
+                          ),
+                        );
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.accentColor,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      child: const Text('View Requests'),
+                    ),
                   ],
                 ),
               ),
@@ -213,7 +234,7 @@ class UserApp extends StatelessWidget {
   }
 }
 
-// --------------------- Report Page ---------------------
+// Report Page for submitting public waste reports
 class ReportPage extends StatefulWidget {
   const ReportPage({super.key});
 
@@ -318,17 +339,27 @@ class _ReportPageState extends State<ReportPage> {
       var response = await request.send();
       var responseBody = await response.stream.bytesToString();
 
+      print('Response status: ${response.statusCode}');
+      print('Response body: $responseBody');
+
       if (response.statusCode == 201) {
+        final data = jsonDecode(responseBody);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("Report submitted successfully!")),
         );
         Navigator.pop(context);
       } else {
-        final error =
-            jsonDecode(responseBody)['message'] ?? 'Failed to submit report';
-        throw Exception(error);
+        try {
+          final error =
+              jsonDecode(responseBody)['message'] ??
+              'Failed to submit report with status ${response.statusCode}';
+          throw Exception(error);
+        } catch (parseError) {
+          throw Exception('Invalid server response: $responseBody');
+        }
       }
     } catch (e) {
+      print('Error during submit report: $e');
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(e.toString())));
@@ -401,9 +432,7 @@ class _ReportPageState extends State<ReportPage> {
   }
 }
 
-// --------------------- Bin Fill Page ---------------------
-// ... (keep other imports and widgets as they are)
-
+// Bin Fill Page for submitting bin fill requests
 class BinFillPage extends StatefulWidget {
   const BinFillPage({super.key});
 
@@ -522,7 +551,7 @@ class _BinFillPageState extends State<BinFillPage> {
         try {
           final error =
               jsonDecode(response.body)['message'] ??
-              'Failed to submit bin fill';
+              'Failed to submit bin fill with status ${response.statusCode}';
           throw Exception(error);
         } catch (parseError) {
           throw Exception('Invalid server response: ${response.body}');
@@ -604,6 +633,201 @@ class _BinFillPageState extends State<BinFillPage> {
         ),
         Text(label, style: TextStyle(color: AppColors.textColor)),
       ],
+    );
+  }
+}
+
+// Collection Requests Page to view submitted requests
+class CollectionRequestsPage extends StatefulWidget {
+  const CollectionRequestsPage({super.key});
+
+  @override
+  _CollectionRequestsPageState createState() => _CollectionRequestsPageState();
+}
+
+class _CollectionRequestsPageState extends State<CollectionRequestsPage> {
+  List<Map<String, dynamic>> collectionRequests = [];
+  List<Map<String, dynamic>> garbageReports = [];
+  bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchRequests();
+  }
+
+  Future<String?> _getToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('token');
+  }
+
+  Future<void> _fetchRequests() async {
+    setState(() => _isLoading = true);
+    try {
+      final token = await _getToken();
+      if (token == null) throw Exception('No token found');
+
+      final response = await http.get(
+        Uri.parse('$apiBaseUrl/api/collection-requests'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      print('Response status: ${response.statusCode}');
+      print('Response body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        setState(() {
+          collectionRequests = List<Map<String, dynamic>>.from(
+            data['collectionRequests'],
+          );
+          garbageReports = List<Map<String, dynamic>>.from(
+            data['garbageReports'],
+          );
+        });
+      } else {
+        try {
+          final error =
+              jsonDecode(response.body)['message'] ??
+              'Failed to fetch requests with status ${response.statusCode}';
+          throw Exception(error);
+        } catch (parseError) {
+          throw Exception('Invalid server response: ${response.body}');
+        }
+      }
+    } catch (e) {
+      print('Error during fetch requests: $e');
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text("Collection Requests"),
+        backgroundColor: AppColors.accentColor,
+      ),
+      backgroundColor: AppColors.backgroundColor,
+      body:
+          _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      "Collection Requests",
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textColor,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    collectionRequests.isEmpty
+                        ? const Text(
+                          "No collection requests found.",
+                          style: TextStyle(color: AppColors.textColor),
+                        )
+                        : Expanded(
+                          child: ListView.builder(
+                            itemCount: collectionRequests.length,
+                            itemBuilder: (context, index) {
+                              final request = collectionRequests[index];
+                              return Card(
+                                elevation: 2,
+                                margin: const EdgeInsets.symmetric(vertical: 5),
+                                child: ListTile(
+                                  title: Text(
+                                    "Request ID: ${request['requestid']}",
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  subtitle: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text("Location: ${request['location']}"),
+                                      Text("Status: ${request['status']}"),
+                                      Text("Time: ${request['datetime']}"),
+                                      Text(
+                                        "Available Time: ${request['availabletime']}",
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                    const SizedBox(height: 20),
+                    const Text(
+                      "Garbage Reports",
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textColor,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    garbageReports.isEmpty
+                        ? const Text(
+                          "No garbage reports found.",
+                          style: TextStyle(color: AppColors.textColor),
+                        )
+                        : Expanded(
+                          child: ListView.builder(
+                            itemCount: garbageReports.length,
+                            itemBuilder: (context, index) {
+                              final report = garbageReports[index];
+                              return Card(
+                                elevation: 2,
+                                margin: const EdgeInsets.symmetric(vertical: 5),
+                                child: ListTile(
+                                  title: Text(
+                                    "Report ID: ${report['reportid']}",
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  subtitle: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text("Location: ${report['location']}"),
+                                      Text("Status: ${report['status']}"),
+                                      Text("Time: ${report['datetime']}"),
+                                      report['imageurl'] != null
+                                          ? Image.network(
+                                            report['imageurl'],
+                                            height: 100,
+                                            errorBuilder:
+                                                (context, error, stackTrace) =>
+                                                    const Text(
+                                                      "Image unavailable",
+                                                    ),
+                                          )
+                                          : const Text("No Image"),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                  ],
+                ),
+              ),
     );
   }
 }

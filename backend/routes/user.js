@@ -69,7 +69,7 @@ router.post('/bin-fill', authenticateToken, async (req, res) => {
       message: 'Collection request submitted successfully',
       request: {
         id: result.rows[0].requestid,
-        location: result.rows[0].location.replace('POINT(', '').replace(')', ''),
+        location: result.rows[0].location.replace('POINT(', '').replace(')', '') || result.rows[0].location,
         status: result.rows[0].status,
         availableTime: result.rows[0].availabletime
       }
@@ -77,7 +77,7 @@ router.post('/bin-fill', authenticateToken, async (req, res) => {
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('Collection request error:', error);
-    res.status(500).json({ message: 'Server error submitting collection request' });
+    res.status(500).json({ message: error.message || 'Server error submitting collection request' });
   } finally {
     client.release();
   }
@@ -114,14 +114,14 @@ router.post('/report-waste', authenticateToken, upload.single('image'), async (r
       message: 'Waste report submitted successfully',
       report: {
         id: result.rows[0].reportid,
-        location: result.rows[0].location.replace('POINT(', '').replace(')', ''),
+        location: result.rows[0].location.replace('POINT(', '').replace(')', '') || result.rows[0].location,
         imageUrl: result.rows[0].imageurl
       }
     });
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('Waste report error:', error);
-    res.status(500).json({ message: 'Server error submitting waste report' });
+    res.status(500).json({ message: error.message || 'Server error submitting waste report' });
   } finally {
     client.release();
   }
@@ -162,11 +162,11 @@ router.get('/collection-requests', authenticateToken, async (req, res) => {
     res.json({
       collectionRequests: collectionRequests.rows.map(row => ({
         ...row,
-        location: row.location.replace('POINT(', '').replace(')', '')
+        location: row.location.replace('POINT(', '').replace(')', '') || row.location
       })),
       garbageReports: garbageReports.rows.map(row => ({
         ...row,
-        location: row.location.replace('POINT(', '').replace(')', '')
+        location: row.location.replace('POINT(', '').replace(')', '') || row.location
       }))
     });
   } catch (error) {
@@ -176,6 +176,11 @@ router.get('/collection-requests', authenticateToken, async (req, res) => {
   } finally {
     client.release();
   }
+});
+
+// Fallback for unmatched routes
+router.use((req, res) => {
+  res.status(404).json({ message: 'Route not found' });
 });
 
 // CORS configuration
