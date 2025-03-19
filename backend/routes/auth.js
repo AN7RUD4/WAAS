@@ -20,7 +20,7 @@ const authenticateToken = (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'passwordKey');
-    req.user = decoded; // Store decoded user data
+    req.user = decoded;
     next();
   } catch (err) {
     return res.status(403).json({ message: 'Invalid or expired token' });
@@ -62,7 +62,6 @@ router.post('/signup', validateSignup, async (req, res) => {
 
     const { name, email, password } = req.body;
 
-    // Check if user exists
     const existingUser = await client.query(
       'SELECT * FROM users WHERE email = $1',
       [email]
@@ -122,7 +121,7 @@ router.post('/login', validateLogin, async (req, res) => {
     }
 
     const token = jwt.sign(
-      { userid: user.userid, email: user.email }, // Use 'userid' to match database
+      { userid: user.userid, email: user.email },
       process.env.JWT_SECRET || 'passwordKey',
       { expiresIn: '1h' }
     );
@@ -133,10 +132,10 @@ router.post('/login', validateLogin, async (req, res) => {
       message: 'Login successful',
       token,
       user: {
-        userid: user.userid, // Use 'userid' to match database
+        userid: user.userid,
         name: user.name,
         email: user.email,
-        role: user.role // Ensure role is included if it exists
+        role: user.role
       }
     };
     console.log('Login response:', responseData);
@@ -157,7 +156,7 @@ router.get('/profile/:userID', authenticateToken, async (req, res) => {
 
     const { userID } = req.params;
     const user = await client.query(
-      'SELECT userid, name, email FROM users WHERE userid = $1', // Use 'userid'
+      'SELECT userid, name, email FROM users WHERE userid = $1',
       [userID]
     );
 
@@ -169,7 +168,7 @@ router.get('/profile/:userID', authenticateToken, async (req, res) => {
 
     res.status(200).json({
       user: {
-        userid: user.rows[0].userid, // Use 'userid'
+        userid: user.rows[0].userid,
         name: user.rows[0].name,
         email: user.rows[0].email
       }
@@ -181,14 +180,6 @@ router.get('/profile/:userID', authenticateToken, async (req, res) => {
   } finally {
     client.release();
   }
-});
-
-// Add CORS configuration
-router.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*'); 
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  next();
 });
 
 module.exports = router;
