@@ -1,8 +1,7 @@
-// server.js
 const express = require('express');
 const authRouter = require('./routes/auth');
 const profileRouter = require('./routes/profile');
-const wasteRouter=require('./routes/waste')
+const wasteRouter = require('./routes/waste');
 const cors = require('cors');
 
 const app = express();
@@ -11,7 +10,7 @@ const port = process.env.PORT || 5000;
 // Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(cors()); 
+app.use(cors());
 
 // Root route for testing
 app.get('/', (req, res) => {
@@ -20,7 +19,7 @@ app.get('/', (req, res) => {
 
 // Routes
 app.use('/api', authRouter);
-app.use('api/profile',profileRouter);
+app.use('/api/profile', profileRouter);
 app.use('/api/waste', wasteRouter);
 
 // Error handling middleware
