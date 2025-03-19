@@ -1,9 +1,11 @@
 const { Pool } = require('pg');
 const jwt = require('jsonwebtoken');
 const multer = require('multer');
-const express = require('express');
+const app = require('express');
 
-const wasteRouter = express.Router();
+const wasteRouter = app.Router();
+app.use('/waste', wasteRouter);
+
 const pool = new Pool({
   connectionString: 'postgresql://postgres.hrzroqrgkvzhomsosqzl:7H.6k2wS*F$q2zY@aws-0-ap-south-1.pooler.supabase.com:6543/postgres',
   ssl: { rejectUnauthorized: false },
@@ -138,8 +140,6 @@ wasteRouter.use((req, res, next) => {
   res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   next();
 });
-
-app.use('/waste', wasteRouter);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
