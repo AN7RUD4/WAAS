@@ -1,6 +1,7 @@
 const { Pool } = require('pg');
 const jwt = require('jsonwebtoken');
 const multer = require('multer');
+const express = require('express');
 
 const wasteRouter = express.Router();
 const pool = new Pool({
