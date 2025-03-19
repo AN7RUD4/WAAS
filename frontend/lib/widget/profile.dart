@@ -3,10 +3,12 @@ import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'dart:convert';
 
+import 'package:waas/assets/constants.dart';
+
 
 
 class ApiService {
-  static const String baseUrl = 'http://localhost:3000/api';
+  static const String baseUrl = apiBaseUrl;
   static const storage = FlutterSecureStorage();
 
   static Future<String?> getToken() async {
