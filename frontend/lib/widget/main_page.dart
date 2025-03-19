@@ -14,7 +14,7 @@ class MainPage extends StatelessWidget {
     : _pages = [
         role == 'worker' ? WorkerApp() : UserApp(),
         MapScreen(),
-        ProfilePage(userID: userID),
+       // ProfilePage(userID: userID),
       ];
 
   @override
