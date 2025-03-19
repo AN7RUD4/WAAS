@@ -19,7 +19,8 @@ app.get('/', (req, res) => {
 
 // Routes
 app.use('/api', authRouter);
-app.use('api/profile',profileRouter)
+app.use('api/profile',profileRouter);
+app.use('/api/waste', wasteRouter);
 
 // Error handling middleware
 app.use((err, req, res, next) => {

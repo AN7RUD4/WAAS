@@ -16,14 +16,15 @@ Widget buildButton(String text, Color color, VoidCallback onPressed) {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
     ),
     onPressed: onPressed,
-    child: Text(
-      text,
-      style: const TextStyle(color: Colors.black),
-    ),
+    child: Text(text, style: const TextStyle(color: Colors.black)),
   );
 }
 
-Widget buildTextField(String label, TextEditingController controller, {bool readOnly = false}) {
+Widget buildTextField(
+  String label,
+  TextEditingController controller, {
+  bool readOnly = false,
+}) {
   return Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
@@ -256,7 +257,9 @@ class _ReportPageState extends State<ReportPage> {
 
     if (permission == LocationPermission.deniedForever) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Location permissions are permanently denied')),
+        const SnackBar(
+          content: Text('Location permissions are permanently denied'),
+        ),
       );
       return;
     }
@@ -276,7 +279,9 @@ class _ReportPageState extends State<ReportPage> {
 
   Future<void> _takePicture() async {
     final ImagePicker picker = ImagePicker();
-    final XFile? pickedImage = await picker.pickImage(source: ImageSource.camera);
+    final XFile? pickedImage = await picker.pickImage(
+      source: ImageSource.camera,
+    );
 
     if (pickedImage != null) {
       setState(() {
@@ -288,7 +293,9 @@ class _ReportPageState extends State<ReportPage> {
   Future<void> _submitReport() async {
     if (_image == null || locationController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please take a photo and provide a location!")),
+        const SnackBar(
+          content: Text("Please take a photo and provide a location!"),
+        ),
       );
       return;
     }
@@ -304,7 +311,9 @@ class _ReportPageState extends State<ReportPage> {
       );
       request.headers['Authorization'] = 'Bearer $token';
       request.fields['location'] = locationController.text;
-      request.files.add(await http.MultipartFile.fromPath('image', _image!.path));
+      request.files.add(
+        await http.MultipartFile.fromPath('image', _image!.path),
+      );
 
       var response = await request.send();
       var responseBody = await response.stream.bytesToString();
@@ -315,13 +324,14 @@ class _ReportPageState extends State<ReportPage> {
         );
         Navigator.pop(context);
       } else {
-        final error = jsonDecode(responseBody)['message'] ?? 'Failed to submit report';
+        final error =
+            jsonDecode(responseBody)['message'] ?? 'Failed to submit report';
         throw Exception(error);
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString())),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
     } finally {
       setState(() => _isLoading = false);
     }
@@ -335,58 +345,65 @@ class _ReportPageState extends State<ReportPage> {
         backgroundColor: AppColors.accentColor,
       ),
       backgroundColor: AppColors.backgroundColor,
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    "Take a Picture",
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.textColor,
+      body:
+          _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      "Take a Picture",
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textColor,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 10),
-                  Center(
-                    child: Column(
-                      children: [
-                        _image == null
-                            ? const Text(
+                    const SizedBox(height: 10),
+                    Center(
+                      child: Column(
+                        children: [
+                          _image == null
+                              ? const Text(
                                 "No Image Taken",
                                 style: TextStyle(color: AppColors.textColor),
                               )
-                            : Image.file(_image!, height: 200),
-                        const SizedBox(height: 10),
-                        buildButton(
-                          "Open Camera",
-                          AppColors.buttonColor,
-                          _takePicture,
-                        ),
-                      ],
+                              : Image.file(_image!, height: 200),
+                          const SizedBox(height: 10),
+                          buildButton(
+                            "Open Camera",
+                            AppColors.buttonColor,
+                            _takePicture,
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 20),
-                  buildTextField("Location", locationController, readOnly: true),
-                  const SizedBox(height: 20),
-                  Center(
-                    child: buildButton(
-                      "Submit Report",
-                      AppColors.accentColor,
-                      _submitReport,
+                    const SizedBox(height: 20),
+                    buildTextField(
+                      "Location",
+                      locationController,
+                      readOnly: true,
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 20),
+                    Center(
+                      child: buildButton(
+                        "Submit Report",
+                        AppColors.accentColor,
+                        _submitReport,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
     );
   }
 }
 
 // --------------------- Bin Fill Page ---------------------
+// ... (keep other imports and widgets as they are)
+
 class BinFillPage extends StatefulWidget {
   const BinFillPage({super.key});
 
@@ -432,7 +449,9 @@ class _BinFillPageState extends State<BinFillPage> {
 
     if (permission == LocationPermission.deniedForever) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Location permissions are permanently denied')),
+        const SnackBar(
+          content: Text('Location permissions are permanently denied'),
+        ),
       );
       return;
     }
@@ -466,7 +485,9 @@ class _BinFillPageState extends State<BinFillPage> {
     }
     if (locationController.text.isEmpty || timeController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please provide location and available time")),
+        const SnackBar(
+          content: Text("Please provide location and available time"),
+        ),
       );
       return;
     }
@@ -488,19 +509,30 @@ class _BinFillPageState extends State<BinFillPage> {
         }),
       );
 
+      print('Response status: ${response.statusCode}');
+      print('Response body: ${response.body}');
+
       if (response.statusCode == 201) {
+        final data = jsonDecode(response.body);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("Bin Fill details submitted!")),
         );
         Navigator.pop(context);
       } else {
-        final error = jsonDecode(response.body)['message'] ?? 'Failed to submit bin fill';
-        throw Exception(error);
+        try {
+          final error =
+              jsonDecode(response.body)['message'] ??
+              'Failed to submit bin fill';
+          throw Exception(error);
+        } catch (parseError) {
+          throw Exception('Invalid server response: ${response.body}');
+        }
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString())),
-      );
+      print('Error during submit bin fill: $e');
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
     } finally {
       setState(() => _isLoading = false);
     }
@@ -514,42 +546,51 @@ class _BinFillPageState extends State<BinFillPage> {
         backgroundColor: AppColors.accentColor,
       ),
       backgroundColor: AppColors.backgroundColor,
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  buildTextField("User Location", locationController, readOnly: true),
-                  const SizedBox(height: 20),
-                  const Text(
-                    "Bin Fill Level",
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.textColor,
+      body:
+          _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    buildTextField(
+                      "User Location",
+                      locationController,
+                      readOnly: true,
                     ),
-                  ),
-                  buildCheckbox(
-                    "80% Bin Fill",
-                    is80Checked,
-                    () => _updateCheckbox(true),
-                  ),
-                  buildCheckbox(
-                    "100% Bin Fill",
-                    is100Checked,
-                    () => _updateCheckbox(false),
-                  ),
-                  const SizedBox(height: 20),
-                  buildTextField("Available Time", timeController),
-                  const SizedBox(height: 20),
-                  Center(
-                    child: buildButton("Submit", AppColors.accentColor, _submitBinFill),
-                  ),
-                ],
+                    const SizedBox(height: 20),
+                    const Text(
+                      "Bin Fill Level",
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textColor,
+                      ),
+                    ),
+                    buildCheckbox(
+                      "80% Bin Fill",
+                      is80Checked,
+                      () => _updateCheckbox(true),
+                    ),
+                    buildCheckbox(
+                      "100% Bin Fill",
+                      is100Checked,
+                      () => _updateCheckbox(false),
+                    ),
+                    const SizedBox(height: 20),
+                    buildTextField("Available Time", timeController),
+                    const SizedBox(height: 20),
+                    Center(
+                      child: buildButton(
+                        "Submit",
+                        AppColors.accentColor,
+                        _submitBinFill,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
     );
   }
 
@@ -561,10 +602,7 @@ class _BinFillPageState extends State<BinFillPage> {
           onChanged: (val) => onChanged(),
           activeColor: AppColors.accentColor,
         ),
-        Text(
-          label,
-          style: TextStyle(color: AppColors.textColor),
-        ),
+        Text(label, style: TextStyle(color: AppColors.textColor)),
       ],
     );
   }
