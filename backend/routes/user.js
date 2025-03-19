@@ -29,20 +29,20 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage: storage });
 
-// Bin Fill endpoint
+// Bin Fill endpoint (Remove availableTime)
 userRouter.post('/bin-fill', authenticateToken, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const { location, availableTime } = req.body;
-    if (!location || !availableTime) return res.status(400).json({ message: 'Location and available time are required' });
+    const { location } = req.body;
+    if (!location) return res.status(400).json({ message: 'Location is required' }); // Removed availableTime validation
     const [lat, long] = location.split(',').map(Number);
     if (isNaN(lat) || isNaN(long)) throw new Error('Invalid location format. Expected: "lat,long"');
     const result = await client.query(
-      `INSERT INTO collectionrequests (userid, location, status, datetime, availabletime) 
-       VALUES ($1, ST_GeomFromText('POINT(${long} ${lat})', 4326), $2, NOW(), $3) 
-       RETURNING requestid, ST_AsText(location) as location, status, availabletime`,
-      [req.user.userid, 'pending', availableTime]
+      `INSERT INTO collectionrequests (userid, location, status, datetime) 
+       VALUES ($1, ST_GeomFromText('POINT(${long} ${lat})', 4326), $2, NOW()) 
+       RETURNING requestid, ST_AsText(location) as location, status`, // Removed availabletime
+      [req.user.userid, 'pending']
     );
     await client.query('COMMIT');
     res.status(201).json({
@@ -51,7 +51,6 @@ userRouter.post('/bin-fill', authenticateToken, async (req, res) => {
         id: result.rows[0].requestid,
         location: result.rows[0].location.replace('POINT(', '').replace(')', '') || result.rows[0].location,
         status: result.rows[0].status,
-        availableTime: result.rows[0].availabletime
       }
     });
   } catch (error) {
@@ -63,7 +62,7 @@ userRouter.post('/bin-fill', authenticateToken, async (req, res) => {
   }
 });
 
-// Report Waste endpoint
+// Report Waste endpoint (unchanged)
 userRouter.post('/report-waste', authenticateToken, upload.single('image'), async (req, res) => {
   const client = await pool.connect();
   try {
@@ -97,14 +96,14 @@ userRouter.post('/report-waste', authenticateToken, upload.single('image'), asyn
   }
 });
 
-// Collection Requests endpoint
+// Collection Requests endpoint (Remove availabletime)
 userRouter.get('/collection-requests', authenticateToken, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     const collectionRequests = await client.query(
-      `SELECT requestid, ST_AsText(location) as location, status, datetime, availabletime 
-       FROM collectionrequests WHERE userid = $1 ORDER BY datetime DESC`,
+      `SELECT requestid, ST_AsText(location) as location, status, datetime 
+       FROM collectionrequests WHERE userid = $1 ORDER BY datetime DESC`, // Removed availabletime
       [req.user.userid]
     );
     const garbageReports = await client.query(

@@ -327,7 +327,7 @@ class _ReportPageState extends State<ReportPage> {
 
       var request = http.MultipartRequest(
         'POST',
-        Uri.parse('$apiBaseUrl/user/report-waste'), // Updated to /user/report-waste
+        Uri.parse('$apiBaseUrl/user/report-waste'),
       );
       request.headers['Authorization'] = 'Bearer $token';
       request.fields['location'] = locationController.text;
@@ -428,7 +428,7 @@ class _ReportPageState extends State<ReportPage> {
   }
 }
 
-// Bin Fill Page for submitting bin fill requests
+// Bin Fill Page for submitting bin fill requests (Updated: Removed availableTime)
 class BinFillPage extends StatefulWidget {
   const BinFillPage({super.key});
 
@@ -440,7 +440,6 @@ class _BinFillPageState extends State<BinFillPage> {
   bool is80Checked = false;
   bool is100Checked = false;
   final TextEditingController locationController = TextEditingController();
-  final TextEditingController timeController = TextEditingController();
   bool _isLoading = false;
 
   @override
@@ -508,10 +507,10 @@ class _BinFillPageState extends State<BinFillPage> {
       );
       return;
     }
-    if (locationController.text.isEmpty || timeController.text.isEmpty) {
+    if (locationController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text("Please provide location and available time"),
+          content: Text("Please provide location"),
         ),
       );
       return;
@@ -523,14 +522,13 @@ class _BinFillPageState extends State<BinFillPage> {
       if (token == null) throw Exception('No token found');
 
       final response = await http.post(
-        Uri.parse('$apiBaseUrl/user/bin-fill'), // Updated to /user/bin-fill
+        Uri.parse('$apiBaseUrl/user/bin-fill'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
         },
         body: jsonEncode({
           'location': locationController.text,
-          'availableTime': timeController.text,
         }),
       );
 
@@ -601,8 +599,6 @@ class _BinFillPageState extends State<BinFillPage> {
                     () => _updateCheckbox(false),
                   ),
                   const SizedBox(height: 20),
-                  buildTextField("Available Time", timeController),
-                  const SizedBox(height: 20),
                   Center(
                     child: buildButton(
                       "Submit",
@@ -630,7 +626,7 @@ class _BinFillPageState extends State<BinFillPage> {
   }
 }
 
-// Collection Requests Page to view submitted requests
+// Collection Requests Page to view submitted requests (Updated: Removed availableTime)
 class CollectionRequestsPage extends StatefulWidget {
   const CollectionRequestsPage({super.key});
 
@@ -661,7 +657,7 @@ class _CollectionRequestsPageState extends State<CollectionRequestsPage> {
       if (token == null) throw Exception('No token found');
 
       final response = await http.get(
-        Uri.parse('$apiBaseUrl/user/collection-requests'), // Updated to /user/collection-requests
+        Uri.parse('$apiBaseUrl/user/collection-requests'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
@@ -749,9 +745,6 @@ class _CollectionRequestsPageState extends State<CollectionRequestsPage> {
                                       Text("Location: ${request['location']}"),
                                       Text("Status: ${request['status']}"),
                                       Text("Time: ${request['datetime']}"),
-                                      Text(
-                                        "Available Time: ${request['availabletime'] ?? 'N/A'}",
-                                      ),
                                     ],
                                   ),
                                 ),
