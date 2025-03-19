@@ -1,4 +1,3 @@
-// routes/waste.js
 const express = require('express');
 const { Pool } = require('pg');
 const jwt = require('jsonwebtoken');
@@ -15,7 +14,6 @@ const pool = new Pool({
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
-  
   if (!token) {
     return res.status(401).json({ message: 'Authentication required' });
   }
@@ -35,111 +33,136 @@ const storage = multer.diskStorage({
     cb(null, 'uploads/');
   },
   filename: (req, file, cb) => {
-    cb(null, Date.now() + '-' + file.originalname);
-  }
+    cb(null, `${Date.now()}-${file.originalname}`);
+  },
 });
 const upload = multer({ storage: storage });
 
 // Bin Fill Report endpoint (updated to CollectionRequests)
 router.post('/bin-fill', authenticateToken, async (req, res) => {
+  const client = await pool.connect();
   try {
-    const { location, availableTime } = req.body; // Removed fillLevel as it's not in schema
-    
+    await client.query('BEGIN');
+
+    const { location, availableTime } = req.body;
     if (!location || !availableTime) {
       return res.status(400).json({ message: 'Location and available time are required' });
     }
 
-    // Convert location to PostGIS point format if it's in lat,long format
+    // Convert location to PostGIS point format
     const [lat, long] = location.split(',').map(Number);
-    const locationPoint = POINT($long, $lat);
+    if (isNaN(lat) || isNaN(long)) {
+      throw new Error('Invalid location format. Expected: "lat,long"');
+    }
 
-    const result = await pool.query(
+    const result = await client.query(
       `INSERT INTO collectionrequests 
-       (userid, location, status, datetime) 
-       VALUES ($1, ST_GeomFromText($2, 4326), $3, NOW()) 
-       RETURNING requestID, location, status`,
-      [req.userid, locationPoint, 'pending']
+       (userid, location, status, datetime, availabletime) 
+       VALUES ($1, ST_GeomFromText('POINT(${long} ${lat})', 4326), $2, NOW(), $3) 
+       RETURNING requestid, ST_AsText(location) as location, status, availabletime`,
+      [req.user.userid, 'pending', availableTime]
     );
+
+    await client.query('COMMIT');
 
     res.status(201).json({
       message: 'Collection request submitted successfully',
       request: {
         id: result.rows[0].requestid,
-        location: result.rows[0].location,
-        status: result.rows[0].status
+        location: result.rows[0].location.replace('POINT(', '').replace(')', ''),
+        status: result.rows[0].status,
+        availableTime: result.rows[0].availabletime
       }
     });
   } catch (error) {
+    await client.query('ROLLBACK');
     console.error('Collection request error:', error);
     res.status(500).json({ message: 'Server error submitting collection request' });
+  } finally {
+    client.release();
   }
 });
 
 // Public Waste Report endpoint (updated to GarbageReports)
 router.post('/report-waste', authenticateToken, upload.single('image'), async (req, res) => {
+  const client = await pool.connect();
   try {
+    await client.query('BEGIN');
+
     const { location } = req.body;
-    
     if (!location || !req.file) {
       return res.status(400).json({ message: 'Location and image are required' });
     }
 
     const imageUrl = req.file.path;
     const [lat, long] = location.split(',').map(Number);
-    const locationPoint = POINT($long , $lat);
+    if (isNaN(lat) || isNaN(long)) {
+      throw new Error('Invalid location format. Expected: "lat,long"');
+    }
 
-    const result = await pool.query(
+    const result = await client.query(
       `INSERT INTO garbagereports 
-       (userid, location, imageUrl, status, dateTime) 
-       VALUES ($1, ST_GeomFromText($2, 4326), $3, $4, NOW()) 
-       RETURNING reportid, location, imageurl`,
-      [req.userid, locationPoint, imageUrl, 'pending']
+       (userid, location, imageurl, status, datetime) 
+       VALUES ($1, ST_GeomFromText('POINT(${long} ${lat})', 4326), $2, $3, NOW()) 
+       RETURNING reportid, ST_AsText(location) as location, imageurl`,
+      [req.user.userid, imageUrl, 'pending']
     );
+
+    await client.query('COMMIT');
 
     res.status(201).json({
       message: 'Waste report submitted successfully',
       report: {
         id: result.rows[0].reportid,
-        location: result.rows[0].location,
+        location: result.rows[0].location.replace('POINT(', '').replace(')', ''),
         imageUrl: result.rows[0].imageurl
       }
     });
   } catch (error) {
+    await client.query('ROLLBACK');
     console.error('Waste report error:', error);
     res.status(500).json({ message: 'Server error submitting waste report' });
+  } finally {
+    client.release();
   }
 });
 
 // View Collection Requests endpoint (updated for new schema)
 router.get('/collection-requests', authenticateToken, async (req, res) => {
+  const client = await pool.connect();
   try {
-    const collectionRequests = await pool.query(
+    await client.query('BEGIN');
+
+    const collectionRequests = await client.query(
       `SELECT requestid, 
               ST_AsText(location) as location, 
               status, 
-              dateTime 
+              datetime,
+              availabletime 
        FROM collectionrequests 
        WHERE userid = $1 
        ORDER BY datetime DESC`,
-      [req.userid]
+      [req.user.userid]
     );
 
-    const garbageReports = await pool.query(
-      `SELECT reportID, 
+    const garbageReports = await client.query(
+      `SELECT reportid, 
               ST_AsText(location) as location, 
-              imageUrl, 
+              imageurl, 
               status, 
-              dateTime 
-       FROM GarbageReports 
-       WHERE userID = $1 
-       ORDER BY dateTime DESC`,
-      [req.user.id]
+              datetime 
+       FROM garbagereports 
+       WHERE userid = $1 
+       ORDER BY datetime DESC`,
+      [req.user.userid]
     );
+
+    await client.query('COMMIT');
 
     res.json({
       collectionRequests: collectionRequests.rows.map(row => ({
         ...row,
-        location: row.location.replace('POINT(', '').replace(')', '') // Convert POINT(x y) to "x,y"
+        location: row.location.replace('POINT(', '').replace(')', '')
       })),
       garbageReports: garbageReports.rows.map(row => ({
         ...row,
@@ -147,9 +170,20 @@ router.get('/collection-requests', authenticateToken, async (req, res) => {
       }))
     });
   } catch (error) {
+    await client.query('ROLLBACK');
     console.error('Collection requests error:', error);
     res.status(500).json({ message: 'Server error fetching collection requests' });
+  } finally {
+    client.release();
   }
 });
 
-module.exports=router;
+// CORS configuration
+router.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  next();
+});
+
+module.exports = router;

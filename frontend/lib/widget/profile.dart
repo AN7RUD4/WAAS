@@ -21,26 +21,16 @@ class _ProfilePageState extends State<ProfilePage>
   String? profileImageUrl =
       'https://via.placeholder.com/150'; // Placeholder image
   bool _isLoading = false;
-  late AnimationController _animationController;
-  late Animation<double> _fadeAnimation;
 
   @override
   void initState() {
     super.initState();
-    _animationController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 500),
-    );
-    _fadeAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(_animationController);
+
     _fetchProfile();
   }
 
   @override
   void dispose() {
-    _animationController.dispose();
     super.dispose();
   }
 
@@ -71,7 +61,6 @@ class _ProfilePageState extends State<ProfilePage>
           // Assuming backend could return a profile image URL in the future
           profileImageUrl = data['user']['profileImageUrl'] ?? profileImageUrl;
         });
-        _animationController.forward();
       } else {
         throw Exception('Failed to load profile: ${response.body}');
       }
