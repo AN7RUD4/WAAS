@@ -2,6 +2,7 @@
 const express = require('express');
 const authRouter = require('./routes/auth');
 const profileRouter = require('./routes/profile');
+const wasteRouter=require('./routes/waste')
 const cors = require('cors');
 
 const app = express();
