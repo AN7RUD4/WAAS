@@ -54,11 +54,11 @@ router.post('/bin-fill', authenticateToken, async (req, res) => {
     const locationPoint = POINT($long, $lat);
 
     const result = await pool.query(
-      `INSERT INTO CollectionRequests 
-       (userID, location, status, dateTime) 
+      `INSERT INTO collectionrequests 
+       (userid, location, status, datetime) 
        VALUES ($1, ST_GeomFromText($2, 4326), $3, NOW()) 
        RETURNING requestID, location, status`,
-      [req.user.id, locationPoint, 'pending']
+      [req.userid, locationPoint, 'pending']
     );
 
     res.status(201).json({
@@ -89,11 +89,11 @@ router.post('/report-waste', authenticateToken, upload.single('image'), async (r
     const locationPoint = POINT($long , $lat);
 
     const result = await pool.query(
-      `INSERT INTO GarbageReports 
-       (userID, location, imageUrl, status, dateTime) 
+      `INSERT INTO garbagereports 
+       (userid, location, imageUrl, status, dateTime) 
        VALUES ($1, ST_GeomFromText($2, 4326), $3, $4, NOW()) 
-       RETURNING reportID, location, imageUrl`,
-      [req.user.id, locationPoint, imageUrl, 'pending']
+       RETURNING reportid, location, imageurl`,
+      [req.userid, locationPoint, imageUrl, 'pending']
     );
 
     res.status(201).json({
@@ -114,14 +114,14 @@ router.post('/report-waste', authenticateToken, upload.single('image'), async (r
 router.get('/collection-requests', authenticateToken, async (req, res) => {
   try {
     const collectionRequests = await pool.query(
-      `SELECT requestID, 
+      `SELECT requestid, 
               ST_AsText(location) as location, 
               status, 
               dateTime 
-       FROM CollectionRequests 
-       WHERE userID = $1 
-       ORDER BY dateTime DESC`,
-      [req.user.id]
+       FROM collectionrequests 
+       WHERE userid = $1 
+       ORDER BY datetime DESC`,
+      [req.userid]
     );
 
     const garbageReports = await pool.query(
