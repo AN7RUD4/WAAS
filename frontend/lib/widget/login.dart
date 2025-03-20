@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:waas/widget/main_page.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:waas/assets/constants.dart';
 
 class LoginPage extends StatefulWidget {
@@ -16,6 +16,14 @@ class _LoginPageState extends State<LoginPage> {
   final TextEditingController emailController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
   bool _isLoading = false;
+  final storage = const FlutterSecureStorage();
+
+  @override
+  void dispose() {
+    emailController.dispose();
+    passwordController.dispose();
+    super.dispose();
+  }
 
   Future<void> login() async {
     if (emailController.text.trim().isEmpty || passwordController.text.trim().isEmpty) {
@@ -48,11 +56,10 @@ class _LoginPageState extends State<LoginPage> {
         final data = jsonDecode(response.body);
         print('Login successful: $data');
 
-        // Save the token to SharedPreferences
+        // Save the token to FlutterSecureStorage
         final token = data['token'];
         if (token != null) {
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.setString('token', token);
+          await storage.write(key: 'jwt_token', value: token);
           print('Token saved: $token');
         } else {
           throw Exception('No token received from server');
@@ -61,7 +68,7 @@ class _LoginPageState extends State<LoginPage> {
         // Extract userid and role from the 'user' object
         final user = data['user'];
         if (user == null) throw Exception('No user data in response');
-        final userID = user['userid'] as int? ?? (throw Exception('No userid in response')); // Use 'userid' (lowercase)
+        final userID = user['userid'] as int? ?? (throw Exception('No userid in response'));
         final role = user['role'] as String? ?? (throw Exception('No role in response'));
 
         Navigator.pushReplacement(
@@ -116,7 +123,7 @@ class _LoginPageState extends State<LoginPage> {
                         ),
                         prefixIcon: const Icon(Icons.email),
                         filled: true,
-                        fillColor: Colors.white.withOpacity(0.8),
+                        fillColor: Colors.white70,
                       ),
                       keyboardType: TextInputType.emailAddress,
                     ),
@@ -131,7 +138,7 @@ class _LoginPageState extends State<LoginPage> {
                         ),
                         prefixIcon: const Icon(Icons.lock),
                         filled: true,
-                        fillColor: Colors.white.withOpacity(0.8),
+                        fillColor: Colors.white70,
                       ),
                     ),
                     const SizedBox(height: 30),

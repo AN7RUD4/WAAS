@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart'; // Use FlutterSecureStorage
 import '../colors/colors.dart'; // Import your theme colors
 import 'package:waas/assets/constants.dart';
 
@@ -245,6 +245,7 @@ class _ReportPageState extends State<ReportPage> {
   File? _image;
   final TextEditingController locationController = TextEditingController();
   bool _isLoading = false;
+  final storage = FlutterSecureStorage(); // Initialize FlutterSecureStorage
 
   @override
   void initState() {
@@ -293,8 +294,7 @@ class _ReportPageState extends State<ReportPage> {
   }
 
   Future<String?> _getToken() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('token');
+    return await storage.read(key: 'jwt_token');
   }
 
   Future<void> _takePicture() async {
@@ -441,6 +441,7 @@ class _BinFillPageState extends State<BinFillPage> {
   bool is100Checked = false;
   final TextEditingController locationController = TextEditingController();
   bool _isLoading = false;
+  final storage = FlutterSecureStorage(); // Initialize FlutterSecureStorage
 
   @override
   void initState() {
@@ -489,8 +490,7 @@ class _BinFillPageState extends State<BinFillPage> {
   }
 
   Future<String?> _getToken() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('token');
+    return await storage.read(key: 'jwt_token');
   }
 
   void _updateCheckbox(bool is80Selected) {
@@ -638,6 +638,7 @@ class _CollectionRequestsPageState extends State<CollectionRequestsPage> {
   List<Map<String, dynamic>> collectionRequests = [];
   List<Map<String, dynamic>> garbageReports = [];
   bool _isLoading = false;
+  final storage = FlutterSecureStorage(); // Initialize FlutterSecureStorage
 
   @override
   void initState() {
@@ -646,8 +647,7 @@ class _CollectionRequestsPageState extends State<CollectionRequestsPage> {
   }
 
   Future<String?> _getToken() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('token');
+    return await storage.read(key: 'jwt_token');
   }
 
   Future<void> _fetchRequests() async {

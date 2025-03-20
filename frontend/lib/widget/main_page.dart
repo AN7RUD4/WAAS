@@ -5,32 +5,37 @@ import 'package:waas/widget/profile.dart';
 import 'package:waas/worker/home_worker.dart';
 import 'package:waas/worker/pick_map.dart';
 
+// Define indexChangeNotifier if not defined in bottom_nav.dart
+final ValueNotifier<int> indexChangeNotifier = ValueNotifier<int>(0);
+
 class MainPage extends StatelessWidget {
-  final String role; // Add email parameter
-  final List<Widget> _pages; // Define pages list
-  int userID;
+  final String role;
+  final List<Widget> _pages;
+  final int userID;
 
   MainPage({super.key, required this.userID, required this.role})
-    : _pages = [
-        role == 'worker' ? WorkerApp() : UserApp(),
-        MapScreen(),
-       // ProfilePage(userID: userID),
-      ];
+      : _pages = [
+          role == 'worker' ? const WorkerApp() : const UserApp(),
+          const MapScreen(),
+          const ProfilePage(),
+        ];
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: Stack(
         children: [
-          // Main Content
           SafeArea(
-            child: ValueListenableBuilder(
+            child: ValueListenableBuilder<int>(
               valueListenable: indexChangeNotifier,
-              builder: (context, int index, _) => _pages[index],
+              builder: (context, index, _) {
+                if (index < 0 || index >= _pages.length) {
+                  return const Center(child: Text('Page not found'));
+                }
+                return _pages[index];
+              },
             ),
           ),
-
-          // Overlay Bottom Navigation Bar
           Positioned(
             left: MediaQuery.of(context).size.width * 0.2,
             right: MediaQuery.of(context).size.width * 0.2,

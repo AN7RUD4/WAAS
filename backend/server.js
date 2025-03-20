@@ -18,9 +18,9 @@ app.get('/', (req, res) => {
 });
 
 // Routes
-app.use('/api', authRouter);
-app.use('/api/profile', profileRouter);
-app.use('/api/user', userRouter);
+app.use('/api', authRouter); // Handles /api/signup, /api/login
+app.use('/api/profile', profileRouter); // Handles /api/profile/profile
+app.use('/api/user', userRouter); // Handles user routes (e.g., /api/user/bin-fill)
 
 // Error handling middleware
 app.use((err, req, res, next) => {

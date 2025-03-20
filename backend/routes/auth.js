@@ -74,7 +74,7 @@ router.post('/signup', validateSignup, async (req, res) => {
     const hashedPassword = await bcryptjs.hash(password, 10);
 
     const newUser = await client.query(
-      'INSERT INTO users (name, email, password, role) VALUES ($1, $2, $3, $4) RETURNING userID, name, email',
+      'INSERT INTO users (name, email, password, role) VALUES ($1, $2, $3, $4) RETURNING userid, name, email',
       [name, email, hashedPassword, 'user']
     );
 
@@ -83,10 +83,10 @@ router.post('/signup', validateSignup, async (req, res) => {
     res.status(201).json({
       message: 'User created successfully',
       user: {
-        userID: newUser.rows[0].userID,
+        userid: newUser.rows[0].userid,
         name: newUser.rows[0].name,
-        email: newUser.rows[0].email
-      }
+        email: newUser.rows[0].email,
+      },
     });
   } catch (error) {
     await client.query('ROLLBACK');
@@ -121,7 +121,7 @@ router.post('/login', validateLogin, async (req, res) => {
     }
 
     const token = jwt.sign(
-      { userid: user.userid, email: user.email },
+      { userid: user.userid, email: user.email, role: user.role }, // Include role in token
       process.env.JWT_SECRET || 'passwordKey',
       { expiresIn: '1h' }
     );
@@ -135,8 +135,8 @@ router.post('/login', validateLogin, async (req, res) => {
         userid: user.userid,
         name: user.name,
         email: user.email,
-        role: user.role
-      }
+        role: user.role,
+      },
     };
     console.log('Login response:', responseData);
     res.json(responseData);
@@ -144,39 +144,6 @@ router.post('/login', validateLogin, async (req, res) => {
     await client.query('ROLLBACK');
     console.error('Login error:', error.message);
     res.status(400).json({ message: error.message || 'Server error during login' });
-  } finally {
-    client.release();
-  }
-});
-
-router.get('/profile/:userID', authenticateToken, async (req, res) => {
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-
-    const { userID } = req.params;
-    const user = await client.query(
-      'SELECT userid, name, email FROM users WHERE userid = $1',
-      [userID]
-    );
-
-    if (user.rows.length === 0) {
-      throw new Error('User not found');
-    }
-
-    await client.query('COMMIT');
-
-    res.status(200).json({
-      user: {
-        userid: user.rows[0].userid,
-        name: user.rows[0].name,
-        email: user.rows[0].email
-      }
-    });
-  } catch (error) {
-    await client.query('ROLLBACK');
-    console.error('Profile fetch error:', error.message);
-    res.status(500).json({ message: error.message || 'Server error fetching profile' });
   } finally {
     client.release();
   }
