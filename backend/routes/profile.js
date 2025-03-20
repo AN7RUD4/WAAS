@@ -13,11 +13,17 @@ const pool = new Pool({
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
+  console.log('Received token:', token);
   if (!token) {
+    console.log('No token provided');
     return res.status(401).json({ message: 'Authentication required' });
   }
   jwt.verify(token, process.env.JWT_SECRET || 'passwordKey', (err, user) => {
-    if (err) return res.status(403).json({ message: 'Invalid token' });
+    if (err) {
+      console.log('Token verification failed:', err.message);
+      return res.status(403).json({ message: 'Invalid token' });
+    }
+    console.log('Token verified, user:', user);
     req.user = user;
     next();
   });
@@ -87,6 +93,17 @@ profileRouter.put('/profile', authenticateToken, async (req, res) => {
       throw new Error('User not found');
     }
 
+    // Generate a new token with the updated user data
+    const newToken = jwt.sign(
+      {
+        userid: updatedUser.rows[0].userid,
+        name: updatedUser.rows[0].name,
+        email: updatedUser.rows[0].email,
+      },
+      process.env.JWT_SECRET || 'passwordKey',
+      { expiresIn: '1h' }
+    );
+
     await client.query('COMMIT');
     res.status(200).json({
       message: 'Profile updated successfully',
@@ -95,6 +112,7 @@ profileRouter.put('/profile', authenticateToken, async (req, res) => {
         name: updatedUser.rows[0].name,
         email: updatedUser.rows[0].email,
       },
+      token: newToken,
     });
   } catch (error) {
     await client.query('ROLLBACK');
@@ -134,8 +152,28 @@ profileRouter.put('/change-password', authenticateToken, async (req, res) => {
       throw new Error('User not found');
     }
 
+    // Fetch the updated user data to include in the new token
+    const userData = await client.query(
+      'SELECT userid, name, email FROM users WHERE userid = $1',
+      [req.user.userid]
+    );
+
+    // Generate a new token
+    const newToken = jwt.sign(
+      {
+        userid: userData.rows[0].userid,
+        name: userData.rows[0].name,
+        email: userData.rows[0].email,
+      },
+      process.env.JWT_SECRET || 'passwordKey',
+      { expiresIn: '1h' }
+    );
+
     await client.query('COMMIT');
-    res.status(200).json({ message: 'Password changed successfully' });
+    res.status(200).json({
+      message: 'Password changed successfully',
+      token: newToken,
+    });
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('Change password error:', error.message);
