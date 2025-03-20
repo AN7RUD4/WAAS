@@ -18,7 +18,7 @@ class ApiService {
     }
 
     final response = await http.get(
-      Uri.parse('$apiBaseUrl/profile/profile'), // Correct endpoint
+      Uri.parse('$apiBaseUrl/profile/profile'),
       headers: {'Authorization': 'Bearer $token'},
     );
 
@@ -32,6 +32,13 @@ class ApiService {
   }
 
   Future<Map<String, dynamic>> updateProfile(String name, String email) async {
+    if (name.trim().isEmpty || email.trim().isEmpty) {
+      throw Exception('Name and email are required');
+    }
+    if (!RegExp(r'\S+@\S+\.\S+').hasMatch(email)) {
+      throw Exception('Invalid email format');
+    }
+
     final token = await getToken();
     if (token == null) {
       throw Exception('No token found. Please log in again.');
@@ -56,6 +63,14 @@ class ApiService {
   }
 
   Future<void> changePassword(String newPassword) async {
+    // Input validation
+    if (newPassword.isEmpty) {
+      throw Exception('New password is required');
+    }
+    if (newPassword.length < 8 || !RegExp(r'^(?=.*[A-Z])(?=.*[0-9])').hasMatch(newPassword)) {
+      throw Exception('Password must be at least 8 characters with one uppercase letter and one number');
+    }
+
     final token = await getToken();
     if (token == null) {
       throw Exception('No token found. Please log in again.');
@@ -108,7 +123,7 @@ class _ProfilePageState extends State<ProfilePage> {
     } catch (e) {
       if (e.toString().contains('Session expired')) {
         await ApiService.storage.delete(key: 'jwt_token');
-        Navigator.pushReplacementNamed(context, '/login');
+        Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
       } else {
         setState(() {
           name = 'Error';
@@ -149,7 +164,7 @@ class _ProfilePageState extends State<ProfilePage> {
                   name = updatedData['name'];
                   email = updatedData['email'];
                 });
-                await _loadProfile(); // Refresh from database
+                await _loadProfile(); 
               }
             },
           ),
@@ -184,7 +199,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 Navigator.push(
                   context,
                   MaterialPageRoute(builder: (context) => const ChangePasswordPage()),
-                ).then((_) => _loadProfile()); 
+                ).then((_) => _loadProfile());
               },
               child: const Text('Change Password'),
             ),
@@ -193,10 +208,18 @@ class _ProfilePageState extends State<ProfilePage> {
               onPressed: () {
                 // Navigator.push(
                 //   context,
-                //   MaterialPageRoute(builder: (context) => ),
+                //   MaterialPageRoute(builder: (context) => const CollectionRequestsPage()),
                 // );
               },
               child: const Text("View Report History"),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: () async {
+                await ApiService.storage.delete(key: 'jwt_token');
+                Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
+              },
+              child: const Text('Logout'),
             ),
           ],
         ),
@@ -270,6 +293,9 @@ class _EditProfilePageState extends State<EditProfilePage> {
                     nameController.text.trim(),
                     emailController.text.trim(),
                   );
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text("Profile updated successfully")),
+                  );
                   Navigator.pop(context, {
                     'name': nameController.text.trim(),
                     'email': emailController.text.trim(),
@@ -277,7 +303,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
                 } catch (e) {
                   if (e.toString().contains('Session expired')) {
                     await ApiService.storage.delete(key: 'jwt_token');
-                    Navigator.pushReplacementNamed(context, '/login');
+                    Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
                   } else {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(content: Text("Failed to update profile: $e")),
@@ -371,7 +397,7 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
                 } catch (e) {
                   if (e.toString().contains('Session expired')) {
                     await ApiService.storage.delete(key: 'jwt_token');
-                    Navigator.pushReplacementNamed(context, '/login');
+                    Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
                   } else {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(content: Text("Failed to change password: $e")),
