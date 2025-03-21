@@ -2,12 +2,12 @@ const express = require('express');
 const authRouter = require('./routes/auth');
 const profileRouter = require('./routes/profile');
 const userRouter = require('./routes/user');
+const collectionRequestRouter = require('./collectionRequest');
 const cors = require('cors');
 
 const app = express();
 const port = process.env.PORT || 5000;
 
-// Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cors());
@@ -18,9 +18,10 @@ app.get('/', (req, res) => {
 });
 
 // Routes
-app.use('/api', authRouter); // Handles /api/signup, /api/login
-app.use('/api/profile', profileRouter); // Handles /api/profile/profile
-app.use('/api/user', userRouter); // Handles user routes (e.g., /api/user/bin-fill)
+app.use('/api', authRouter); 
+app.use('/api/profile', profileRouter); 
+app.use('/api/collectionRequest', collectionRequestRouter);
+app.use('/api/user', userRouter); 
 
 // Error handling middleware
 app.use((err, req, res, next) => {
