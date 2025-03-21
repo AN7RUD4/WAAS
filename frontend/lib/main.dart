@@ -5,6 +5,7 @@ import 'colors/colors.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+// Need to remove before submission
 // Token migration function to move tokens from SharedPreferences to FlutterSecureStorage
 Future<void> migrateToken() async {
   final prefs = await SharedPreferences.getInstance();

@@ -4,7 +4,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:http/http.dart' as http;
-import 'package:haversine_distance/haversine_distance.dart';
+import 'dart:math' show sin, cos, sqrt, asin, pi;
 
 class MapScreen extends StatefulWidget {
   const MapScreen({super.key});
@@ -37,7 +37,7 @@ class _MapScreenState extends State<MapScreen> {
   // Get worker's location using Geolocator
   void _getWorkerLocation() async {
     try {
-      // Check if location services are enabled
+      print('Checking location services...');
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
         print('Location services are disabled.');
@@ -47,7 +47,7 @@ class _MapScreenState extends State<MapScreen> {
         return;
       }
 
-      // Check and request location permissions
+      print('Checking location permissions...');
       LocationPermission permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
@@ -70,14 +70,16 @@ class _MapScreenState extends State<MapScreen> {
         return;
       }
 
-      // Get the current position
+      print('Getting current position...');
       Position position = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.high,
       );
+      print('Position: ${position.latitude}, ${position.longitude}');
       setState(() {
         _workerLocation = LatLng(position.latitude, position.longitude);
         _currentCenter = _workerLocation!; // Center the map on the worker's location
         _mapController.move(_currentCenter, _currentZoom);
+        print('Worker location set: $_workerLocation');
       });
       _calculateDistances();
     } catch (e) {
@@ -85,6 +87,14 @@ class _MapScreenState extends State<MapScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error getting location: $e')),
       );
+      // Fallback to default location if location retrieval fails
+      setState(() {
+        _workerLocation = const LatLng(10.1865, 76.3770); // Default fallback location
+        _currentCenter = _workerLocation!;
+        _mapController.move(_currentCenter, _currentZoom);
+        print('Using fallback location: $_workerLocation');
+      });
+      _calculateDistances();
     }
   }
 
@@ -94,11 +104,16 @@ class _MapScreenState extends State<MapScreen> {
     const String apiUrl = 'http://192.168.164.53:3000/api/collectionrequest/route';
 
     try {
+      print('Fetching data from $apiUrl');
       final response = await http.get(Uri.parse(apiUrl));
+      print('Response status: ${response.statusCode}');
+      print('Response body: ${response.body}');
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = jsonDecode(response.body);
+        print('Parsed data: $data');
         _parseLocations(data['locations']);
         _route = _parseRoute(data['route']); // Parse the optimized route
+        print('Updated _route: $_route');
         _calculateDistances();
       } else {
         print('Failed to fetch data: ${response.statusCode}');
@@ -158,38 +173,57 @@ class _MapScreenState extends State<MapScreen> {
     throw FormatException('Invalid location format: $location');
   }
 
+  // Custom Haversine distance calculation
+  double _haversineDistance(LatLng start, LatLng end) {
+    const double earthRadius = 6371.0; // Radius of the Earth in kilometers
+    final double dLat = _degreesToRadians(end.latitude - start.latitude);
+    final double dLon = _degreesToRadians(end.longitude - start.longitude);
+
+    final double a = sin(dLat / 2) * sin(dLat / 2) +
+        cos(_degreesToRadians(start.latitude)) *
+            cos(_degreesToRadians(end.latitude)) *
+            sin(dLon / 2) *
+            sin(dLon / 2);
+    final double c = 2 * asin(sqrt(a));
+    return earthRadius * c;
+  }
+
+  double _degreesToRadians(double degrees) {
+    return degrees * (pi / 180.0);
+  }
+
   // Calculate distances and directions
   void _calculateDistances() {
-    if (_workerLocation == null || _locations.isEmpty) return;
-
-    // Use Haversine formula to calculate distances
-    final haversine = HaversineDistance();
+    print('Calculating distances...');
+    print('Worker Location: $_workerLocation');
+    print('Route: $_route');
+    if (_workerLocation == null || _locations.isEmpty) {
+      print('Cannot calculate distances: workerLocation or locations are empty');
+      return;
+    }
 
     // Find the nearest pickup spot
     LatLng nearestSpot = _route[0];
     double minDistance = double.infinity;
     for (var loc in _route) {
-      final distance = haversine.haversine(
-        Location(_workerLocation!.latitude, _workerLocation!.longitude),
-        Location(loc.latitude, loc.longitude),
-        Unit.KM,
-      );
+      final distance = _haversineDistance(_workerLocation!, loc);
+      print('Distance to $loc: $distance km');
       if (distance < minDistance) {
         minDistance = distance;
         nearestSpot = loc;
       }
     }
     _distanceToNearest = minDistance;
+    print('Nearest spot: $nearestSpot, Distance: $_distanceToNearest km');
 
     // Calculate total distance of the route
     _totalDistance = 0.0;
     for (int i = 0; i < _route.length - 1; i++) {
-      _totalDistance += haversine.haversine(
-        Location(_route[i].latitude, _route[i].longitude),
-        Location(_route[i + 1].latitude, _route[i + 1].longitude),
-        Unit.KM,
-      );
+      final segmentDistance = _haversineDistance(_route[i], _route[i + 1]);
+      print('Segment distance from ${_route[i]} to ${_route[i + 1]}: $segmentDistance km');
+      _totalDistance += segmentDistance;
     }
+    print('Total distance: $_totalDistance km');
 
     // Simple directions (for demo purposes; replace with actual directions API if needed)
     _directions = "Head towards ${nearestSpot.latitude}, ${nearestSpot.longitude}";
@@ -239,15 +273,16 @@ class _MapScreenState extends State<MapScreen> {
                 tileProvider: NetworkTileProvider(),
                 additionalOptions: {'alpha': '0.9'},
               ),
-              PolylineLayer(
-                polylines: [
-                  Polyline(
-                    points: _route,
-                    strokeWidth: 4.0,
-                    color: Colors.blue,
-                  ),
-                ],
-              ),
+              if (_route.isNotEmpty) // Only render PolylineLayer if _route is not empty
+                PolylineLayer(
+                  polylines: [
+                    Polyline(
+                      points: _route,
+                      strokeWidth: 4.0,
+                      color: Colors.blue,
+                    ),
+                  ],
+                ),
               MarkerLayer(
                 markers: [
                   // Worker location marker

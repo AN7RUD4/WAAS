@@ -60,7 +60,7 @@ collectionRequestRouter.get('/route', async (req, res) => {
     await client.query('BEGIN');
 
     // Fetch collection requests
-    const result = await client.query('SELECT * FROM collection_requests WHERE status = $1', ['pending']);
+    const result = await client.query('SELECT * FROM collectionrequests WHERE status = $1', ['pending']);
     const locations = result.rows.map(row => ({
       id: row.id,
       location: row.location,
