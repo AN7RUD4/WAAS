@@ -2,7 +2,7 @@ const express = require('express');
 const authRouter = require('./routes/auth');
 const profileRouter = require('./routes/profile');
 const userRouter = require('./routes/user');
-const collectionRequestRouter = require('./collectionRequest');
+const collectionRequestRouter = require('./routes/collectionRequest');
 const cors = require('cors');
 
 const app = express();
