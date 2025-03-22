@@ -2,7 +2,7 @@ const express = require('express');
 const authRouter = require('./routes/auth');
 const profileRouter = require('./routes/profile');
 const userRouter = require('./routes/user');
-const collectionRequestRouter = require('./routes/collectionRequest');
+// const workerRouter = require('./routes/worker');
 const cors = require('cors');
 
 const app = express();
@@ -20,7 +20,7 @@ app.get('/', (req, res) => {
 // Routes
 app.use('/api', authRouter); 
 app.use('/api/profile', profileRouter); 
-app.use('/api/collectionRequest', collectionRequestRouter);
+// app.use('/api/worker', workerRouter);
 app.use('/api/user', userRouter); 
 
 // Error handling middleware

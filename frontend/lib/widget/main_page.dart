@@ -13,7 +13,7 @@ class MainPage extends StatelessWidget {
   const MainPage({super.key, required this.userID, required this.role})
     : _pages = const [
         UserApp(), // Default to UserApp; override in build if role is 'worker'
-        MapScreen(),
+        // MapScreen(),
         ProfilePage(),
       ];
 

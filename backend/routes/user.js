@@ -39,7 +39,7 @@ userRouter.post('/bin-fill', authenticateToken, async (req, res) => {
     const [lat, long] = location.split(',').map(Number);
     if (isNaN(lat) || isNaN(long)) throw new Error('Invalid location format. Expected: "lat,long"');
     const result = await client.query(
-      `INSERT INTO collectionrequests (userid, location, status, datetime) 
+      `INSERT INTO taskrequests (userid, location, status, datetime) 
        VALUES ($1, ST_GeomFromText('POINT(${long} ${lat})', 4326), $2, NOW()) 
        RETURNING requestid, ST_AsText(location) as location, status`, // Removed availabletime
       [req.user.userid, 'pending']

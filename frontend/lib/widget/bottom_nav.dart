@@ -49,11 +49,6 @@ class BottomNavigationWidget extends StatelessWidget {
                   label: 'Home',
                 ),
                 BottomNavigationBarItem(
-                  icon: Icon(Icons.map_outlined), // Outline icon
-                  activeIcon: Icon(Icons.map), // Filled icon when selected
-                  label: 'Map',
-                ),
-                BottomNavigationBarItem(
                   icon: Icon(Icons.person_outlined), // Outline icon
                   activeIcon: Icon(Icons.person), // Filled icon when selected
                   label: 'Profile',
