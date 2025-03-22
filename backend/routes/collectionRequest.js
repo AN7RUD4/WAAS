@@ -8,7 +8,7 @@ const collectionRequestRouter = express.Router();
 // Initialize Supabase client for image storage
 const supabase = createClient(
   'https://hrzroqrgkvzhomsosqzl.supabase.co',
-  'your-supabase-anon-key' // Replace with your Supabase anon key
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhyenJvcXJna3Z6aG9tc29zcXpsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDE5MjQ0NDQsImV4cCI6MjA1NzUwMDQ0NH0.qBDNsN0DvMKZ8JBAmoh2DsN8WW74uj2hZZuG_-gxF4g' // Replace with your Supabase anon key
 );
 
 // Configure PostgreSQL connection
