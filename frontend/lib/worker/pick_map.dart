@@ -64,8 +64,10 @@ class _MapScreenState extends State<MapScreen> {
         print('Location permissions are permanently denied.');
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-              content: Text(
-                  'Location permissions are permanently denied, please enable them in settings')),
+            content: Text(
+              'Location permissions are permanently denied, please enable them in settings',
+            ),
+          ),
         );
         return;
       }
@@ -77,19 +79,23 @@ class _MapScreenState extends State<MapScreen> {
       print('Position: ${position.latitude}, ${position.longitude}');
       setState(() {
         _workerLocation = LatLng(position.latitude, position.longitude);
-        _currentCenter = _workerLocation!; // Center the map on the worker's location
+        _currentCenter =
+            _workerLocation!; // Center the map on the worker's location
         _mapController.move(_currentCenter, _currentZoom);
         print('Worker location set: $_workerLocation');
       });
       _calculateDistances();
     } catch (e) {
       print('Error getting location: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error getting location: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error getting location: $e')));
       // Fallback to default location if location retrieval fails
       setState(() {
-        _workerLocation = const LatLng(10.1865, 76.3770); // Default fallback location
+        _workerLocation = const LatLng(
+          10.1865,
+          76.3770,
+        ); // Default fallback location
         _currentCenter = _workerLocation!;
         _mapController.move(_currentCenter, _currentZoom);
         print('Using fallback location: $_workerLocation');
@@ -101,7 +107,8 @@ class _MapScreenState extends State<MapScreen> {
   // Fetch data from the backend API
   Future<void> _fetchCollectionRequestData() async {
     setState(() => _isLoading = true);
-    const String apiUrl = 'http://192.168.164.53:3000/api/collectionrequest/route';
+    const String apiUrl =
+        'http://192.168.164.53:3000/api/collectionrequest/route';
 
     try {
       print('Fetching data from $apiUrl');
@@ -179,7 +186,8 @@ class _MapScreenState extends State<MapScreen> {
     final double dLat = _degreesToRadians(end.latitude - start.latitude);
     final double dLon = _degreesToRadians(end.longitude - start.longitude);
 
-    final double a = sin(dLat / 2) * sin(dLat / 2) +
+    final double a =
+        sin(dLat / 2) * sin(dLat / 2) +
         cos(_degreesToRadians(start.latitude)) *
             cos(_degreesToRadians(end.latitude)) *
             sin(dLon / 2) *
@@ -198,7 +206,9 @@ class _MapScreenState extends State<MapScreen> {
     print('Worker Location: $_workerLocation');
     print('Route: $_route');
     if (_workerLocation == null || _locations.isEmpty) {
-      print('Cannot calculate distances: workerLocation or locations are empty');
+      print(
+        'Cannot calculate distances: workerLocation or locations are empty',
+      );
       return;
     }
 
@@ -220,13 +230,16 @@ class _MapScreenState extends State<MapScreen> {
     _totalDistance = 0.0;
     for (int i = 0; i < _route.length - 1; i++) {
       final segmentDistance = _haversineDistance(_route[i], _route[i + 1]);
-      print('Segment distance from ${_route[i]} to ${_route[i + 1]}: $segmentDistance km');
+      print(
+        'Segment distance from ${_route[i]} to ${_route[i + 1]}: $segmentDistance km',
+      );
       _totalDistance += segmentDistance;
     }
     print('Total distance: $_totalDistance km');
 
     // Simple directions (for demo purposes; replace with actual directions API if needed)
-    _directions = "Head towards ${nearestSpot.latitude}, ${nearestSpot.longitude}";
+    _directions =
+        "Head towards ${nearestSpot.latitude}, ${nearestSpot.longitude}";
 
     setState(() {});
   }
@@ -268,12 +281,14 @@ class _MapScreenState extends State<MapScreen> {
             ),
             children: [
               TileLayer(
-                urlTemplate: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+                urlTemplate:
+                    "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
                 subdomains: ['a', 'b', 'c'],
                 tileProvider: NetworkTileProvider(),
                 additionalOptions: {'alpha': '0.9'},
               ),
-              if (_route.isNotEmpty) // Only render PolylineLayer if _route is not empty
+              if (_route
+                  .isNotEmpty) // Only render PolylineLayer if _route is not empty
                 PolylineLayer(
                   polylines: [
                     Polyline(
@@ -349,7 +364,10 @@ class _MapScreenState extends State<MapScreen> {
                 children: [
                   Text(
                     'Directions: $_directions',
-                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   const SizedBox(height: 5),
                   Text(
