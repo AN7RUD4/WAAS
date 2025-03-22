@@ -101,11 +101,6 @@ userRouter.get('/collection-requests', authenticateToken, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const collectionRequests = await client.query(
-      `SELECT requestid, ST_AsText(location) as location, status, datetime 
-       FROM collectionrequests WHERE userid = $1 ORDER BY datetime DESC`, // Removed availabletime
-      [req.user.userid]
-    );
     const garbageReports = await client.query(
       `SELECT reportid, ST_AsText(location) as location, imageurl, status, datetime 
        FROM garbagereports WHERE userid = $1 ORDER BY datetime DESC`,
@@ -113,10 +108,6 @@ userRouter.get('/collection-requests', authenticateToken, async (req, res) => {
     );
     await client.query('COMMIT');
     res.json({
-      collectionRequests: collectionRequests.rows.map(row => ({
-        ...row,
-        location: row.location.replace('POINT(', '').replace(')', '') || row.location
-      })),
       garbageReports: garbageReports.rows.map(row => ({
         ...row,
         location: row.location.replace('POINT(', '').replace(')', '') || row.location
