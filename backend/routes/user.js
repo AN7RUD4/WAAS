@@ -36,45 +36,39 @@ const upload = multer({ storage: storage });
 
 // Bin Fill endpoint
 userRouter.post('/bin-fill', authenticateToken, async (req, res) => {
-  const client = await pool.connect();
   try {
     console.log('Received bin-fill request:', req.body);
-    await client.query('BEGIN');
     const { location, fillLevel } = req.body;
     if (!location) {
-      console.log('Validation failed: Location is required');
       return res.status(400).json({ message: 'Location is required' });
     }
     if (!fillLevel || ![80, 100].includes(Number(fillLevel))) {
-      console.log('Validation failed: Fill level must be 80 or 100');
       return res.status(400).json({ message: 'Fill level must be 80 or 100' });
     }
     const [lat, long] = location.split(',').map(Number);
     if (isNaN(lat) || isNaN(long)) {
       throw new Error('Invalid location format. Expected: "lat,long"');
     }
-    const result = await client.query(
+
+    const result = await pool.query(
       `INSERT INTO garbagereports (userid, location, wastetype, status, comments, datetime) 
        VALUES ($1, ST_GeomFromText('POINT(${long} ${lat})', 4326), $2, $3, $4, NOW()) 
        RETURNING reportid, ST_AsText(location) as location, status`,
       [req.user.userid, 'bin', 'pending', `Bin fill level: ${fillLevel}%`]
     );
-    await client.query('COMMIT');
+
     console.log('Bin fill report submitted:', result.rows[0]);
     res.status(201).json({
       message: 'Bin fill report submitted successfully',
       report: {
         id: result.rows[0].reportid,
-        location: result.rows[0].location.replace('POINT(', '').replace(')', '') || result.rows[0].location,
+        location: result.rows[0].location.replace('POINT(', '').replace(')', ''),
         status: result.rows[0].status,
-      }
+      },
     });
   } catch (error) {
-    await client.query('ROLLBACK');
     console.error('Bin fill report error:', error);
     res.status(500).json({ message: error.message || 'Server error submitting bin fill report' });
-  } finally {
-    client.release();
   }
 });
 

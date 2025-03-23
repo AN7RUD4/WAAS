@@ -210,7 +210,8 @@ class UserApp extends StatelessWidget {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (context) => const CollectionRequestsPage(),
+                            builder:
+                                (context) => const CollectionRequestsPage(),
                           ),
                         );
                       },
@@ -360,13 +361,17 @@ class _ReportPageState extends State<ReportPage> {
       print('Error during submit report: $e');
       String errorMessage;
       if (e.toString().contains('Failed to fetch')) {
-        errorMessage = 'Unable to reach the server. Please check your internet connection or try again later.';
+        errorMessage =
+            'Unable to reach the server. Please check your internet connection or try again later.';
       } else if (e.toString().contains('Request timed out')) {
-        errorMessage = 'Request timed out. Please check your internet connection or server status.';
+        errorMessage =
+            'Request timed out. Please check your internet connection or server status.';
       } else {
         errorMessage = e.toString();
       }
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(errorMessage)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(errorMessage)));
     } finally {
       setState(() => _isLoading = false);
     }
@@ -380,57 +385,58 @@ class _ReportPageState extends State<ReportPage> {
         backgroundColor: AppColors.accentColor,
       ),
       backgroundColor: AppColors.backgroundColor,
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    "Take a Picture",
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.textColor,
+      body:
+          _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      "Take a Picture",
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textColor,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 10),
-                  Center(
-                    child: Column(
-                      children: [
-                        _image == null
-                            ? const Text(
+                    const SizedBox(height: 10),
+                    Center(
+                      child: Column(
+                        children: [
+                          _image == null
+                              ? const Text(
                                 "No Image Taken",
                                 style: TextStyle(color: AppColors.textColor),
                               )
-                            : Image.file(_image!, height: 200),
-                        const SizedBox(height: 10),
-                        buildButton(
-                          "Open Camera",
-                          AppColors.buttonColor,
-                          _takePicture,
-                        ),
-                      ],
+                              : Image.file(_image!, height: 200),
+                          const SizedBox(height: 10),
+                          buildButton(
+                            "Open Camera",
+                            AppColors.buttonColor,
+                            _takePicture,
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 20),
-                  buildTextField(
-                    "Location",
-                    locationController,
-                    readOnly: true,
-                  ),
-                  const SizedBox(height: 20),
-                  Center(
-                    child: buildButton(
-                      "Submit Report",
-                      AppColors.accentColor,
-                      _submitReport,
+                    const SizedBox(height: 20),
+                    buildTextField(
+                      "Location",
+                      locationController,
+                      readOnly: true,
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 20),
+                    Center(
+                      child: buildButton(
+                        "Submit Report",
+                        AppColors.accentColor,
+                        _submitReport,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
     );
   }
 }
@@ -515,68 +521,66 @@ class _BinFillPageState extends State<BinFillPage> {
       return;
     }
     if (locationController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Please provide location"),
-        ),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Please provide location")));
       return;
     }
 
     setState(() => _isLoading = true);
-    try {
-      final token = await _getToken();
-      if (token == null) throw Exception('No token found');
+    const maxRetries = 3;
+    for (int attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        final token = await _getToken();
+        if (token == null) throw Exception('No token found');
 
-      print('JWT Token: $token'); // Debug: Print the token
+        final fillLevel = is80Checked ? 80 : 100;
 
-      final fillLevel = is80Checked ? 80 : 100;
+        final response = await http
+            .post(
+              Uri.parse('$apiBaseUrl/user/bin-fill'),
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer $token',
+              },
+              body: jsonEncode({
+                'location': locationController.text,
+                'fillLevel': fillLevel,
+              }),
+            )
+            .timeout(const Duration(seconds: 30)); // Increased from 10s to 30s
 
-      final response = await http.post(
-        Uri.parse('$apiBaseUrl/user/bin-fill'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-        body: jsonEncode({
-          'location': locationController.text,
-          'fillLevel': fillLevel,
-        }),
-      ).timeout(const Duration(seconds: 10), onTimeout: () {
-        throw Exception('Request timed out. Please check your internet connection or server status.');
-      });
+        print('Attempt $attempt - Response status: ${response.statusCode}');
+        print('Response body: ${response.body}');
 
-      print('Response status: ${response.statusCode}');
-      print('Response body: ${response.body}');
-
-      if (response.statusCode == 201) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Bin Fill details submitted!")),
-        );
-        Navigator.pop(context);
-      } else {
-        try {
-          final error =
-              jsonDecode(response.body)['message'] ??
-              'Failed to submit bin fill with status ${response.statusCode}';
-          throw Exception(error);
-        } catch (parseError) {
-          throw Exception('Invalid server response: ${response.body}');
+        if (response.statusCode == 201) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Bin Fill details submitted!")),
+          );
+          Navigator.pop(context);
+          break;
+        } else {
+          throw Exception(
+            jsonDecode(response.body)['message'] ??
+                'Failed with status ${response.statusCode}',
+          );
+        }
+      } catch (e) {
+        print('Attempt $attempt failed: $e');
+        if (attempt == maxRetries) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed after $maxRetries attempts: $e')),
+          );
+        } else {
+          await Future.delayed(
+            Duration(seconds: 2 * attempt),
+          ); // Exponential backoff
+        }
+      } finally {
+        if (attempt == maxRetries || !_isLoading) {
+          setState(() => _isLoading = false);
         }
       }
-    } catch (e) {
-      print('Error during submit bin fill: $e');
-      String errorMessage;
-      if (e.toString().contains('Failed to fetch')) {
-        errorMessage = 'Unable to reach the server. Please check your internet connection or try again later.';
-      } else if (e.toString().contains('Request timed out')) {
-        errorMessage = 'Request timed out. Please check your internet connection or server status.';
-      } else {
-        errorMessage = e.toString();
-      }
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(errorMessage)));
-    } finally {
-      setState(() => _isLoading = false);
     }
   }
 
@@ -588,48 +592,49 @@ class _BinFillPageState extends State<BinFillPage> {
         backgroundColor: AppColors.accentColor,
       ),
       backgroundColor: AppColors.backgroundColor,
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  buildTextField(
-                    "User Location",
-                    locationController,
-                    readOnly: true,
-                  ),
-                  const SizedBox(height: 20),
-                  const Text(
-                    "Bin Fill Level",
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.textColor,
+      body:
+          _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    buildTextField(
+                      "User Location",
+                      locationController,
+                      readOnly: true,
                     ),
-                  ),
-                  buildCheckbox(
-                    "80% Bin Fill",
-                    is80Checked,
-                    () => _updateCheckbox(true),
-                  ),
-                  buildCheckbox(
-                    "100% Bin Fill",
-                    is100Checked,
-                    () => _updateCheckbox(false),
-                  ),
-                  const SizedBox(height: 20),
-                  Center(
-                    child: buildButton(
-                      "Submit",
-                      AppColors.accentColor,
-                      _submitBinFill,
+                    const SizedBox(height: 20),
+                    const Text(
+                      "Bin Fill Level",
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textColor,
+                      ),
                     ),
-                  ),
-                ],
+                    buildCheckbox(
+                      "80% Bin Fill",
+                      is80Checked,
+                      () => _updateCheckbox(true),
+                    ),
+                    buildCheckbox(
+                      "100% Bin Fill",
+                      is100Checked,
+                      () => _updateCheckbox(false),
+                    ),
+                    const SizedBox(height: 20),
+                    Center(
+                      child: buildButton(
+                        "Submit",
+                        AppColors.accentColor,
+                        _submitBinFill,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
     );
   }
 
@@ -678,15 +683,22 @@ class _CollectionRequestsPageState extends State<CollectionRequestsPage> {
 
       print('JWT Token: $token'); // Debug: Print the token
 
-      final response = await http.get(
-        Uri.parse('$apiBaseUrl/user/collection-requests'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-      ).timeout(const Duration(seconds: 10), onTimeout: () {
-        throw Exception('Request timed out. Please check your internet connection or server status.');
-      });
+      final response = await http
+          .get(
+            Uri.parse('$apiBaseUrl/user/collection-requests'),
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer $token',
+            },
+          )
+          .timeout(
+            const Duration(seconds: 10),
+            onTimeout: () {
+              throw Exception(
+                'Request timed out. Please check your internet connection or server status.',
+              );
+            },
+          );
 
       print('Response status: ${response.statusCode}');
       print('Response body: ${response.body}');
@@ -712,13 +724,17 @@ class _CollectionRequestsPageState extends State<CollectionRequestsPage> {
       print('Error during fetch requests: $e');
       String errorMessage;
       if (e.toString().contains('Failed to fetch')) {
-        errorMessage = 'Unable to reach the server. Please check your internet connection or try again later.';
+        errorMessage =
+            'Unable to reach the server. Please check your internet connection or try again later.';
       } else if (e.toString().contains('Request timed out')) {
-        errorMessage = 'Request timed out. Please check your internet connection or server status.';
+        errorMessage =
+            'Request timed out. Please check your internet connection or server status.';
       } else {
         errorMessage = e.toString();
       }
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(errorMessage)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(errorMessage)));
     } finally {
       setState(() => _isLoading = false);
     }
@@ -732,28 +748,29 @@ class _CollectionRequestsPageState extends State<CollectionRequestsPage> {
         backgroundColor: AppColors.accentColor,
       ),
       backgroundColor: AppColors.backgroundColor,
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    "Garbage Reports",
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.textColor,
+      body:
+          _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      "Garbage Reports",
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textColor,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 10),
-                  garbageReports.isEmpty
-                      ? const Text(
+                    const SizedBox(height: 10),
+                    garbageReports.isEmpty
+                        ? const Text(
                           "No garbage reports found.",
                           style: TextStyle(color: AppColors.textColor),
                         )
-                      : Expanded(
+                        : Expanded(
                           child: ListView.builder(
                             itemCount: garbageReports.length,
                             itemBuilder: (context, index) {
@@ -769,21 +786,27 @@ class _CollectionRequestsPageState extends State<CollectionRequestsPage> {
                                     ),
                                   ),
                                   subtitle: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Text("Location: ${report['location']}"),
                                       Text("Status: ${report['status']}"),
                                       Text("Time: ${report['datetime']}"),
-                                      Text("Waste Type: ${report['wastetype']}"),
+                                      Text(
+                                        "Waste Type: ${report['wastetype']}",
+                                      ),
                                       if (report['comments'] != null)
                                         Text("Comments: ${report['comments']}"),
                                       report['imageurl'] != null
                                           ? Image.network(
-                                              report['imageurl'],
-                                              height: 100,
-                                              errorBuilder: (context, error, stackTrace) =>
-                                                  const Text("Image unavailable"),
-                                            )
+                                            report['imageurl'],
+                                            height: 100,
+                                            errorBuilder:
+                                                (context, error, stackTrace) =>
+                                                    const Text(
+                                                      "Image unavailable",
+                                                    ),
+                                          )
                                           : const Text("No Image"),
                                     ],
                                   ),
@@ -792,9 +815,9 @@ class _CollectionRequestsPageState extends State<CollectionRequestsPage> {
                             },
                           ),
                         ),
-                ],
+                  ],
+                ),
               ),
-            ),
     );
   }
 }
