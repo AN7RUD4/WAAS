@@ -245,12 +245,12 @@
                                 status,
                                 comments,
                                 datetime,
-                                users!publicofficialapprovals_workerid_fkey(name: worker_name)
+                                users!publicofficialapprovals_workerid_fkey(name)
                             )
                         `)
                         .eq('reportid', reportid)
-                        .eq('publicofficialapprovals.datetime', `${date}T00:00:00Z`, { gte: true })
-                        .eq('publicofficialapprovals.datetime', `${date}T23:59:59Z`, { lte: true });
+                        .gte('publicofficialapprovals.datetime', `${date}T00:00:00Z`)
+                        .lte('publicofficialapprovals.datetime', `${date}T23:59:59Z`);
 
                     if (reportError) throw reportError;
 
@@ -262,7 +262,7 @@
                                     <strong>Report ID:</strong> ${report.reportid}<br>
                                     <strong>Reported by:</strong> ${report.users.name || 'Unknown'}<br>
                                     <strong>Waste Type:</strong> ${report.wastetype || 'N/A'}<br>
-                                    <strong>Attended By:</strong> ${approval.users?.worker_name || 'Not Assigned'}<br>
+                                    <strong>Attended By:</strong> ${approval.users?.name || 'Not Assigned'}<br>
                                     <strong>Status:</strong> ${approval.status || 'N/A'}<br>
                                     <strong>Comments:</strong> ${approval.comments || 'None'}<br>
                                     <strong>Date:</strong> ${approval.datetime ? new Date(approval.datetime).toLocaleString() : 'N/A'}
