@@ -20,8 +20,7 @@ app.get('/', (req, res) => {
 // Routes
 app.use('/api', authRouter); 
 app.use('/api/profile', profileRouter); 
-// app.use('/api/worker', workerRouter);
-app.use('/api/user', userRouter); 
+app.use('/api/user', userRouter);
 
 // Error handling middleware
 app.use((err, req, res, next) => {

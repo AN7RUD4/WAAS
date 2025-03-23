@@ -358,7 +358,15 @@ class _ReportPageState extends State<ReportPage> {
       }
     } catch (e) {
       print('Error during submit report: $e');
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+      String errorMessage;
+      if (e.toString().contains('Failed to fetch')) {
+        errorMessage = 'Unable to reach the server. Please check your internet connection or try again later.';
+      } else if (e.toString().contains('Request timed out')) {
+        errorMessage = 'Request timed out. Please check your internet connection or server status.';
+      } else {
+        errorMessage = e.toString();
+      }
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(errorMessage)));
     } finally {
       setState(() => _isLoading = false);
     }
@@ -520,7 +528,9 @@ class _BinFillPageState extends State<BinFillPage> {
       final token = await _getToken();
       if (token == null) throw Exception('No token found');
 
-      final fillLevel = is80Checked ? 80 : 100; // Set fillLevel based on checkbox
+      print('JWT Token: $token'); // Debug: Print the token
+
+      final fillLevel = is80Checked ? 80 : 100;
 
       final response = await http.post(
         Uri.parse('$apiBaseUrl/user/bin-fill'),
@@ -530,9 +540,11 @@ class _BinFillPageState extends State<BinFillPage> {
         },
         body: jsonEncode({
           'location': locationController.text,
-          'fillLevel': fillLevel, // Include fillLevel in the request body
+          'fillLevel': fillLevel,
         }),
-      );
+      ).timeout(const Duration(seconds: 10), onTimeout: () {
+        throw Exception('Request timed out. Please check your internet connection or server status.');
+      });
 
       print('Response status: ${response.statusCode}');
       print('Response body: ${response.body}');
@@ -554,7 +566,15 @@ class _BinFillPageState extends State<BinFillPage> {
       }
     } catch (e) {
       print('Error during submit bin fill: $e');
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+      String errorMessage;
+      if (e.toString().contains('Failed to fetch')) {
+        errorMessage = 'Unable to reach the server. Please check your internet connection or try again later.';
+      } else if (e.toString().contains('Request timed out')) {
+        errorMessage = 'Request timed out. Please check your internet connection or server status.';
+      } else {
+        errorMessage = e.toString();
+      }
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(errorMessage)));
     } finally {
       setState(() => _isLoading = false);
     }
@@ -656,13 +676,17 @@ class _CollectionRequestsPageState extends State<CollectionRequestsPage> {
       final token = await _getToken();
       if (token == null) throw Exception('No token found');
 
+      print('JWT Token: $token'); // Debug: Print the token
+
       final response = await http.get(
         Uri.parse('$apiBaseUrl/user/collection-requests'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
         },
-      );
+      ).timeout(const Duration(seconds: 10), onTimeout: () {
+        throw Exception('Request timed out. Please check your internet connection or server status.');
+      });
 
       print('Response status: ${response.statusCode}');
       print('Response body: ${response.body}');
@@ -686,7 +710,15 @@ class _CollectionRequestsPageState extends State<CollectionRequestsPage> {
       }
     } catch (e) {
       print('Error during fetch requests: $e');
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+      String errorMessage;
+      if (e.toString().contains('Failed to fetch')) {
+        errorMessage = 'Unable to reach the server. Please check your internet connection or try again later.';
+      } else if (e.toString().contains('Request timed out')) {
+        errorMessage = 'Request timed out. Please check your internet connection or server status.';
+      } else {
+        errorMessage = e.toString();
+      }
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(errorMessage)));
     } finally {
       setState(() => _isLoading = false);
     }
