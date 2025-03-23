@@ -232,25 +232,43 @@
                 const resultDiv = document.getElementById('reportResult');
                 
                 try {
-                    const { data, error } = await supabaseClient
-                        .from('publicofficialapprovals')
-                        .select('*, users!userid(name)')
+                    // Fetch data from garbagereports (for userid and wastetype) and publicofficialapprovals (for workerid, status, etc.)
+                    const { data: reportData, error: reportError } = await supabaseClient
+                        .from('garbagereports')
+                        .select(`
+                            reportid,
+                            userid,
+                            wastetype,
+                            users!userid(name),
+                            publicofficialapprovals!reportid (
+                                workerid,
+                                status,
+                                comments,
+                                datetime,
+                                users!publicofficialapprovals_workerid_fkey(name: worker_name)
+                            )
+                        `)
                         .eq('reportid', reportid)
-                        .gte('datetime', `${date}T00:00:00Z`)
-                        .lte('datetime', `${date}T23:59:59Z`);
-                    
-                    if (error) throw error;
-                    resultDiv.innerHTML = data.length > 0 
-                        ? data.map(report => `
-                            <div>
-                                <strong>Report ID:</strong> ${report.reportid}<br>
-                                <strong>Reported by:</strong> ${report.users.name}<br>
-                                <strong>Waste Type:</strong> ${report.wastetype}<br>
-                                <strong>Status:</strong> ${report.status}<br>
-                                <strong>Comments:</strong> ${report.comments || 'None'}<br>
-                                <strong>Date:</strong> ${new Date(report.datetime).toLocaleString()}
-                            </div><hr>
-                        `).join('')
+                        .eq('publicofficialapprovals.datetime', `${date}T00:00:00Z`, { gte: true })
+                        .eq('publicofficialapprovals.datetime', `${date}T23:59:59Z`, { lte: true });
+
+                    if (reportError) throw reportError;
+
+                    resultDiv.innerHTML = reportData.length > 0 
+                        ? reportData.map(report => {
+                            const approval = report.publicofficialapprovals[0] || {};
+                            return `
+                                <div>
+                                    <strong>Report ID:</strong> ${report.reportid}<br>
+                                    <strong>Reported by:</strong> ${report.users.name || 'Unknown'}<br>
+                                    <strong>Waste Type:</strong> ${report.wastetype || 'N/A'}<br>
+                                    <strong>Attended By:</strong> ${approval.users?.worker_name || 'Not Assigned'}<br>
+                                    <strong>Status:</strong> ${approval.status || 'N/A'}<br>
+                                    <strong>Comments:</strong> ${approval.comments || 'None'}<br>
+                                    <strong>Date:</strong> ${approval.datetime ? new Date(approval.datetime).toLocaleString() : 'N/A'}
+                                </div><hr>
+                            `;
+                        }).join('')
                         : `No report found with ID ${reportid} on ${date}`;
                 } catch (error) {
                     resultDiv.innerHTML = `Error generating report: ${error.message}`;
@@ -268,7 +286,7 @@
                     phone: document.getElementById('workerPhone').value,
                     address: document.getElementById('workerAddress').value,
                     role: 'worker',
-                    status: 'available' // Fix: Set default status to 'available' as per the check constraint
+                    status: 'available'
                 };
 
                 try {
