@@ -548,7 +548,7 @@ class _BinFillPageState extends State<BinFillPage> {
                 'fillLevel': fillLevel,
               }),
             )
-            .timeout(const Duration(seconds: 30)); // Increased from 10s to 30s
+            .timeout(const Duration(seconds: 30));
 
         print('Attempt $attempt - Response status: ${response.statusCode}');
         print('Response body: ${response.body}');

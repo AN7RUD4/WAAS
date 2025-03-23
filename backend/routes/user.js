@@ -54,7 +54,7 @@ userRouter.post('/bin-fill', authenticateToken, async (req, res) => {
       `INSERT INTO garbagereports (userid, location, wastetype, status, comments, datetime) 
        VALUES ($1, ST_GeomFromText('POINT(${long} ${lat})', 4326), $2, $3, $4, NOW()) 
        RETURNING reportid, ST_AsText(location) as location, status`,
-      [req.user.userid, 'bin', 'pending', `Bin fill level: ${fillLevel}%`]
+      [req.user.userid, 'home', 'pending', `Bin fill level: ${fillLevel}%`]
     );
 
     console.log('Bin fill report submitted:', result.rows[0]);
