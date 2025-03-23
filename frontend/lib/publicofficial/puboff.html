@@ -216,7 +216,7 @@
     <script>
         const SUPABASE_URL = 'https://hrzroqrgkvzhomsosqzl.supabase.co';
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhyenJvcXJna3Z6aG9tc29zcXpsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDE5MjQ0NDQsImV4cCI6MjA1NzUwMDQ0NH0.qBDNsN0DvMKZ8JBAmoh2DsN8WW74uj2hZZuG_-gxF4g';
-        const supabase = Supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
         const RENDER_URL = 'https://waas-9pr6.onrender.com';
 
         document.addEventListener('DOMContentLoaded', async () => {
@@ -232,7 +232,7 @@
                 const resultDiv = document.getElementById('reportResult');
                 
                 try {
-                    const { data, error } = await supabase
+                    const { data, error } = await supabaseClient
                         .from('publicofficialapprovals')
                         .select('*, users!userid(name)')
                         .eq('reportid', reportid)
@@ -268,11 +268,11 @@
                     phone: document.getElementById('workerPhone').value,
                     address: document.getElementById('workerAddress').value,
                     role: 'worker',
-                    status: 'Not Collecting'
+                    status: 'available' // Fix: Set default status to 'available' as per the check constraint
                 };
 
                 try {
-                    const { error } = await supabase
+                    const { error } = await supabaseClient
                         .from('users')
                         .insert([worker]);
                     
@@ -294,7 +294,7 @@
 
         async function fetchWorkers() {
             try {
-                const { data, error } = await supabase
+                const { data, error } = await supabaseClient
                     .from('users')
                     .select('*, taskrequests!taskrequests_assignedworkerid_fkey(status)')
                     .eq('role', 'worker');
@@ -302,7 +302,7 @@
                 if (error) throw error;
                 updateWorkerTable(data);
             } catch (error) {
-                console.error('Error fetching workers:', error);
+                alert(`Error fetching workers: ${error.message}`);
             }
         }
 
@@ -335,7 +335,7 @@
         async function toggleStatus(workerId, currentStatus) {
             const newStatus = currentStatus === 'Collecting' ? 'Not Collecting' : 'Collecting';
             try {
-                const { data: existingTasks, error: fetchError } = await supabase
+                const { data: existingTasks, error: fetchError } = await supabaseClient
                     .from('taskrequests')
                     .select('reportid')
                     .eq('assignedworkerid', workerId)
@@ -359,7 +359,7 @@
                         throw new Error(data.error);
                     }
 
-                    const { error } = await supabase
+                    const { error } = await supabaseClient
                         .from('taskrequests')
                         .update({
                             status: newStatus,
@@ -370,7 +370,7 @@
                     
                     if (error) throw error;
                 } else if (newStatus === 'Collecting') {
-                    const { error } = await supabase
+                    const { error } = await supabaseClient
                         .from('taskrequests')
                         .insert([{
                             reportid: `task_${workerId}_${Date.now()}`,
