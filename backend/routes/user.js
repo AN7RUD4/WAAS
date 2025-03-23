@@ -6,7 +6,7 @@ const multer = require('multer');
 const userRouter = express.Router();
 
 const pool = new Pool({
-  connectionString: 'postgresql://postgres.hrzroqrgkvzhomsosqzl:7H.6k2wS*F$q2zY@aws-0-ap-south-1.pooler.supabase.com:6543/postgres',
+  connectionString: 'postgresql://postgres.hrzroqrgkvzhomsosqzl:7H.6k2wS*F$q2zY@aws-0-ap-south-1.pooler.supabase.com:6543/WasteManagementDB',
   ssl: { rejectUnauthorized: false },
 });
 
@@ -29,40 +29,43 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage: storage });
 
-// Bin Fill endpoint (Remove availableTime)
+// Bin Fill endpoint
 userRouter.post('/bin-fill', authenticateToken, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const { location } = req.body;
-    if (!location) return res.status(400).json({ message: 'Location is required' }); // Removed availableTime validation
+    const { location, fillLevel } = req.body;
+    if (!location) return res.status(400).json({ message: 'Location is required' });
+    if (!fillLevel || ![80, 100].includes(Number(fillLevel))) {
+      return res.status(400).json({ message: 'Fill level must be 80 or 100' });
+    }
     const [lat, long] = location.split(',').map(Number);
     if (isNaN(lat) || isNaN(long)) throw new Error('Invalid location format. Expected: "lat,long"');
     const result = await client.query(
-      `INSERT INTO taskrequests (userid, location, status, datetime) 
-       VALUES ($1, ST_GeomFromText('POINT(${long} ${lat})', 4326), $2, NOW()) 
-       RETURNING requestid, ST_AsText(location) as location, status`, // Removed availabletime
-      [req.user.userid, 'pending']
+      `INSERT INTO garbagereports (userid, location, wastetype, status, comments, datetime) 
+       VALUES ($1, ST_GeomFromText('POINT(${long} ${lat})', 4326), $2, $3, $4, NOW()) 
+       RETURNING reportid, ST_AsText(location) as location, status`,
+      [req.user.userid, 'bin', 'pending', `Bin fill level: ${fillLevel}%`]
     );
     await client.query('COMMIT');
     res.status(201).json({
-      message: 'Collection request submitted successfully',
-      request: {
-        id: result.rows[0].requestid,
+      message: 'Bin fill report submitted successfully',
+      report: {
+        id: result.rows[0].reportid,
         location: result.rows[0].location.replace('POINT(', '').replace(')', '') || result.rows[0].location,
         status: result.rows[0].status,
       }
     });
   } catch (error) {
     await client.query('ROLLBACK');
-    console.error('Collection request error:', error);
-    res.status(500).json({ message: error.message || 'Server error submitting collection request' });
+    console.error('Bin fill report error:', error);
+    res.status(500).json({ message: error.message || 'Server error submitting bin fill report' });
   } finally {
     client.release();
   }
 });
 
-// Report Waste endpoint (unchanged)
+// Report Public Waste endpoint
 userRouter.post('/report-waste', authenticateToken, upload.single('image'), async (req, res) => {
   const client = await pool.connect();
   try {
@@ -73,10 +76,10 @@ userRouter.post('/report-waste', authenticateToken, upload.single('image'), asyn
     const [lat, long] = location.split(',').map(Number);
     if (isNaN(lat) || isNaN(long)) throw new Error('Invalid location format. Expected: "lat,long"');
     const result = await client.query(
-      `INSERT INTO garbagereports (userid, location, imageurl, status, datetime) 
-       VALUES ($1, ST_GeomFromText('POINT(${long} ${lat})', 4326), $2, $3, NOW()) 
+      `INSERT INTO garbagereports (userid, location, wastetype, imageurl, status, datetime) 
+       VALUES ($1, ST_GeomFromText('POINT(${long} ${lat})', 4326), $2, $3, $4, NOW()) 
        RETURNING reportid, ST_AsText(location) as location, imageurl`,
-      [req.user.userid, imageUrl, 'pending']
+      [req.user.userid, 'public', imageUrl, 'pending']
     );
     await client.query('COMMIT');
     res.status(201).json({
@@ -96,13 +99,13 @@ userRouter.post('/report-waste', authenticateToken, upload.single('image'), asyn
   }
 });
 
-// Collection Requests endpoint (Remove availabletime)
+// Collection Requests endpoint
 userRouter.get('/collection-requests', authenticateToken, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     const garbageReports = await client.query(
-      `SELECT reportid, ST_AsText(location) as location, imageurl, status, datetime 
+      `SELECT reportid, ST_AsText(location) as location, imageurl, status, datetime, wastetype, comments 
        FROM garbagereports WHERE userid = $1 ORDER BY datetime DESC`,
       [req.user.userid]
     );

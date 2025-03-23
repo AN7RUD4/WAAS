@@ -2,29 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:waas/widget/login.dart';
 import 'package:waas/widget/signup_page.dart';
 import 'colors/colors.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-
-// Need to remove before submission
-// Token migration function to move tokens from SharedPreferences to FlutterSecureStorage
-Future<void> migrateToken() async {
-  final prefs = await SharedPreferences.getInstance();
-  final storage = const FlutterSecureStorage();
-
-  // Check if a token exists in SharedPreferences
-  String? oldToken = prefs.getString('token');
-  if (oldToken != null) {
-    // Migrate the token to FlutterSecureStorage
-    await storage.write(key: 'jwt_token', value: oldToken);
-    // Remove the token from SharedPreferences
-    await prefs.remove('token');
-    print('Token migrated from SharedPreferences to FlutterSecureStorage');
-  }
-}
 
 void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  await migrateToken();
   runApp(const MyApp());
 }
 

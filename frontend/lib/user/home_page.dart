@@ -4,8 +4,8 @@ import 'dart:io';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart'; // Use FlutterSecureStorage
-import '../colors/colors.dart'; 
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../colors/colors.dart';
 import 'package:waas/assets/constants.dart';
 
 // Utility widget for buttons
@@ -245,7 +245,7 @@ class _ReportPageState extends State<ReportPage> {
   File? _image;
   final TextEditingController locationController = TextEditingController();
   bool _isLoading = false;
-  final storage = FlutterSecureStorage(); // Initialize FlutterSecureStorage
+  final storage = FlutterSecureStorage();
 
   @override
   void initState() {
@@ -342,7 +342,6 @@ class _ReportPageState extends State<ReportPage> {
       print('Response body: $responseBody');
 
       if (response.statusCode == 201) {
-        final data = jsonDecode(responseBody);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("Report submitted successfully!")),
         );
@@ -428,7 +427,7 @@ class _ReportPageState extends State<ReportPage> {
   }
 }
 
-// Bin Fill Page for submitting bin fill requests (Updated: Removed availableTime)
+// Bin Fill Page for submitting bin fill requests
 class BinFillPage extends StatefulWidget {
   const BinFillPage({super.key});
 
@@ -441,7 +440,7 @@ class _BinFillPageState extends State<BinFillPage> {
   bool is100Checked = false;
   final TextEditingController locationController = TextEditingController();
   bool _isLoading = false;
-  final storage = FlutterSecureStorage(); // Initialize FlutterSecureStorage
+  final storage = FlutterSecureStorage();
 
   @override
   void initState() {
@@ -521,6 +520,8 @@ class _BinFillPageState extends State<BinFillPage> {
       final token = await _getToken();
       if (token == null) throw Exception('No token found');
 
+      final fillLevel = is80Checked ? 80 : 100; // Set fillLevel based on checkbox
+
       final response = await http.post(
         Uri.parse('$apiBaseUrl/user/bin-fill'),
         headers: {
@@ -529,6 +530,7 @@ class _BinFillPageState extends State<BinFillPage> {
         },
         body: jsonEncode({
           'location': locationController.text,
+          'fillLevel': fillLevel, // Include fillLevel in the request body
         }),
       );
 
@@ -536,7 +538,6 @@ class _BinFillPageState extends State<BinFillPage> {
       print('Response body: ${response.body}');
 
       if (response.statusCode == 201) {
-        final data = jsonDecode(response.body);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("Bin Fill details submitted!")),
         );
@@ -626,7 +627,7 @@ class _BinFillPageState extends State<BinFillPage> {
   }
 }
 
-// Collection Requests Page to view submitted requests (Updated: Removed availableTime)
+// Collection Requests Page to view submitted requests
 class CollectionRequestsPage extends StatefulWidget {
   const CollectionRequestsPage({super.key});
 
@@ -635,10 +636,9 @@ class CollectionRequestsPage extends StatefulWidget {
 }
 
 class _CollectionRequestsPageState extends State<CollectionRequestsPage> {
-  List<Map<String, dynamic>> collectionRequests = [];
   List<Map<String, dynamic>> garbageReports = [];
   bool _isLoading = false;
-  final storage = FlutterSecureStorage(); // Initialize FlutterSecureStorage
+  final storage = FlutterSecureStorage();
 
   @override
   void initState() {
@@ -670,11 +670,8 @@ class _CollectionRequestsPageState extends State<CollectionRequestsPage> {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         setState(() {
-          collectionRequests = List<Map<String, dynamic>>.from(
-            data['collectionRequests'],
-          );
           garbageReports = List<Map<String, dynamic>>.from(
-            data['garbageReports'],
+            data['garbageReports'] ?? [],
           );
         });
       } else {
@@ -711,49 +708,6 @@ class _CollectionRequestsPageState extends State<CollectionRequestsPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                    "Collection Requests",
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.textColor,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  collectionRequests.isEmpty
-                      ? const Text(
-                          "No collection requests found.",
-                          style: TextStyle(color: AppColors.textColor),
-                        )
-                      : Expanded(
-                          child: ListView.builder(
-                            itemCount: collectionRequests.length,
-                            itemBuilder: (context, index) {
-                              final request = collectionRequests[index];
-                              return Card(
-                                elevation: 2,
-                                margin: const EdgeInsets.symmetric(vertical: 5),
-                                child: ListTile(
-                                  title: Text(
-                                    "Request ID: ${request['requestid']}",
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  subtitle: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text("Location: ${request['location']}"),
-                                      Text("Status: ${request['status']}"),
-                                      Text("Time: ${request['datetime']}"),
-                                    ],
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                  const SizedBox(height: 20),
-                  const Text(
                     "Garbage Reports",
                     style: TextStyle(
                       fontSize: 20,
@@ -788,6 +742,9 @@ class _CollectionRequestsPageState extends State<CollectionRequestsPage> {
                                       Text("Location: ${report['location']}"),
                                       Text("Status: ${report['status']}"),
                                       Text("Time: ${report['datetime']}"),
+                                      Text("Waste Type: ${report['wastetype']}"),
+                                      if (report['comments'] != null)
+                                        Text("Comments: ${report['comments']}"),
                                       report['imageurl'] != null
                                           ? Image.network(
                                               report['imageurl'],
