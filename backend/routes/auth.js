@@ -75,7 +75,7 @@ router.post('/signup', validateSignup, async (req, res) => {
 
     const newUser = await client.query(
       'INSERT INTO users (name, email, password, role) VALUES ($1, $2, $3, $4) RETURNING userid, name, email',
-      [name, email, hashedPassword, 'worker']
+      [name, email, hashedPassword, 'user']
     );
 
     await client.query('COMMIT');

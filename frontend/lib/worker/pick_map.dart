@@ -7,10 +7,15 @@ import 'package:http/http.dart' as http;
 import 'dart:math' show sin, cos, sqrt, asin, pi;
 
 class MapScreen extends StatefulWidget {
-  const MapScreen({super.key});
+  final int taskid;
+  const MapScreen({
+    super.key,
+    required this.taskid
+  });
 
   @override
   _MapScreenState createState() => _MapScreenState();
+
 }
 
 class _MapScreenState extends State<MapScreen> {
