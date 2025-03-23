@@ -1,85 +1,69 @@
-// require('dotenv').config();
-// const express = require('express');
-// const { createClient } = require('@supabase/supabase-js');
-// const bcrypt = require('bcryptjs');
-// const jwt = require('jsonwebtoken');
-// const cors = require('cors');
+require('dotenv').config();
+const express = require('express');
+const { Pool } = require('pg');
+const cors = require('cors');
 
-// const app = express();
-// app.use(express.json());
-// app.use(cors());
+const app = express();
+const PORT = process.env.PORT || 3000;
 
-// // Supabase Client Setup
-// const SUPABASE_URL = 'https://your-supabase-url';
-// const SUPABASE_KEY = 'your-supabase-key';
-// const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+// Fetch Assigned Tasks for Worker
+app.get('/worker/assigned-tasks', async (req, res) => {
+    try {
+        const { workerId } = req.query;
+        if (!workerId) return res.status(400).json({ error: 'Worker ID is required' });
 
-// // JWT Secret Key
-// const JWT_SECRET = 'your_jwt_secret';
+        const result = await pool.query(
+            `SELECT t.taskid, g.wastetype, g.location, t.status, t.progress 
+       FROM taskrequests t 
+       JOIN garbagereports g ON t.reportid = g.reportid 
+       WHERE t.assignedworkerid = $1 AND t.status != 'completed'`,
+            [workerId]
+        );
 
-// /** Worker Signup */
-// app.post('/worker/signup', async (req, res) => {
-//     const { name, email, password } = req.body;
-    
-//     const hashedPassword = await bcrypt.hash(password, 10);
-//     const { data, error } = await supabase.from('Users').insert([{ 
-//         name, email, password: hashedPassword, role: 'worker', status: 'available'
-//     }]);
-    
-//     if (error) return res.status(400).json({ error: error.message });
-//     res.json({ message: 'Worker registered successfully!' });
-// });
+        res.json({ assignedWorks: result.rows });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
 
-// /** Worker Login */
-// app.post('/worker/login', async (req, res) => {
-//     const { email, password } = req.body;
-    
-//     const { data: user, error } = await supabase.from('Users').select('*').eq('email', email).single();
-//     if (error || !user) return res.status(400).json({ error: 'Invalid credentials' });
-    
-//     const isValid = await bcrypt.compare(password, user.password);
-//     if (!isValid) return res.status(401).json({ error: 'Incorrect password' });
-    
-//     const token = jwt.sign({ userID: user.userID, role: user.role }, JWT_SECRET, { expiresIn: '1d' });
-//     res.json({ token, workerID: user.userID });
-// });
+// Update Task Progress
+app.patch('/worker/update-progress', async (req, res) => {
+    try {
+        const { taskId, progress, status } = req.body;
+        if (!taskId || progress === undefined || !status) {
+            return res.status(400).json({ error: 'Task ID, progress, and status are required' });
+        }
 
-// /** Get Assigned Tasks */
-// app.get('/worker/tasks/:workerID', async (req, res) => {
-//     const { workerID } = req.params;
-    
-//     const { data, error } = await supabase.from('TaskRequests').select('*').eq('assignedWorkerID', workerID);
-//     if (error) return res.status(400).json({ error: error.message });
-    
-//     res.json({ tasks: data });
-// });
+        await pool.query(
+            'UPDATE taskrequests SET progress = $1, status = $2 WHERE taskid = $3',
+            [progress, status, taskId]
+        );
 
-// /** Update Task Status */
-// app.patch('/worker/task/update', async (req, res) => {
-//     const { taskID, status } = req.body;
-    
-//     const { data, error } = await supabase.from('TaskRequests').update({ status }).eq('taskID', taskID);
-//     if (error) return res.status(400).json({ error: error.message });
-    
-//     res.json({ message: 'Task status updated successfully!' });
-// });
+        res.json({ message: 'Task updated successfully' });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
 
-// /** Fetch Nearby Reports */
-// app.get('/worker/reports/nearby', async (req, res) => {
-//     const { latitude, longitude } = req.query;
-    
-//     const { data, error } = await supabase.rpc('get_nearby_reports', { lat: latitude, lon: longitude });
-//     if (error) return res.status(400).json({ error: error.message });
-    
-//     res.json({ reports: data });
-// });
+// Fetch Completed Tasks
+app.get('/worker/completed-tasks', async (req, res) => {
+    try {
+        const { workerId } = req.query;
+        if (!workerId) return res.status(400).json({ error: 'Worker ID is required' });
 
-// /** Update Live Location */
-// app.patch('/worker/location/update', async (req, res) => {
-//     const { workerID, latitude, longitude } = req.body;
-    
-//     const { data, error } = await supabase.from('Users').update({ location: SRID=4326; POINT(${longitude} ${latitude}) }).eq('userID', workerID);
-//     if (error) return res.status(400).json({ error: error.message });
-    
-//     res.json({ message: 'Location updated successfully!' });
-// });
+        const result = await pool.query(
+            `SELECT t.taskid, g.wastetype, g.location, t.endtime 
+       FROM taskrequests t 
+       JOIN garbagereports g ON t.reportid = g.reportid 
+       WHERE t.assignedworkerid = $1 AND t.status = 'completed'`,
+            [workerId]
+        );
+
+        res.json({ completedWorks: result.rows });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
