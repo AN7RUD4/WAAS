@@ -75,7 +75,9 @@ router.get('/assigned-tasks', authenticateToken, checkWorkerRole, async (req, re
     const assignedWorks = result.rows.map(row => ({
       taskId: row.taskid.toString(),
       title: row.wastetype,
-      location: row.location, // Note: This is a geography type; frontend may need to parse it
+      location: row.location,
+      distance: row.distance, 
+      time: row.startTime, 
       status: row.status,
       progress: row.progress,
     }));
