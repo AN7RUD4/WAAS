@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'package:waas/worker/pick_map.dart';
 
@@ -13,11 +14,10 @@ class WorkerApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       home: WorkerHomePage(
         workerName: "Worker",
-        workerId: "201",
-      ), // Example workerId
+        workerId: "201", // Used for display only; backend uses JWT token
+      ),
       routes: {
-        '/pickup-map':
-            (context) => const MapScreen(taskid: 0), // Placeholder route
+        '/pickup-map': (context) => const MapScreen(taskid: 0),
       },
     );
   }
@@ -39,6 +39,7 @@ class WorkerHomePage extends StatefulWidget {
 
 class _WorkerHomePageState extends State<WorkerHomePage> {
   late Future<List<Map<String, dynamic>>> _assignedWorksFuture;
+  final storage = const FlutterSecureStorage();
 
   @override
   void initState() {
@@ -47,10 +48,16 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
   }
 
   Future<List<Map<String, dynamic>>> fetchAssignedWorks() async {
+    final token = await storage.read(key: 'jwt_token');
+    if (token == null) {
+      throw Exception('No authentication token found');
+    }
+
     final response = await http.get(
-      Uri.parse(
-        'http://localhost:3000/worker/assigned-tasks?workerId=${widget.workerId}',
-      ),
+      Uri.parse('http://localhost:5000/api/worker/assigned-tasks'), // Updated URL
+      headers: {
+        'Authorization': 'Bearer $token',
+      },
     );
 
     if (response.statusCode == 200) {
@@ -155,31 +162,26 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
                         );
                       } else {
                         return Column(
-                          children:
-                              snapshot.data!
-                                  .map(
-                                    (work) => WorkListItem(
-                                      taskId: work['taskId'],
-                                      title: work['title'],
-                                      distance:
-                                          "5km", // Placeholder (calculated in pickup_map.dart)
-                                      time:
-                                          "15min", // Placeholder (calculated in pickup_map.dart)
-                                      onTap: () {
-                                        // Redirect to PickupMapPage with taskId
-                                        Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder:
-                                                (context) => MapScreen(
-                                                  taskid: work['taskId'],
-                                                ),
-                                          ),
-                                        );
-                                      },
-                                    ),
-                                  )
-                                  .toList(),
+                          children: snapshot.data!
+                              .map(
+                                (work) => WorkListItem(
+                                  taskId: work['taskId'],
+                                  title: work['title'],
+                                  distance: "5km", // Placeholder
+                                  time: "15min", // Placeholder
+                                  onTap: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) => MapScreen(
+                                          taskid: int.parse(work['taskId']),
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              )
+                              .toList(),
                         );
                       }
                     },
@@ -193,10 +195,7 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
               child: IconButton(
                 icon: const Icon(Icons.info, color: Colors.grey),
                 onPressed: () {
-                  // Navigator.push(
-                  //   context,
-                  //   MaterialPageRoute(builder: (context) => const PastWorkDetailsPage()),
-                  // );
+                  // Navigate to past work details if needed
                 },
               ),
             ),
@@ -263,52 +262,3 @@ class WorkListItem extends StatelessWidget {
     );
   }
 }
-
-// class PastWorkDetailsPage extends StatelessWidget {
-//   const PastWorkDetailsPage({super.key});
-
-//   @override
-//   Widget build(BuildContext context) {
-//     return Scaffold(
-//       appBar: AppBar(
-//         title: const Text("Past Work Details"),
-//         backgroundColor: Colors.orange.shade700,
-//       ),
-//       backgroundColor: Colors.orange.shade50,
-//       body: Padding(
-//         padding: const EdgeInsets.all(16.0),
-//         child: Column(
-//           crossAxisAlignment: CrossAxisAlignment.start,
-//           children: [
-//             const Text(
-//               "Completed Works",
-//               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-//             ),
-//             const SizedBox(height: 10),
-//             const WorkListItem(
-//               taskId: "0",
-//               title: "Work-1",
-//               distance: "5km",
-//               time: "15min",
-//               // onTap: null,
-//             ),
-//             const WorkListItem(
-//               taskId: "0",
-//               title: "Work-2",
-//               distance: "8km",
-//               time: "20min",
-//               onTap: null,
-//             ),
-//             const WorkListItem(
-//               taskId: "0",
-//               title: "Work-3",
-//               distance: "10km",
-//               time: "25min",
-//               onTap: null,
-//             ),
-//           ],
-//         ),
-//       ),
-//     );
-//   }
-// }
