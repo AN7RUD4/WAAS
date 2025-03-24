@@ -221,4 +221,83 @@ router.get('/completed-tasks', authenticateToken, checkWorkerRole, async (req, r
   }
 });
 
+// ... (existing imports and code from worker.js)
+
+router.get('/task-route/:taskid', authenticateToken, checkWorkerRole, async (req, res) => {
+  const taskId = parseInt(req.params.taskid, 10);
+  const workerId = req.user.userid; // From JWT token
+
+  try {
+    // Fetch the task details, ensuring it belongs to the worker
+    const taskResult = await pool.query(
+      `SELECT tr.taskid, tr.reportid, tr.assignedworkerid, tr.status, tr.route, tr.progress, tr.starttime, tr.endtime,
+              gr.location AS report_location, gr.wastetype
+       FROM taskrequests tr
+       JOIN garbagereports gr ON tr.reportid = gr.reportid
+       WHERE tr.taskid = $1 AND tr.assignedworkerid = $2`,
+      [taskId, workerId]
+    );
+
+    if (taskResult.rows.length === 0) {
+      return res.status(404).json({ message: 'Task not found or not assigned to this worker' });
+    }
+
+    const task = taskResult.rows[0];
+
+    // Parse the route from the jsonb field
+    const routeData = task.route || { start: {}, end: {}, waypoints: [] };
+    const routePoints = [];
+
+    // Add start point
+    if (routeData.start && routeData.start.lat && routeData.start.lng) {
+      routePoints.push({
+        lat: parseFloat(routeData.start.lat),
+        lng: parseFloat(routeData.start.lng),
+      });
+    }
+
+    // Add waypoints
+    if (routeData.waypoints && Array.isArray(routeData.waypoints)) {
+      routeData.waypoints.forEach(waypoint => {
+        if (waypoint.lat && waypoint.lng) {
+          routePoints.push({
+            lat: parseFloat(waypoint.lat),
+            lng: parseFloat(waypoint.lng),
+          });
+        }
+      });
+    }
+
+    // Add end point
+    if (routeData.end && routeData.end.lat && routeData.end.lng) {
+      routePoints.push({
+        lat: parseFloat(routeData.end.lat),
+        lng: parseFloat(routeData.end.lng),
+      });
+    }
+
+    // Parse the report location (from garbagereports)
+    const reportLocation = task.report_location;
+    const locationMatch = reportLocation.match(/POINT\(([^ ]+) ([^)]+)\)/);
+    const collectionPoint = locationMatch
+      ? {
+          lat: parseFloat(locationMatch[2]), // Latitude
+          lng: parseFloat(locationMatch[1]), // Longitude
+        }
+      : null;
+
+    res.status(200).json({
+      taskid: task.taskid,
+      reportid: task.reportid,
+      status: task.status,
+      route: routePoints,
+      locations: collectionPoint ? [collectionPoint] : [],
+      wastetype: task.wastetype,
+    });
+  } catch (error) {
+    console.error('Error fetching task route:', error.message, error.stack);
+    res.status(500).json({ error: 'Internal Server Error', details: error.message });
+  }
+});
+
 module.exports = router;

@@ -5,27 +5,29 @@ import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:http/http.dart' as http;
 import 'dart:math' show sin, cos, sqrt, asin, pi;
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class MapScreen extends StatefulWidget {
   final int taskid;
   const MapScreen({
     super.key,
-    required this.taskid
+    required this.taskid,
   });
 
   @override
   _MapScreenState createState() => _MapScreenState();
-
 }
 
 class _MapScreenState extends State<MapScreen> {
   final MapController _mapController = MapController();
   List<LatLng> _locations = [];
-  List<LatLng> _route = []; // To store the shortest route
+  List<LatLng> _route = []; // Route from taskrequests
+  List<LatLng> _completeRoute = []; // Complete route including worker's location
   double _currentZoom = 14.0;
   LatLng _currentCenter = const LatLng(10.1860, 76.3765); // Default center
   LatLng? _workerLocation; // Worker's location
   bool _isLoading = false;
+  final storage = const FlutterSecureStorage();
 
   // For the info box
   double _distanceToNearest = 0.0;
@@ -84,66 +86,80 @@ class _MapScreenState extends State<MapScreen> {
       print('Position: ${position.latitude}, ${position.longitude}');
       setState(() {
         _workerLocation = LatLng(position.latitude, position.longitude);
-        _currentCenter =
-            _workerLocation!; // Center the map on the worker's location
+        _currentCenter = _workerLocation!; // Center the map on the worker's location
         _mapController.move(_currentCenter, _currentZoom);
         print('Worker location set: $_workerLocation');
       });
+      _updateCompleteRoute();
       _calculateDistances();
     } catch (e) {
       print('Error getting location: $e');
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error getting location: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error getting location: $e')),
+      );
       // Fallback to default location if location retrieval fails
       setState(() {
-        _workerLocation = const LatLng(
-          10.1865,
-          76.3770,
-        ); // Default fallback location
+        _workerLocation = const LatLng(10.1865, 76.3770); // Default fallback location
         _currentCenter = _workerLocation!;
         _mapController.move(_currentCenter, _currentZoom);
         print('Using fallback location: $_workerLocation');
       });
+      _updateCompleteRoute();
       _calculateDistances();
     }
   }
 
-  // Fetch data from the backend API
+  // Fetch data from the backend API for the specific taskid
   Future<void> _fetchCollectionRequestData() async {
     setState(() => _isLoading = true);
-    const String apiUrl =
-        'http://192.168.164.53:3000/api/collectionrequest/route';
+    final String apiUrl = 'http://192.168.164.53:3000/api/worker/task-route/${widget.taskid}';
 
     try {
+      final token = await storage.read(key: 'jwt_token');
+      if (token == null) {
+        throw Exception('No authentication token found');
+      }
+
       print('Fetching data from $apiUrl');
-      final response = await http.get(Uri.parse(apiUrl));
+      final response = await http.get(
+        Uri.parse(apiUrl),
+        headers: {'Authorization': 'Bearer $token'},
+      );
       print('Response status: ${response.statusCode}');
       print('Response body: ${response.body}');
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = jsonDecode(response.body);
         print('Parsed data: $data');
         _parseLocations(data['locations']);
-        _route = _parseRoute(data['route']); // Parse the optimized route
+        _route = _parseRoute(data['route']);
         print('Updated _route: $_route');
+        _updateCompleteRoute();
         _calculateDistances();
       } else {
         print('Failed to fetch data: ${response.statusCode}');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to fetch task data: ${response.statusCode}')),
+        );
       }
     } catch (e) {
       print('Error fetching data: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error fetching task data: $e')),
+      );
     }
     setState(() => _isLoading = false);
   }
 
-  // Parse the location field
+  // Parse the locations field (collection points from garbagereports)
   void _parseLocations(List<dynamic> data) {
     _locations.clear();
     for (var item in data) {
-      final String? location = item['location'];
-      if (location != null) {
+      if (item['lat'] != null && item['lng'] != null) {
         try {
-          final LatLng latLng = parseLocation(location);
+          final LatLng latLng = LatLng(
+            double.parse(item['lat'].toString()),
+            double.parse(item['lng'].toString()),
+          );
           _locations.add(latLng);
         } catch (e) {
           print('Error parsing location: $e');
@@ -158,31 +174,34 @@ class _MapScreenState extends State<MapScreen> {
     setState(() {});
   }
 
-  // Parse the route from the backend
+  // Parse the route from the backend (from taskrequests.route)
   List<LatLng> _parseRoute(List<dynamic> routeData) {
     List<LatLng> route = [];
-    for (var loc in routeData) {
-      final String? location = loc['location'];
-      if (location != null) {
+    for (var point in routeData) {
+      if (point['lat'] != null && point['lng'] != null) {
         try {
-          final LatLng latLng = parseLocation(location);
+          final LatLng latLng = LatLng(
+            double.parse(point['lat'].toString()),
+            double.parse(point['lng'].toString()),
+          );
           route.add(latLng);
         } catch (e) {
-          print('Error parsing route location: $e');
+          print('Error parsing route point: $e');
         }
       }
     }
     return route;
   }
 
-  LatLng parseLocation(String location) {
-    final parts = location.split(',');
-    if (parts.length == 2) {
-      final double latitude = double.tryParse(parts[0]) ?? 0.0;
-      final double longitude = double.tryParse(parts[1]) ?? 0.0;
-      return LatLng(latitude, longitude);
+  // Update the complete route by prepending the worker's location
+  void _updateCompleteRoute() {
+    if (_workerLocation == null || _route.isEmpty) {
+      _completeRoute = _route;
+      return;
     }
-    throw FormatException('Invalid location format: $location');
+    // Prepend worker's location to the route
+    _completeRoute = [_workerLocation!, ..._route];
+    print('Updated _completeRoute: $_completeRoute');
   }
 
   // Custom Haversine distance calculation
@@ -209,42 +228,28 @@ class _MapScreenState extends State<MapScreen> {
   void _calculateDistances() {
     print('Calculating distances...');
     print('Worker Location: $_workerLocation');
-    print('Route: $_route');
-    if (_workerLocation == null || _locations.isEmpty) {
-      print(
-        'Cannot calculate distances: workerLocation or locations are empty',
-      );
+    print('Complete Route: $_completeRoute');
+    if (_workerLocation == null || _completeRoute.isEmpty) {
+      print('Cannot calculate distances: workerLocation or completeRoute are empty');
       return;
     }
 
-    // Find the nearest pickup spot
-    LatLng nearestSpot = _route[0];
-    double minDistance = double.infinity;
-    for (var loc in _route) {
-      final distance = _haversineDistance(_workerLocation!, loc);
-      print('Distance to $loc: $distance km');
-      if (distance < minDistance) {
-        minDistance = distance;
-        nearestSpot = loc;
-      }
-    }
-    _distanceToNearest = minDistance;
+    // Find the nearest pickup spot (first point after worker's location)
+    LatLng nearestSpot = _completeRoute[1]; // First point after worker's location
+    _distanceToNearest = _haversineDistance(_workerLocation!, nearestSpot);
     print('Nearest spot: $nearestSpot, Distance: $_distanceToNearest km');
 
-    // Calculate total distance of the route
+    // Calculate total distance of the complete route
     _totalDistance = 0.0;
-    for (int i = 0; i < _route.length - 1; i++) {
-      final segmentDistance = _haversineDistance(_route[i], _route[i + 1]);
-      print(
-        'Segment distance from ${_route[i]} to ${_route[i + 1]}: $segmentDistance km',
-      );
+    for (int i = 0; i < _completeRoute.length - 1; i++) {
+      final segmentDistance = _haversineDistance(_completeRoute[i], _completeRoute[i + 1]);
+      print('Segment distance from ${_completeRoute[i]} to ${_completeRoute[i + 1]}: $segmentDistance km');
       _totalDistance += segmentDistance;
     }
     print('Total distance: $_totalDistance km');
 
-    // Simple directions (for demo purposes; replace with actual directions API if needed)
-    _directions =
-        "Head towards ${nearestSpot.latitude}, ${nearestSpot.longitude}";
+    // Simple directions
+    _directions = "Head towards ${nearestSpot.latitude}, ${nearestSpot.longitude}";
 
     setState(() {});
   }
@@ -278,26 +283,24 @@ class _MapScreenState extends State<MapScreen> {
               onPositionChanged: (position, hasGesture) {
                 if (hasGesture) {
                   setState(() {
-                    _currentCenter = position.center ?? _currentCenter;
-                    _currentZoom = position.zoom ?? _currentZoom;
+                    _currentCenter = position.center;
+                    _currentZoom = position.zoom;
                   });
                 }
               },
             ),
             children: [
               TileLayer(
-                urlTemplate:
-                    "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+                urlTemplate: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
                 subdomains: ['a', 'b', 'c'],
                 tileProvider: NetworkTileProvider(),
                 additionalOptions: {'alpha': '0.9'},
               ),
-              if (_route
-                  .isNotEmpty) // Only render PolylineLayer if _route is not empty
+              if (_completeRoute.isNotEmpty) // Use _completeRoute for the polyline
                 PolylineLayer(
                   polylines: [
                     Polyline(
-                      points: _route,
+                      points: _completeRoute,
                       strokeWidth: 4.0,
                       color: Colors.blue,
                     ),
@@ -356,11 +359,11 @@ class _MapScreenState extends State<MapScreen> {
               decoration: BoxDecoration(
                 color: Colors.white.withOpacity(0.9),
                 borderRadius: BorderRadius.circular(8),
-                boxShadow: const [
+                boxShadow: [
                   BoxShadow(
                     color: Colors.black26,
                     blurRadius: 4,
-                    offset: Offset(0, 2),
+                    offset: Offset(0,2),
                   ),
                 ],
               ),

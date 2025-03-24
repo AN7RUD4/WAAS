@@ -165,8 +165,8 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
                                     (work) => WorkListItem(
                                       taskId: work['taskId'],
                                       title: work['title'],
-                                      distance: "5km", // Placeholder
-                                      time: "15min", // Placeholder
+                                      distance: work['distance'], // Placeholder
+                                      time: work['startTime'], // Placeholder
                                       onTap: () {
                                         Navigator.push(
                                           context,
@@ -212,6 +212,7 @@ class WorkListItem extends StatelessWidget {
   final String title;
   final String distance;
   final String time;
+  final String? endTime; // Added to display completion time
   final VoidCallback onTap;
 
   const WorkListItem({
@@ -220,6 +221,7 @@ class WorkListItem extends StatelessWidget {
     required this.title,
     required this.distance,
     required this.time,
+    this.endTime,
     required this.onTap,
   });
 
@@ -255,7 +257,158 @@ class WorkListItem extends StatelessWidget {
                   "Time: $time",
                   style: const TextStyle(color: Colors.white70),
                 ),
+                if (endTime != null)
+                  Text(
+                    "Completed: $endTime",
+                    style: const TextStyle(color: Colors.white70),
+                  ),
               ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class PastWorkDetailsPage extends StatefulWidget {
+  const PastWorkDetailsPage({super.key});
+
+  @override
+  _PastWorkDetailsPageState createState() => _PastWorkDetailsPageState();
+}
+
+class _PastWorkDetailsPageState extends State<PastWorkDetailsPage> {
+  late Future<List<Map<String, dynamic>>> _completedWorksFuture;
+  final storage = const FlutterSecureStorage();
+
+  @override
+  void initState() {
+    super.initState();
+    _completedWorksFuture = fetchCompletedWorks();
+  }
+
+  Future<List<Map<String, dynamic>>> fetchCompletedWorks() async {
+    final token = await storage.read(key: 'jwt_token');
+    if (token == null) {
+      throw Exception('No authentication token found');
+    }
+
+    final response = await http.get(
+      Uri.parse('$apiBaseUrl/worker/completed-tasks'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return List<Map<String, dynamic>>.from(data['completedWorks']);
+    } else if (response.statusCode == 401) {
+      throw Exception('Unauthorized: Invalid or missing token');
+    } else if (response.statusCode == 403) {
+      throw Exception('Access denied: User is not a worker');
+    } else {
+      throw Exception(
+        'Failed to load completed works: ${response.statusCode} - ${response.body}',
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.orange.shade700,
+        title: const Text(
+          "Past Work Details",
+          style: TextStyle(color: Colors.white),
+        ),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: () {
+            Navigator.pop(context);
+          },
+        ),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade800,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    "Completed Tasks",
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  FutureBuilder<List<Map<String, dynamic>>>(
+                    future: _completedWorksFuture,
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator());
+                      } else if (snapshot.hasError) {
+                        return Center(
+                          child: Text(
+                            'Error: ${snapshot.error}',
+                            style: const TextStyle(color: Colors.white70),
+                          ),
+                        );
+                      } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                        return const Center(
+                          child: Text(
+                            "No completed tasks",
+                            style: TextStyle(
+                              color: Colors.white70,
+                              fontSize: 16,
+                            ),
+                          ),
+                        );
+                      } else {
+                        return Column(
+                          children:
+                              snapshot.data!
+                                  .map(
+                                    (work) => WorkListItem(
+                                      taskId: work['taskId'],
+                                      title: work['title'],
+                                      distance: work['distance'], // Placeholder
+                                      time: work['startTime'], // Placeholder
+                                      endTime:
+                                          work['endTime'], // Display endTime
+                                      onTap: () {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder:
+                                                (context) => MapScreen(
+                                                  taskid: int.parse(
+                                                    work['taskId'],
+                                                  ),
+                                                ),
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                  )
+                                  .toList(),
+                        );
+                      }
+                    },
+                  ),
+                ],
+              ),
             ),
           ],
         ),
