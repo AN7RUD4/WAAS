@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:waas/assets/constants.dart';
 
 import 'package:waas/worker/pick_map.dart';
 
@@ -16,9 +17,7 @@ class WorkerApp extends StatelessWidget {
         workerName: "Worker",
         workerId: "201", // Used for display only; backend uses JWT token
       ),
-      routes: {
-        '/pickup-map': (context) => const MapScreen(taskid: 0),
-      },
+      routes: {'/pickup-map': (context) => const MapScreen(taskid: 0)},
     );
   }
 }
@@ -54,10 +53,8 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
     }
 
     final response = await http.get(
-      Uri.parse('http://localhost:5000/api/worker/assigned-tasks'), // Updated URL
-      headers: {
-        'Authorization': 'Bearer $token',
-      },
+      Uri.parse('$apiBaseUrl/worker/assigned-tasks'), // Updated URL
+      headers: {'Authorization': 'Bearer $token'},
     );
 
     if (response.statusCode == 200) {
@@ -162,26 +159,30 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
                         );
                       } else {
                         return Column(
-                          children: snapshot.data!
-                              .map(
-                                (work) => WorkListItem(
-                                  taskId: work['taskId'],
-                                  title: work['title'],
-                                  distance: "5km", // Placeholder
-                                  time: "15min", // Placeholder
-                                  onTap: () {
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (context) => MapScreen(
-                                          taskid: int.parse(work['taskId']),
-                                        ),
-                                      ),
-                                    );
-                                  },
-                                ),
-                              )
-                              .toList(),
+                          children:
+                              snapshot.data!
+                                  .map(
+                                    (work) => WorkListItem(
+                                      taskId: work['taskId'],
+                                      title: work['title'],
+                                      distance: "5km", // Placeholder
+                                      time: "15min", // Placeholder
+                                      onTap: () {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder:
+                                                (context) => MapScreen(
+                                                  taskid: int.parse(
+                                                    work['taskId'],
+                                                  ),
+                                                ),
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                  )
+                                  .toList(),
                         );
                       }
                     },

@@ -56,7 +56,7 @@ const checkWorkerRole = (req, res, next) => {
 };
 
 // Fetch Assigned Tasks for Worker
-router.get('/worker/assigned-tasks', authenticateToken, checkWorkerRole, async (req, res) => {
+router.get('/assigned-tasks', authenticateToken, checkWorkerRole, async (req, res) => {
   try {
     const workerId = parseInt(req.user.userid, 10); // Use userid from JWT token
     if (isNaN(workerId)) {
@@ -139,7 +139,7 @@ router.get('/task/route', authenticateToken, checkWorkerRole, async (req, res) =
 });
 
 // Update Task Progress
-router.patch('/worker/update-progress', authenticateToken, checkWorkerRole, async (req, res) => {
+router.patch('/update-progress', authenticateToken, checkWorkerRole, async (req, res) => {
   try {
     const { taskId, progress, status } = req.body;
     if (!taskId || progress === undefined || !status) {
@@ -192,7 +192,7 @@ router.patch('/worker/update-progress', authenticateToken, checkWorkerRole, asyn
 });
 
 // Fetch Completed Tasks
-router.get('/worker/completed-tasks', authenticateToken, checkWorkerRole, async (req, res) => {
+router.get('/completed-tasks', authenticateToken, checkWorkerRole, async (req, res) => {
   try {
     const workerId = parseInt(req.user.userid, 10);
     if (isNaN(workerId)) {
