@@ -167,10 +167,10 @@
         <section id="report" class="section">
             <h2>Generate Report</h2>
             <form id="reportForm">
-                <label for="date">Date:</label>
-                <input type="date" id="date" required>
-                <label for="reportid">Report ID:</label>
-                <input type="text" id="reportid" placeholder="Enter Report ID" required>
+                <label for="month">Month:</label>
+                <input type="month" id="month" required>
+                <label for="reportid">Report ID (Optional):</label>
+                <input type="text" id="reportid" placeholder="Enter Report ID">
                 <button type="submit">Generate Report</button>
             </form>
             <div id="reportResult"></div>
@@ -227,13 +227,19 @@
             const reportForm = document.getElementById('reportForm');
             reportForm.addEventListener('submit', async (e) => {
                 e.preventDefault();
-                const date = document.getElementById('date').value;
+                const month = document.getElementById('month').value; // Format: "YYYY-MM"
                 const reportid = document.getElementById('reportid').value;
                 const resultDiv = document.getElementById('reportResult');
                 
                 try {
-                    // Fetch data from garbagereports (for userid and wastetype) and publicofficialapprovals (for workerid, status, etc.)
-                    const { data: reportData, error: reportError } = await supabaseClient
+                    // Calculate the start and end of the month
+                    const [year, monthNum] = month.split('-').map(Number);
+                    const startOfMonth = `${year}-${monthNum.toString().padStart(2, '0')}-01T00:00:00Z`;
+                    const lastDay = new Date(year, monthNum, 0).getDate(); // Get the last day of the month
+                    const endOfMonth = `${year}-${monthNum.toString().padStart(2, '0')}-${lastDay}T23:59:59Z`;
+
+                    // Build the query
+                    let query = supabaseClient
                         .from('garbagereports')
                         .select(`
                             reportid,
@@ -248,9 +254,15 @@
                                 users!publicofficialapprovals_workerid_fkey(name)
                             )
                         `)
-                        .eq('reportid', reportid)
-                        .gte('publicofficialapprovals.datetime', `${date}T00:00:00Z`)
-                        .lte('publicofficialapprovals.datetime', `${date}T23:59:59Z`);
+                        .gte('publicofficialapprovals.datetime', startOfMonth)
+                        .lte('publicofficialapprovals.datetime', endOfMonth);
+
+                    // If reportid is provided, add it to the query
+                    if (reportid) {
+                        query = query.eq('reportid', reportid);
+                    }
+
+                    const { data: reportData, error: reportError } = await query;
 
                     if (reportError) throw reportError;
 
@@ -269,7 +281,7 @@
                                 </div><hr>
                             `;
                         }).join('')
-                        : `No report found with ID ${reportid} on ${date}`;
+                        : `No reports found${reportid ? ` with ID ${reportid}` : ''} for the month of ${new Date(year, monthNum - 1).toLocaleString('default', { month: 'long', year: 'numeric' })}`;
                 } catch (error) {
                     resultDiv.innerHTML = `Error generating report: ${error.message}`;
                 }
