@@ -1,85 +1,224 @@
-// require('dotenv').config();
-// const express = require('express');
-// const { createClient } = require('@supabase/supabase-js');
-// const bcrypt = require('bcryptjs');
-// const jwt = require('jsonwebtoken');
-// const cors = require('cors');
+require('dotenv').config();
+const express = require('express');
+const { Pool } = require('pg');
+const cors = require('cors');
+const jwt = require('jsonwebtoken');
 
-// const app = express();
-// app.use(express.json());
-// app.use(cors());
+const router = express.Router();
+router.use(cors());
+router.use(express.json());
 
-// // Supabase Client Setup
-// const SUPABASE_URL = 'https://your-supabase-url';
-// const SUPABASE_KEY = 'your-supabase-key';
-// const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+// Database connection (aligned with auth.js)
+const pool = new Pool({
+  connectionString: 'postgresql://postgres.hrzroqrgkvzhomsosqzl:7H.6k2wS*F$q2zY@aws-0-ap-south-1.pooler.supabase.com:6543/postgres',
+  ssl: { rejectUnauthorized: false },
+});
 
-// // JWT Secret Key
-// const JWT_SECRET = 'your_jwt_secret';
+// Test database connection on startup
+pool.connect((err, client, release) => {
+  if (err) {
+    console.error('Error connecting to the database in worker.js:', err.stack);
+    process.exit(1); // Exit the process if the database connection fails
+  } else {
+    console.log('Worker.js successfully connected to the database');
+    release();
+  }
+});
 
-// /** Worker Signup */
-// app.post('/worker/signup', async (req, res) => {
-//     const { name, email, password } = req.body;
-    
-//     const hashedPassword = await bcrypt.hash(password, 10);
-//     const { data, error } = await supabase.from('Users').insert([{ 
-//         name, email, password: hashedPassword, role: 'worker', status: 'available'
-//     }]);
-    
-//     if (error) return res.status(400).json({ error: error.message });
-//     res.json({ message: 'Worker registered successfully!' });
-// });
+// Middleware to verify JWT token (from auth.js)
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
 
-// /** Worker Login */
-// app.post('/worker/login', async (req, res) => {
-//     const { email, password } = req.body;
-    
-//     const { data: user, error } = await supabase.from('Users').select('*').eq('email', email).single();
-//     if (error || !user) return res.status(400).json({ error: 'Invalid credentials' });
-    
-//     const isValid = await bcrypt.compare(password, user.password);
-//     if (!isValid) return res.status(401).json({ error: 'Incorrect password' });
-    
-//     const token = jwt.sign({ userID: user.userID, role: user.role }, JWT_SECRET, { expiresIn: '1d' });
-//     res.json({ token, workerID: user.userID });
-// });
+  if (!token) {
+    return res.status(401).json({ message: 'Authentication token required' });
+  }
 
-// /** Get Assigned Tasks */
-// app.get('/worker/tasks/:workerID', async (req, res) => {
-//     const { workerID } = req.params;
-    
-//     const { data, error } = await supabase.from('TaskRequests').select('*').eq('assignedWorkerID', workerID);
-//     if (error) return res.status(400).json({ error: error.message });
-    
-//     res.json({ tasks: data });
-// });
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'passwordKey');
+    if (!decoded.userid || !decoded.role) {
+      return res.status(403).json({ message: 'Invalid token: Missing userid or role' });
+    }
+    req.user = decoded; // Attach decoded token data (userid, email, role) to req.user
+    next();
+  } catch (err) {
+    console.error('Token verification error in worker.js:', err.message);
+    return res.status(403).json({ message: 'Invalid or expired token' });
+  }
+};
 
-// /** Update Task Status */
-// app.patch('/worker/task/update', async (req, res) => {
-//     const { taskID, status } = req.body;
-    
-//     const { data, error } = await supabase.from('TaskRequests').update({ status }).eq('taskID', taskID);
-//     if (error) return res.status(400).json({ error: error.message });
-    
-//     res.json({ message: 'Task status updated successfully!' });
-// });
+// Middleware to check if the user is a worker
+const checkWorkerRole = (req, res, next) => {
+  if (!req.user || req.user.role.toLowerCase() !== 'worker') {
+    return res.status(403).json({ message: 'Access denied: Only workers can access this endpoint' });
+  }
+  next();
+};
 
-// /** Fetch Nearby Reports */
-// app.get('/worker/reports/nearby', async (req, res) => {
-//     const { latitude, longitude } = req.query;
-    
-//     const { data, error } = await supabase.rpc('get_nearby_reports', { lat: latitude, lon: longitude });
-//     if (error) return res.status(400).json({ error: error.message });
-    
-//     res.json({ reports: data });
-// });
+// Fetch Assigned Tasks for Worker
+router.get('/assigned-tasks', authenticateToken, checkWorkerRole, async (req, res) => {
+  try {
+    const workerId = parseInt(req.user.userid, 10); // Use userid from JWT token
+    if (isNaN(workerId)) {
+      return res.status(400).json({ error: 'Invalid worker ID in token' });
+    }
 
-// /** Update Live Location */
-// app.patch('/worker/location/update', async (req, res) => {
-//     const { workerID, latitude, longitude } = req.body;
-    
-//     const { data, error } = await supabase.from('Users').update({ location: SRID=4326; POINT(${longitude} ${latitude}) }).eq('userID', workerID);
-//     if (error) return res.status(400).json({ error: error.message });
-    
-//     res.json({ message: 'Location updated successfully!' });
-// });
+    const result = await pool.query(
+      `SELECT t.taskid, g.wastetype, g.location, t.status, t.progress 
+       FROM taskrequests t 
+       JOIN garbagereports g ON t.reportid = g.reportid 
+       WHERE t.assignedworkerid = $1 AND t.status != 'completed'`,
+      [workerId]
+    );
+
+    // Format the response to include task details
+    const assignedWorks = result.rows.map(row => ({
+      taskId: row.taskid.toString(),
+      title: row.wastetype,
+      location: row.location, // Note: This is a geography type; frontend may need to parse it
+      status: row.status,
+      progress: row.progress,
+    }));
+
+    res.json({ assignedWorks });
+  } catch (error) {
+    console.error('Error fetching assigned tasks in worker.js:', error.message, error.stack);
+    res.status(500).json({ error: 'Internal Server Error', details: error.message });
+  }
+});
+
+// Fetch Task Route for Map (used by pickup_map.dart)
+router.get('/task/route', authenticateToken, checkWorkerRole, async (req, res) => {
+  try {
+    const { taskId } = req.query;
+    if (!taskId) return res.status(400).json({ error: 'Task ID is required' });
+
+    const taskIdInt = parseInt(taskId, 10);
+    if (isNaN(taskIdInt)) {
+      return res.status(400).json({ error: 'Invalid Task ID' });
+    }
+
+    const workerId = parseInt(req.user.userid, 10);
+    if (isNaN(workerId)) {
+      return res.status(400).json({ error: 'Invalid worker ID in token' });
+    }
+
+    // Ensure the task belongs to the worker
+    const taskCheck = await pool.query(
+      `SELECT 1 
+       FROM taskrequests 
+       WHERE taskid = $1 AND assignedworkerid = $2`,
+      [taskIdInt, workerId]
+    );
+
+    if (taskCheck.rows.length === 0) {
+      return res.status(403).json({ error: 'Task not assigned to this worker' });
+    }
+
+    const result = await pool.query(
+      `SELECT route 
+       FROM taskrequests 
+       WHERE taskid = $1`,
+      [taskIdInt]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+
+    const route = result.rows[0].route;
+    if (!route) {
+      return res.status(404).json({ error: 'No route data available for this task' });
+    }
+
+    res.json({ route });
+  } catch (error) {
+    console.error('Error fetching task route in worker.js:', error.message, error.stack);
+    res.status(500).json({ error: 'Internal Server Error', details: error.message });
+  }
+});
+
+// Update Task Progress
+router.patch('/update-progress', authenticateToken, checkWorkerRole, async (req, res) => {
+  try {
+    const { taskId, progress, status } = req.body;
+    if (!taskId || progress === undefined || !status) {
+      return res.status(400).json({ error: 'Task ID, progress, and status are required' });
+    }
+
+    const taskIdInt = parseInt(taskId, 10);
+    if (isNaN(taskIdInt)) {
+      return res.status(400).json({ error: 'Invalid Task ID' });
+    }
+
+    const workerId = parseInt(req.user.userid, 10);
+    if (isNaN(workerId)) {
+      return res.status(400).json({ error: 'Invalid worker ID in token' });
+    }
+
+    // Validate progress and status
+    const progressFloat = parseFloat(progress);
+    if (isNaN(progressFloat) || progressFloat < 0 || progressFloat > 1) {
+      return res.status(400).json({ error: 'Progress must be a number between 0 and 1' });
+    }
+
+    const validStatuses = ['pending', 'assigned', 'in-progress', 'completed', 'failed'];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({ error: `Invalid status. Must be one of: ${validStatuses.join(', ')}` });
+    }
+
+    // Ensure the task belongs to the worker
+    const taskCheck = await pool.query(
+      `SELECT 1 
+       FROM taskrequests 
+       WHERE taskid = $1 AND assignedworkerid = $2`,
+      [taskIdInt, workerId]
+    );
+
+    if (taskCheck.rows.length === 0) {
+      return res.status(403).json({ error: 'Task not assigned to this worker' });
+    }
+
+    await pool.query(
+      'UPDATE taskrequests SET progress = $1, status = $2 WHERE taskid = $3',
+      [progressFloat, status, taskIdInt]
+    );
+
+    res.json({ message: 'Task updated successfully' });
+  } catch (error) {
+    console.error('Error updating task progress in worker.js:', error.message, error.stack);
+    res.status(500).json({ error: 'Internal Server Error', details: error.message });
+  }
+});
+
+// Fetch Completed Tasks
+router.get('/completed-tasks', authenticateToken, checkWorkerRole, async (req, res) => {
+  try {
+    const workerId = parseInt(req.user.userid, 10);
+    if (isNaN(workerId)) {
+      return res.status(400).json({ error: 'Invalid worker ID in token' });
+    }
+
+    const result = await pool.query(
+      `SELECT t.taskid, g.wastetype, g.location, t.endtime 
+       FROM taskrequests t 
+       JOIN garbagereports g ON t.reportid = g.reportid 
+       WHERE t.assignedworkerid = $1 AND t.status = 'completed'`,
+      [workerId]
+    );
+
+    const completedWorks = result.rows.map(row => ({
+      taskId: row.taskid.toString(),
+      title: row.wastetype,
+      location: row.location,
+      endTime: row.endtime ? row.endtime.toISOString() : null,
+    }));
+
+    res.json({ completedWorks });
+  } catch (error) {
+    console.error('Error fetching completed tasks in worker.js:', error.message, error.stack);
+    res.status(500).json({ error: 'Internal Server Error', details: error.message });
+  }
+});
+
+module.exports = router;

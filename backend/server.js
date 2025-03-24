@@ -2,7 +2,7 @@ const express = require('express');
 const authRouter = require('./routes/auth');
 const profileRouter = require('./routes/profile');
 const userRouter = require('./routes/user');
-// const workerRouter = require('./routes/worker');
+const workerRouter = require('./routes/worker'); // Uncommented
 const cors = require('cors');
 
 const app = express();
@@ -18,9 +18,10 @@ app.get('/', (req, res) => {
 });
 
 // Routes
-app.use('/api', authRouter); 
-app.use('/api/profile', profileRouter); 
+app.use('/api', authRouter);
+app.use('/api/profile', profileRouter);
 app.use('/api/user', userRouter);
+app.use('/api/worker', workerRouter); // Mount worker routes
 
 // Error handling middleware
 app.use((err, req, res, next) => {

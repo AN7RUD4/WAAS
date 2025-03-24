@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:waas/assets/constants.dart';
 
-void main() {
-  runApp(const WorkerApp());
-}
+import 'package:waas/worker/pick_map.dart';
 
 class WorkerApp extends StatelessWidget {
   const WorkerApp({super.key});
@@ -13,14 +13,18 @@ class WorkerApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      home: WorkerHomePage(workerName: "Worker", workerId: "W001"), // Pass workerId
+      home: WorkerHomePage(
+        workerName: "Worker",
+        workerId: "201", // Used for display only; backend uses JWT token
+      ),
+      routes: {'/pickup-map': (context) => const MapScreen(taskid: 0)},
     );
   }
 }
 
 class WorkerHomePage extends StatefulWidget {
   final String workerName;
-  final String workerId; // Add workerId to identify the worker
+  final String workerId;
 
   const WorkerHomePage({
     super.key,
@@ -33,7 +37,8 @@ class WorkerHomePage extends StatefulWidget {
 }
 
 class _WorkerHomePageState extends State<WorkerHomePage> {
-  late Future<List<Map<String, String>>> _assignedWorksFuture;
+  late Future<List<Map<String, dynamic>>> _assignedWorksFuture;
+  final storage = const FlutterSecureStorage();
 
   @override
   void initState() {
@@ -41,14 +46,20 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
     _assignedWorksFuture = fetchAssignedWorks();
   }
 
-  Future<List<Map<String, String>>> fetchAssignedWorks() async {
+  Future<List<Map<String, dynamic>>> fetchAssignedWorks() async {
+    final token = await storage.read(key: 'jwt_token');
+    if (token == null) {
+      throw Exception('No authentication token found');
+    }
+
     final response = await http.get(
-      Uri.parse('http://localhost:3000/worker/assigned-tasks?workerId=${widget.workerId}'),
+      Uri.parse('$apiBaseUrl/worker/assigned-tasks'), // Updated URL
+      headers: {'Authorization': 'Bearer $token'},
     );
 
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
-      return List<Map<String, String>>.from(data['assignedWorks']);
+      return List<Map<String, dynamic>>.from(data['assignedWorks']);
     } else {
       throw Exception('Failed to load assigned works: ${response.body}');
     }
@@ -94,7 +105,10 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
                         ],
                       ),
                       IconButton(
-                        icon: const Icon(Icons.notifications, color: Colors.white),
+                        icon: const Icon(
+                          Icons.notifications,
+                          color: Colors.white,
+                        ),
                         onPressed: () {},
                       ),
                     ],
@@ -121,29 +135,54 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
                     ),
                   ),
                   const SizedBox(height: 10),
-                  FutureBuilder<List<Map<String, String>>>(
+                  FutureBuilder<List<Map<String, dynamic>>>(
                     future: _assignedWorksFuture,
                     builder: (context, snapshot) {
                       if (snapshot.connectionState == ConnectionState.waiting) {
                         return const Center(child: CircularProgressIndicator());
                       } else if (snapshot.hasError) {
-                        return Center(child: Text('Error: ${snapshot.error}', style: const TextStyle(color: Colors.white70)));
+                        return Center(
+                          child: Text(
+                            'Error: ${snapshot.error}',
+                            style: const TextStyle(color: Colors.white70),
+                          ),
+                        );
                       } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
                         return const Center(
                           child: Text(
                             "No tasks currently assigned",
-                            style: TextStyle(color: Colors.white70, fontSize: 16),
+                            style: TextStyle(
+                              color: Colors.white70,
+                              fontSize: 16,
+                            ),
                           ),
                         );
                       } else {
                         return Column(
-                          children: snapshot.data!
-                              .map((work) => WorkListItem(
-                                    title: work['title']!,
-                                    distance: work['distance']!,
-                                    time: work['time']!,
-                                  ))
-                              .toList(),
+                          children:
+                              snapshot.data!
+                                  .map(
+                                    (work) => WorkListItem(
+                                      taskId: work['taskId'],
+                                      title: work['title'],
+                                      distance: "5km", // Placeholder
+                                      time: "15min", // Placeholder
+                                      onTap: () {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder:
+                                                (context) => MapScreen(
+                                                  taskid: int.parse(
+                                                    work['taskId'],
+                                                  ),
+                                                ),
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                  )
+                                  .toList(),
                         );
                       }
                     },
@@ -157,10 +196,7 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
               child: IconButton(
                 icon: const Icon(Icons.info, color: Colors.grey),
                 onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) => const PastWorkDetailsPage()),
-                  );
+                  // Navigate to past work details if needed
                 },
               ),
             ),
@@ -172,73 +208,55 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
 }
 
 class WorkListItem extends StatelessWidget {
+  final String taskId;
   final String title;
   final String distance;
   final String time;
+  final VoidCallback onTap;
 
   const WorkListItem({
     super.key,
+    required this.taskId,
     required this.title,
     required this.distance,
     required this.time,
+    required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 5),
-      padding: const EdgeInsets.all(15),
-      decoration: BoxDecoration(
-        color: Colors.grey.shade600,
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            title,
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text("Distance: $distance", style: const TextStyle(color: Colors.white70)),
-              Text("Time: $time", style: const TextStyle(color: Colors.white70)),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class PastWorkDetailsPage extends StatelessWidget {
-  const PastWorkDetailsPage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text("Past Work Details"),
-        backgroundColor: Colors.orange.shade700,
-      ),
-      backgroundColor: Colors.orange.shade50,
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: 5),
+        padding: const EdgeInsets.all(15),
+        decoration: BoxDecoration(
+          color: Colors.grey.shade600,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Text(
-              "Completed Works",
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            Text(
+              title,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
             ),
-            const SizedBox(height: 10),
-            const WorkListItem(title: "Work-1", distance: "5km", time: "15min"),
-            const WorkListItem(title: "Work-2", distance: "8km", time: "20min"),
-            const WorkListItem(title: "Work-3", distance: "10km", time: "25min"),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  "Distance: $distance",
+                  style: const TextStyle(color: Colors.white70),
+                ),
+                Text(
+                  "Time: $time",
+                  style: const TextStyle(color: Colors.white70),
+                ),
+              ],
+            ),
           ],
         ),
       ),
