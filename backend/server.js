@@ -21,7 +21,7 @@ app.get('/', (req, res) => {
 app.use('/api', authRouter);
 app.use('/api/profile', profileRouter);
 app.use('/api/user', userRouter);
-app.use('/api', workerRouter); // Mount worker routes
+app.use('/api/worker', workerRouter); // Mount worker routes
 
 // Error handling middleware
 app.use((err, req, res, next) => {
