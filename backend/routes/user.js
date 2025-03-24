@@ -51,10 +51,10 @@ userRouter.post('/bin-fill', authenticateToken, async (req, res) => {
     }
 
     const result = await pool.query(
-      `INSERT INTO garbagereports (userid, location, wastetype, status, comments, datetime) 
-       VALUES ($1, ST_GeomFromText('POINT(${long} ${lat})', 4326), $2, $3, $4, NOW()) 
-       RETURNING reportid, ST_AsText(location) as location, status`,
-      [req.user.userid, 'home', 'pending', `Bin fill level: ${fillLevel}%`]
+      `INSERT INTO garbagereports (userid, location, wastetype, comments, datetime) 
+       VALUES ($1, ST_GeomFromText('POINT(${long} ${lat})', 4326), $2, $3, NOW()) 
+       RETURNING reportid, ST_AsText(location) as location`,
+      [req.user.userid, 'home', `Bin fill level: ${fillLevel}%`]
     );
 
     console.log('Bin fill report submitted:', result.rows[0]);
@@ -63,7 +63,6 @@ userRouter.post('/bin-fill', authenticateToken, async (req, res) => {
       report: {
         id: result.rows[0].reportid,
         location: result.rows[0].location.replace('POINT(', '').replace(')', ''),
-        status: result.rows[0].status,
       },
     });
   } catch (error) {
@@ -89,8 +88,8 @@ userRouter.post('/report-waste', authenticateToken, upload.single('image'), asyn
       throw new Error('Invalid location format. Expected: "lat,long"');
     }
     const result = await client.query(
-      `INSERT INTO garbagereports (userid, location, wastetype, imageurl, status, datetime) 
-       VALUES ($1, ST_GeomFromText('POINT(${long} ${lat})', 4326), $2, $3, $4, NOW()) 
+      `INSERT INTO garbagereports (userid, location, wastetype, imageurl, datetime) 
+       VALUES ($1, ST_GeomFromText('POINT(${long} ${lat})', 4326), $2, $3, NOW()) 
        RETURNING reportid, ST_AsText(location) as location, imageurl`,
       [req.user.userid, 'public', imageUrl, 'pending']
     );
@@ -120,7 +119,7 @@ userRouter.get('/collection-requests', authenticateToken, async (req, res) => {
     console.log('Fetching collection requests for user:', req.user.userid);
     await client.query('BEGIN');
     const garbageReports = await client.query(
-      `SELECT reportid, ST_AsText(location) as location, imageurl, status, datetime, wastetype, comments 
+      `SELECT reportid, ST_AsText(location) as location, imageurl, datetime, wastetype, comments 
        FROM garbagereports WHERE userid = $1 ORDER BY datetime DESC`,
       [req.user.userid]
     );
