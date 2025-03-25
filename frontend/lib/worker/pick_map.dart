@@ -6,6 +6,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:http/http.dart' as http;
 import 'dart:math' show sin, cos, sqrt, asin;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:waas/assets/constants.dart';
 
 class MapScreen extends StatefulWidget {
   final int taskid;
@@ -114,8 +115,7 @@ class _MapScreenState extends State<MapScreen> {
   // Fetch data from the backend API for the specific taskid
   Future<void> _fetchCollectionRequestData() async {
     setState(() => _isLoading = true);
-    final String apiUrl =
-        'http://192.168.164.53:3000/api/worker/task-route/${widget.taskid}';
+    final String apiUrl = '$apiBaseUrl/worker/task-route/${widget.taskid}';
 
     try {
       final token = await storage.read(key: 'jwt_token');
