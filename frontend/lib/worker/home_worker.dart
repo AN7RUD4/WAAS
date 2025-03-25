@@ -165,8 +165,7 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
                                     (work) => WorkListItem(
                                       taskId: work['taskId'],
                                       title: work['title'],
-                                      distance: work['distance'], // Placeholder
-                                      time: work['startTime'], // Placeholder
+                                      distance: work['distance'], 
                                       onTap: () {
                                         Navigator.push(
                                           context,
@@ -211,8 +210,8 @@ class WorkListItem extends StatelessWidget {
   final String taskId;
   final String title;
   final String distance;
-  final String time;
-  final String? endTime; // Added to display completion time
+  final String? startTime;
+  final String? endTime; 
   final VoidCallback onTap;
 
   const WorkListItem({
@@ -220,7 +219,7 @@ class WorkListItem extends StatelessWidget {
     required this.taskId,
     required this.title,
     required this.distance,
-    required this.time,
+    this.startTime,
     this.endTime,
     required this.onTap,
   });
@@ -254,7 +253,7 @@ class WorkListItem extends StatelessWidget {
                   style: const TextStyle(color: Colors.white70),
                 ),
                 Text(
-                  "Time: $time",
+                  "Time: $startTime",
                   style: const TextStyle(color: Colors.white70),
                 ),
                 if (endTime != null)
@@ -383,10 +382,9 @@ class _PastWorkDetailsPageState extends State<PastWorkDetailsPage> {
                                     (work) => WorkListItem(
                                       taskId: work['taskId'],
                                       title: work['title'],
-                                      distance: work['distance'], // Placeholder
-                                      time: work['startTime'], // Placeholder
-                                      endTime:
-                                          work['endTime'], // Display endTime
+                                      distance: work['distance'], 
+                                      startTime: work['startTime'], 
+                                      endTime: work['endTime'],
                                       onTap: () {
                                         Navigator.push(
                                           context,

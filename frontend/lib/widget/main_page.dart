@@ -3,7 +3,6 @@ import 'package:waas/user/home_page.dart';
 import 'package:waas/widget/bottom_nav.dart';
 import 'package:waas/widget/profile.dart';
 import 'package:waas/worker/home_worker.dart';
-import 'package:waas/worker/pick_map.dart';
 
 class MainPage extends StatelessWidget {
   final String role;
@@ -12,8 +11,7 @@ class MainPage extends StatelessWidget {
 
   const MainPage({super.key, required this.userID, required this.role})
     : _pages = const [
-        UserApp(), // Default to UserApp; override in build if role is 'worker'
-        // MapScreen(),
+        UserApp(), // Default to UserApp
         ProfilePage(),
       ];
 

@@ -58,29 +58,54 @@ const checkWorkerRole = (req, res, next) => {
 // Fetch Assigned Tasks for Worker
 router.get('/assigned-tasks', authenticateToken, checkWorkerRole, async (req, res) => {
   try {
-    const workerId = parseInt(req.user.userid, 10); // Use userid from JWT token
+    const workerId = parseInt(req.user.userid, 10);
     if (isNaN(workerId)) {
       return res.status(400).json({ error: 'Invalid worker ID in token' });
     }
 
     const result = await pool.query(
-      `SELECT t.taskid, g.wastetype, g.location, t.status, t.progress 
+      `SELECT t.taskid, g.wastetype, g.location, t.status, t.progress, t.starttime
        FROM taskrequests t 
        JOIN garbagereports g ON t.reportid = g.reportid 
        WHERE t.assignedworkerid = $1 AND t.status != 'completed'`,
       [workerId]
     );
 
-    // Format the response to include task details
-    const assignedWorks = result.rows.map(row => ({
-      taskId: row.taskid.toString(),
-      title: row.wastetype,
-      location: row.location,
-      distance: row.distance, 
-      time: row.startTime, 
-      status: row.status,
-      progress: row.progress,
-    }));
+    const assignedWorks = result.rows.map(row => {
+      // Parse g.location (e.g., "POINT(72.8777 19.0760)")
+      const locationMatch = row.location.match(/POINT\(([^ ]+) ([^)]+)\)/);
+      const reportLat = locationMatch ? parseFloat(locationMatch[2]) : null; // Latitude
+      const reportLng = locationMatch ? parseFloat(locationMatch[1]) : null; // Longitude
+
+      // Placeholder for worker's location (fetch from users table or request)
+      const workerLat = 19.0860; // Example worker latitude
+      const workerLng = 72.8877; // Example worker longitude
+
+      // Calculate distance using Haversine formula
+      let distance = '0km'; // Default placeholder
+      if (reportLat && reportLng) {
+        const earthRadius = 6371; // km
+        const dLat = (reportLat - workerLat) * (Math.PI / 180);
+        const dLng = (reportLng - workerLng) * (Math.PI / 180);
+        const a =
+          Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+          Math.cos(workerLat * (Math.PI / 180)) *
+          Math.cos(reportLat * (Math.PI / 180)) *
+          Math.sin(dLng / 2) * Math.sin(dLng / 2);
+        const c = 2 * Math.asin(Math.sqrt(a));
+        distance = (earthRadius * c).toFixed(2) + 'km';
+      }
+
+      return {
+        taskId: row.taskid.toString(),
+        title: row.wastetype ?? 'Unknown', 
+        location: row.location,
+        distance: distance, 
+        time: row.starttime ? row.starttime.toISOString() : 'Not Started', 
+        status: row.status,
+        progress: row.progress,
+      };
+    });
 
     res.json({ assignedWorks });
   } catch (error) {

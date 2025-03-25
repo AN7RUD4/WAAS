@@ -4,7 +4,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:http/http.dart' as http;
-import 'dart:math' show sin, cos, sqrt, asin, pi;
+import 'dart:math' show sin, cos, sqrt, asin;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class MapScreen extends StatefulWidget {
