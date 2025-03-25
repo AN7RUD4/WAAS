@@ -9,10 +9,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class MapScreen extends StatefulWidget {
   final int taskid;
-  const MapScreen({
-    super.key,
-    required this.taskid,
-  });
+  const MapScreen({super.key, required this.taskid});
 
   @override
   _MapScreenState createState() => _MapScreenState();
@@ -22,7 +19,8 @@ class _MapScreenState extends State<MapScreen> {
   final MapController _mapController = MapController();
   List<LatLng> _locations = [];
   List<LatLng> _route = []; // Route from taskrequests
-  List<LatLng> _completeRoute = []; // Complete route including worker's location
+  List<LatLng> _completeRoute =
+      []; // Complete route including worker's location
   double _currentZoom = 14.0;
   LatLng _currentCenter = const LatLng(10.1860, 76.3765); // Default center
   LatLng? _workerLocation; // Worker's location
@@ -86,7 +84,8 @@ class _MapScreenState extends State<MapScreen> {
       print('Position: ${position.latitude}, ${position.longitude}');
       setState(() {
         _workerLocation = LatLng(position.latitude, position.longitude);
-        _currentCenter = _workerLocation!; // Center the map on the worker's location
+        _currentCenter =
+            _workerLocation!; // Center the map on the worker's location
         _mapController.move(_currentCenter, _currentZoom);
         print('Worker location set: $_workerLocation');
       });
@@ -94,12 +93,15 @@ class _MapScreenState extends State<MapScreen> {
       _calculateDistances();
     } catch (e) {
       print('Error getting location: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error getting location: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error getting location: $e')));
       // Fallback to default location if location retrieval fails
       setState(() {
-        _workerLocation = const LatLng(10.1865, 76.3770); // Default fallback location
+        _workerLocation = const LatLng(
+          10.1865,
+          76.3770,
+        ); // Default fallback location
         _currentCenter = _workerLocation!;
         _mapController.move(_currentCenter, _currentZoom);
         print('Using fallback location: $_workerLocation');
@@ -112,7 +114,8 @@ class _MapScreenState extends State<MapScreen> {
   // Fetch data from the backend API for the specific taskid
   Future<void> _fetchCollectionRequestData() async {
     setState(() => _isLoading = true);
-    final String apiUrl = 'http://192.168.164.53:3000/api/worker/task-route/${widget.taskid}';
+    final String apiUrl =
+        'http://192.168.164.53:3000/api/worker/task-route/${widget.taskid}';
 
     try {
       final token = await storage.read(key: 'jwt_token');
@@ -120,9 +123,15 @@ class _MapScreenState extends State<MapScreen> {
         throw Exception('No authentication token found');
       }
 
-      print('Fetching data from $apiUrl');
+      // Add worker's location to the query parameters
+      final queryParameters = {
+        'workerLat': _workerLocation?.latitude.toString() ?? '10.1860',
+        'workerLng': _workerLocation?.longitude.toString() ?? '76.3765',
+      };
+      final uri = Uri.parse(apiUrl).replace(queryParameters: queryParameters);
+      print('Fetching data from $uri');
       final response = await http.get(
-        Uri.parse(apiUrl),
+        uri,
         headers: {'Authorization': 'Bearer $token'},
       );
       print('Response status: ${response.statusCode}');
@@ -138,14 +147,16 @@ class _MapScreenState extends State<MapScreen> {
       } else {
         print('Failed to fetch data: ${response.statusCode}');
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to fetch task data: ${response.statusCode}')),
+          SnackBar(
+            content: Text('Failed to fetch task data: ${response.statusCode}'),
+          ),
         );
       }
     } catch (e) {
       print('Error fetching data: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error fetching task data: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error fetching task data: $e')));
     }
     setState(() => _isLoading = false);
   }
@@ -230,26 +241,35 @@ class _MapScreenState extends State<MapScreen> {
     print('Worker Location: $_workerLocation');
     print('Complete Route: $_completeRoute');
     if (_workerLocation == null || _completeRoute.isEmpty) {
-      print('Cannot calculate distances: workerLocation or completeRoute are empty');
+      print(
+        'Cannot calculate distances: workerLocation or completeRoute are empty',
+      );
       return;
     }
 
     // Find the nearest pickup spot (first point after worker's location)
-    LatLng nearestSpot = _completeRoute[1]; // First point after worker's location
+    LatLng nearestSpot =
+        _completeRoute[1]; // First point after worker's location
     _distanceToNearest = _haversineDistance(_workerLocation!, nearestSpot);
     print('Nearest spot: $nearestSpot, Distance: $_distanceToNearest km');
 
     // Calculate total distance of the complete route
     _totalDistance = 0.0;
     for (int i = 0; i < _completeRoute.length - 1; i++) {
-      final segmentDistance = _haversineDistance(_completeRoute[i], _completeRoute[i + 1]);
-      print('Segment distance from ${_completeRoute[i]} to ${_completeRoute[i + 1]}: $segmentDistance km');
+      final segmentDistance = _haversineDistance(
+        _completeRoute[i],
+        _completeRoute[i + 1],
+      );
+      print(
+        'Segment distance from ${_completeRoute[i]} to ${_completeRoute[i + 1]}: $segmentDistance km',
+      );
       _totalDistance += segmentDistance;
     }
     print('Total distance: $_totalDistance km');
 
     // Simple directions
-    _directions = "Head towards ${nearestSpot.latitude}, ${nearestSpot.longitude}";
+    _directions =
+        "Head towards ${nearestSpot.latitude}, ${nearestSpot.longitude}";
 
     setState(() {});
   }
@@ -291,12 +311,14 @@ class _MapScreenState extends State<MapScreen> {
             ),
             children: [
               TileLayer(
-                urlTemplate: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+                urlTemplate:
+                    "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
                 subdomains: ['a', 'b', 'c'],
                 tileProvider: NetworkTileProvider(),
                 additionalOptions: {'alpha': '0.9'},
               ),
-              if (_completeRoute.isNotEmpty) // Use _completeRoute for the polyline
+              if (_completeRoute
+                  .isNotEmpty) // Use _completeRoute for the polyline
                 PolylineLayer(
                   polylines: [
                     Polyline(
@@ -363,7 +385,7 @@ class _MapScreenState extends State<MapScreen> {
                   BoxShadow(
                     color: Colors.black26,
                     blurRadius: 4,
-                    offset: Offset(0,2),
+                    offset: Offset(0, 2),
                   ),
                 ],
               ),

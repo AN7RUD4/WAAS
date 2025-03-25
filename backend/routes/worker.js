@@ -253,6 +253,8 @@ router.get('/completed-tasks', authenticateToken, checkWorkerRole, async (req, r
 router.get('/task-route/:taskid', authenticateToken, checkWorkerRole, async (req, res) => {
   const taskId = parseInt(req.params.taskid, 10);
   const workerId = req.user.userid; // From JWT token
+  const workerLat = parseFloat(req.query.workerLat) || 10.1860; // Default fallback
+  const workerLng = parseFloat(req.query.workerLng) || 76.3765;
 
   try {
     // Fetch the task details, ensuring it belongs to the worker
@@ -271,38 +273,6 @@ router.get('/task-route/:taskid', authenticateToken, checkWorkerRole, async (req
 
     const task = taskResult.rows[0];
 
-    // Parse the route from the jsonb field
-    const routeData = task.route || { start: {}, end: {}, waypoints: [] };
-    const routePoints = [];
-
-    // Add start point
-    if (routeData.start && routeData.start.lat && routeData.start.lng) {
-      routePoints.push({
-        lat: parseFloat(routeData.start.lat),
-        lng: parseFloat(routeData.start.lng),
-      });
-    }
-
-    // Add waypoints
-    if (routeData.waypoints && Array.isArray(routeData.waypoints)) {
-      routeData.waypoints.forEach(waypoint => {
-        if (waypoint.lat && waypoint.lng) {
-          routePoints.push({
-            lat: parseFloat(waypoint.lat),
-            lng: parseFloat(waypoint.lng),
-          });
-        }
-      });
-    }
-
-    // Add end point
-    if (routeData.end && routeData.end.lat && routeData.end.lng) {
-      routePoints.push({
-        lat: parseFloat(routeData.end.lat),
-        lng: parseFloat(routeData.end.lng),
-      });
-    }
-
     // Parse the report location (from garbagereports)
     const reportLocation = task.report_location;
     const locationMatch = reportLocation.match(/POINT\(([^ ]+) ([^)]+)\)/);
@@ -312,6 +282,57 @@ router.get('/task-route/:taskid', authenticateToken, checkWorkerRole, async (req
           lng: parseFloat(locationMatch[1]), // Longitude
         }
       : null;
+
+    // Parse the route from the jsonb field
+    const routeData = task.route || { start: {}, end: {}, waypoints: [] };
+    const routePoints = [];
+
+    // If route is empty or invalid, construct a route from worker's location to collection point
+    if (
+      (!routeData.start || !routeData.start.lat || !routeData.start.lng) &&
+      (!routeData.end || !routeData.end.lat || !routeData.end.lng) &&
+      (!routeData.waypoints || routeData.waypoints.length === 0)
+    ) {
+      if (collectionPoint) {
+        // Construct a route: worker's location -> collection point
+        routePoints.push({
+          lat: workerLat,
+          lng: workerLng,
+        });
+        routePoints.push({
+          lat: collectionPoint.lat,
+          lng: collectionPoint.lng,
+        });
+      }
+    } else {
+      // Add start point
+      if (routeData.start && routeData.start.lat && routeData.start.lng) {
+        routePoints.push({
+          lat: parseFloat(routeData.start.lat),
+          lng: parseFloat(routeData.start.lng),
+        });
+      }
+
+      // Add waypoints
+      if (routeData.waypoints && Array.isArray(routeData.waypoints)) {
+        routeData.waypoints.forEach(waypoint => {
+          if (waypoint.lat && waypoint.lng) {
+            routePoints.push({
+              lat: parseFloat(waypoint.lat),
+              lng: parseFloat(waypoint.lng),
+            });
+          }
+        });
+      }
+
+      // Add end point
+      if (routeData.end && routeData.end.lat && routeData.end.lng) {
+        routePoints.push({
+          lat: parseFloat(routeData.end.lat),
+          lng: parseFloat(routeData.end.lng),
+        });
+      }
+    }
 
     res.status(200).json({
       taskid: task.taskid,
