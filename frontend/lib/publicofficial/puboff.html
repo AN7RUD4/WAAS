@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Waste Management - Official Portal</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- Add SheetJS library for Excel generation -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -266,22 +268,37 @@
 
                     if (reportError) throw reportError;
 
-                    resultDiv.innerHTML = reportData.length > 0 
-                        ? reportData.map(report => {
-                            const approval = report.publicofficialapprovals[0] || {};
-                            return `
-                                <div>
-                                    <strong>Report ID:</strong> ${report.reportid}<br>
-                                    <strong>Reported by:</strong> ${report.users.name || 'Unknown'}<br>
-                                    <strong>Waste Type:</strong> ${report.wastetype || 'N/A'}<br>
-                                    <strong>Attended By:</strong> ${approval.users?.name || 'Not Assigned'}<br>
-                                    <strong>Status:</strong> ${approval.status || 'N/A'}<br>
-                                    <strong>Comments:</strong> ${approval.comments || 'None'}<br>
-                                    <strong>Date:</strong> ${approval.datetime ? new Date(approval.datetime).toLocaleString() : 'N/A'}
-                                </div><hr>
-                            `;
-                        }).join('')
-                        : `No reports found${reportid ? ` with ID ${reportid}` : ''} for the month of ${new Date(year, monthNum - 1).toLocaleString('default', { month: 'long', year: 'numeric' })}`;
+                    if (reportData.length === 0) {
+                        resultDiv.innerHTML = `No reports found${reportid ? ` with ID ${reportid}` : ''} for the month of ${new Date(year, monthNum - 1).toLocaleString('default', { month: 'long', year: 'numeric' })}`;
+                        return;
+                    }
+
+                    // Prepare data for Excel
+                    const excelData = reportData.map(report => {
+                        const approval = report.publicofficialapprovals[0] || {};
+                        return {
+                            'Report ID': report.reportid,
+                            'Reported by': report.users.name || 'Unknown',
+                            'Waste Type': report.wastetype || 'N/A',
+                            'Attended By': approval.users?.name || 'Not Assigned',
+                            'Status': approval.status || 'N/A',
+                            'Comments': approval.comments || 'None',
+                            'Date': approval.datetime ? new Date(approval.datetime).toLocaleString() : 'N/A'
+                        };
+                    });
+
+                    // Create a new workbook and worksheet
+                    const worksheet = XLSX.utils.json_to_sheet(excelData);
+                    const workbook = XLSX.utils.book_new();
+                    XLSX.utils.book_append_sheet(workbook, worksheet, 'Reports');
+
+                    // Generate the Excel file and trigger download
+                    const monthName = new Date(year, monthNum - 1).toLocaleString('default', { month: 'long', year: 'numeric' });
+                    const fileName = `Reports_${monthName}${reportid ? `_ID_${reportid}` : ''}.xlsx`;
+                    XLSX.writeFile(workbook, fileName);
+
+                    // Display a message in the result div
+                    resultDiv.innerHTML = `Report generated and downloaded as ${fileName}`;
                 } catch (error) {
                     resultDiv.innerHTML = `Error generating report: ${error.message}`;
                 }
