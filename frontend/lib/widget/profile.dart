@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'dart:convert';
 import 'package:waas/assets/constants.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 class ApiService {
   static const storage = FlutterSecureStorage();
@@ -13,34 +14,23 @@ class ApiService {
 
   Future<Map<String, dynamic>> getProfile() async {
     final token = await getToken();
-    if (token == null) {
-      throw Exception('No token found. Please log in again.');
-    }
-
-    print('Token: $token');
-    print('Requesting URL: $apiBaseUrl/profile/profile');
+    if (token == null) throw Exception('No token found. Please log in again.');
 
     final response = await http.get(
       Uri.parse('$apiBaseUrl/profile/profile'),
       headers: {'Authorization': 'Bearer $token'},
     );
 
-    print('Response status: ${response.statusCode}');
-    print('Response body: ${response.body}');
-
     if (response.statusCode == 200) {
       return json.decode(response.body);
     } else if (response.statusCode == 403 || response.statusCode == 401) {
       throw Exception('Session expired. Please log in again.');
     } else {
-      throw Exception(
-        'Failed to load profile: ${response.statusCode} - ${response.body}',
-      );
+      throw Exception('Failed to load profile: ${response.statusCode} - ${response.body}');
     }
   }
 
   Future<Map<String, dynamic>> updateProfile(String name, String email) async {
-    // Input validation
     if (name.trim().isEmpty || email.trim().isEmpty) {
       throw Exception('Name and email are required');
     }
@@ -49,12 +39,7 @@ class ApiService {
     }
 
     final token = await getToken();
-    if (token == null) {
-      throw Exception('No token found. Please log in again.');
-    }
-
-    print('Token: $token');
-    print('Requesting URL: $apiBaseUrl/profile/profile');
+    if (token == null) throw Exception('No token found. Please log in again.');
 
     final response = await http.put(
       Uri.parse('$apiBaseUrl/profile/profile'),
@@ -65,45 +50,28 @@ class ApiService {
       body: json.encode({'name': name, 'email': email}),
     );
 
-    print('Response status: ${response.statusCode}');
-    print('Response body: ${response.body}');
-
     if (response.statusCode == 200) {
       final responseData = json.decode(response.body);
       final newToken = responseData['token'];
       if (newToken != null) {
         await storage.write(key: 'jwt_token', value: newToken);
-        print('New token stored: $newToken');
       }
       return responseData;
     } else if (response.statusCode == 403 || response.statusCode == 401) {
       throw Exception('Session expired. Please log in again.');
     } else {
-      throw Exception(
-        'Failed to update profile: ${response.statusCode} - ${response.body}',
-      );
+      throw Exception('Failed to update profile: ${response.statusCode} - ${response.body}');
     }
   }
 
   Future<void> changePassword(String newPassword) async {
-    // Input validation
-    if (newPassword.isEmpty) {
-      throw Exception('New password is required');
-    }
-    if (newPassword.length < 8 ||
-        !RegExp(r'^(?=.*[A-Z])(?=.*[0-9])').hasMatch(newPassword)) {
-      throw Exception(
-        'Password must be at least 8 characters with one uppercase letter and one number',
-      );
+    if (newPassword.isEmpty) throw Exception('New password is required');
+    if (newPassword.length < 8 || !RegExp(r'^(?=.*[A-Z])(?=.*[0-9])').hasMatch(newPassword)) {
+      throw Exception('Password must be at least 8 characters with one uppercase letter and one number');
     }
 
     final token = await getToken();
-    if (token == null) {
-      throw Exception('No token found. Please log in again.');
-    }
-
-    print('Token: $token');
-    print('Requesting URL: $apiBaseUrl/profile/change-password');
+    if (token == null) throw Exception('No token found. Please log in again.');
 
     final response = await http.put(
       Uri.parse('$apiBaseUrl/profile/change-password'),
@@ -114,23 +82,17 @@ class ApiService {
       body: json.encode({'newPassword': newPassword}),
     );
 
-    print('Response status: ${response.statusCode}');
-    print('Response body: ${response.body}');
-
     if (response.statusCode == 200) {
       final responseData = json.decode(response.body);
       final newToken = responseData['token'];
       if (newToken != null) {
         await storage.write(key: 'jwt_token', value: newToken);
-        print('New token stored: $newToken');
       }
       return;
     } else if (response.statusCode == 403 || response.statusCode == 401) {
       throw Exception('Session expired. Please log in again.');
     } else {
-      throw Exception(
-        'Failed to change password: ${response.statusCode} - ${response.body}',
-      );
+      throw Exception('Failed to change password: ${response.statusCode} - ${response.body}');
     }
   }
 }
@@ -169,9 +131,7 @@ class _ProfilePageState extends State<ProfilePage> {
           name = 'Error';
           email = 'Error';
         });
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text("Failed to load profile: $e")));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Failed to load profile: $e")));
       }
     }
   }
@@ -180,93 +140,133 @@ class _ProfilePageState extends State<ProfilePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          'Profile Page',
-          style: TextStyle(fontSize: 30, fontWeight: FontWeight.bold),
-        ),
-        backgroundColor: Colors.green,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.edit, size: 30),
-            onPressed: () async {
-              final updatedData = await Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder:
-                      (context) => EditProfilePage(
-                        currentName: name,
-                        currentEmail: email,
-                      ),
-                ),
-              );
-
-              if (updatedData != null) {
-                setState(() {
-                  name = updatedData['name'];
-                  email = updatedData['email'];
-                });
-                await _loadProfile(); // Refresh from database
-              }
-            },
-          ),
-        ],
+        title: const Text('Profile'),
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Profile Header
+            Row(
+              children: [
+                const CircleAvatar(
+                  radius: 40,
+                  backgroundColor: Colors.grey,
+                  child: Icon(Icons.person, size: 50, color: Colors.white),
+                ),
+                const SizedBox(width: 16),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      name,
+                      style: GoogleFonts.poppins(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
+                      ),
+                    ),
+                    Text(
+                      email,
+                      style: GoogleFonts.poppins(
+                        fontSize: 16,
+                        color: Colors.black54,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+            // Profile Details Card
             Card(
-              elevation: 2,
-              child: Column(
-                children: [
-                  ListTile(
-                    leading: const Icon(Icons.person),
-                    title: const Text("Name"),
-                    subtitle: Text(name, style: const TextStyle(fontSize: 18)),
-                  ),
-                  const Divider(),
-                  ListTile(
-                    leading: const Icon(Icons.email),
-                    title: const Text("Email"),
-                    subtitle: Text(email, style: const TextStyle(fontSize: 18)),
-                  ),
-                ],
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  children: [
+                    ListTile(
+                      leading: const Icon(Icons.person, color: Colors.black54),
+                      title: const Text("Name"),
+                      subtitle: Text(name, style: const TextStyle(fontSize: 16)),
+                    ),
+                    const Divider(),
+                    ListTile(
+                      leading: const Icon(Icons.email, color: Colors.black54),
+                      title: const Text("Email"),
+                      subtitle: Text(email, style: const TextStyle(fontSize: 16)),
+                    ),
+                  ],
+                ),
               ),
             ),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const ChangePasswordPage(),
-                  ),
-                ); // Removed .then((_) => _loadProfile())
-              },
-              child: const Text('Change Password'),
+            const SizedBox(height: 16),
+            // Action Buttons
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                icon: const Icon(Icons.edit),
+                label: const Text('Edit Profile'),
+                onPressed: () async {
+                  final updatedData = await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => EditProfilePage(
+                        currentName: name,
+                        currentEmail: email,
+                      ),
+                    ),
+                  );
+
+                  if (updatedData != null) {
+                    setState(() {
+                      name = updatedData['name'];
+                      email = updatedData['email'];
+                    });
+                    await _loadProfile();
+                  }
+                },
+              ),
             ),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: () {
-                // Navigator.push(
-                //   context,
-                //   MaterialPageRoute(builder: (context) => const CollectionRequestsPage()),
-                // );
-              },
-              child: const Text("View Report History"),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                icon: const Icon(Icons.lock),
+                label: const Text('Change Password'),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const ChangePasswordPage()),
+                  );
+                },
+              ),
             ),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: () async {
-                await ApiService.storage.delete(key: 'jwt_token');
-                Navigator.pushNamedAndRemoveUntil(
-                  context,
-                  '/login',
-                  (route) => false,
-                );
-              },
-              child: const Text('Logout'),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                icon: const Icon(Icons.history),
+                label: const Text('View Report History'),
+                onPressed: () {
+                  // Navigator.push(
+                  //   context,
+                  //   MaterialPageRoute(builder: (context) => const CollectionRequestsPage()),
+                  // );
+                },
+              ),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                icon: const Icon(Icons.logout),
+                label: const Text('Logout'),
+                onPressed: () async {
+                  await ApiService.storage.delete(key: 'jwt_token');
+                  Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
+                },
+              ),
             ),
           ],
         ),
@@ -313,62 +313,58 @@ class _EditProfilePageState extends State<EditProfilePage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text("Edit Profile"),
-        backgroundColor: Colors.green,
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            TextField(
+            TextFormField(
               controller: nameController,
               decoration: const InputDecoration(
                 labelText: "Name",
-                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.person),
               ),
             ),
-            const SizedBox(height: 20),
-            TextField(
+            const SizedBox(height: 16),
+            TextFormField(
               controller: emailController,
               decoration: const InputDecoration(
                 labelText: "Email",
-                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.email),
               ),
               keyboardType: TextInputType.emailAddress,
             ),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: () async {
-                try {
-                  await apiService.updateProfile(
-                    nameController.text.trim(),
-                    emailController.text.trim(),
-                  );
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text("Profile updated successfully"),
-                    ),
-                  );
-                  Navigator.pop(context, {
-                    'name': nameController.text.trim(),
-                    'email': emailController.text.trim(),
-                  });
-                } catch (e) {
-                  if (e.toString().contains('Session expired')) {
-                    await ApiService.storage.delete(key: 'jwt_token');
-                    Navigator.pushNamedAndRemoveUntil(
-                      context,
-                      '/login',
-                      (route) => false,
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () async {
+                  try {
+                    await apiService.updateProfile(
+                      nameController.text.trim(),
+                      emailController.text.trim(),
                     );
-                  } else {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text("Failed to update profile: $e")),
+                      const SnackBar(content: Text("Profile updated successfully")),
                     );
+                    Navigator.pop(context, {
+                      'name': nameController.text.trim(),
+                      'email': emailController.text.trim(),
+                    });
+                  } catch (e) {
+                    if (e.toString().contains('Session expired')) {
+                      await ApiService.storage.delete(key: 'jwt_token');
+                      Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text("Failed to update profile: $e")),
+                      );
+                    }
                   }
-                }
-              },
-              child: const Text("Save"),
+                },
+                child: const Text("Save"),
+              ),
             ),
           ],
         ),
@@ -386,8 +382,7 @@ class ChangePasswordPage extends StatefulWidget {
 
 class _ChangePasswordPageState extends State<ChangePasswordPage> {
   final TextEditingController newPasswordController = TextEditingController();
-  final TextEditingController confirmPasswordController =
-      TextEditingController();
+  final TextEditingController confirmPasswordController = TextEditingController();
   final apiService = ApiService();
 
   @override
@@ -402,74 +397,70 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text("Change Password"),
-        backgroundColor: Colors.green,
       ),
       body: Padding(
-        padding: EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(16.0),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            TextField(
+            TextFormField(
               controller: newPasswordController,
               obscureText: true,
               decoration: const InputDecoration(
                 labelText: "New Password",
-                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.lock),
               ),
             ),
-            const SizedBox(height: 20),
-            TextField(
+            const SizedBox(height: 16),
+            TextFormField(
               controller: confirmPasswordController,
               obscureText: true,
               decoration: const InputDecoration(
                 labelText: "Confirm Password",
-                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.lock),
               ),
             ),
-            const SizedBox(height: 30),
-            ElevatedButton(
-              onPressed: () async {
-                String newPassword = newPasswordController.text.trim();
-                String confirmPassword = confirmPasswordController.text.trim();
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () async {
+                  String newPassword = newPasswordController.text.trim();
+                  String confirmPassword = confirmPasswordController.text.trim();
 
-                if (newPassword.isEmpty || confirmPassword.isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text("Please fill in both fields")),
-                  );
-                  return;
-                }
-
-                if (newPassword != confirmPassword) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text("Passwords do not match")),
-                  );
-                  return;
-                }
-
-                try {
-                  await apiService.changePassword(newPassword);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text("Password Changed Successfully"),
-                    ),
-                  );
-                  Navigator.pop(context);
-                } catch (e) {
-                  if (e.toString().contains('Session expired')) {
-                    await ApiService.storage.delete(key: 'jwt_token');
-                    Navigator.pushNamedAndRemoveUntil(
-                      context,
-                      '/login',
-                      (route) => false,
-                    );
-                  } else {
+                  if (newPassword.isEmpty || confirmPassword.isEmpty) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text("Failed to change password: $e")),
+                      const SnackBar(content: Text("Please fill in both fields")),
                     );
+                    return;
                   }
-                }
-              },
-              child: const Text("Save"),
+
+                  if (newPassword != confirmPassword) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text("Passwords do not match")),
+                    );
+                    return;
+                  }
+
+                  try {
+                    await apiService.changePassword(newPassword);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text("Password Changed Successfully")),
+                    );
+                    Navigator.pop(context);
+                  } catch (e) {
+                    if (e.toString().contains('Session expired')) {
+                      await ApiService.storage.delete(key: 'jwt_token');
+                      Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text("Failed to change password: $e")),
+                      );
+                    }
+                  }
+                },
+                child: const Text("Save"),
+              ),
             ),
           ],
         ),
@@ -486,7 +477,6 @@ class ReportHistoryPage extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text("Report History"),
-        backgroundColor: Colors.green,
       ),
       body: const Center(
         child: Text(

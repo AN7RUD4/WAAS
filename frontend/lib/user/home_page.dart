@@ -7,53 +7,7 @@ import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../colors/colors.dart';
 import 'package:waas/assets/constants.dart';
-
-// Utility widget for buttons
-Widget buildButton(String text, Color color, VoidCallback onPressed) {
-  return ElevatedButton(
-    style: ElevatedButton.styleFrom(
-      backgroundColor: color,
-      padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-    ),
-    onPressed: onPressed,
-    child: Text(text, style: const TextStyle(color: Colors.black)),
-  );
-}
-
-// Utility widget for text fields
-Widget buildTextField(
-  String label,
-  TextEditingController controller, {
-  bool readOnly = false,
-}) {
-  return Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Text(
-        label,
-        style: const TextStyle(
-          fontSize: 18,
-          fontWeight: FontWeight.bold,
-          color: Colors.black,
-        ),
-      ),
-      const SizedBox(height: 10),
-      TextField(
-        controller: controller,
-        readOnly: readOnly,
-        style: const TextStyle(color: Colors.white),
-        decoration: InputDecoration(
-          filled: true,
-          fillColor: Colors.grey.shade800,
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-          hintText: "Enter $label",
-          hintStyle: const TextStyle(color: Colors.white70),
-        ),
-      ),
-    ],
-  );
-}
+import 'package:google_fonts/google_fonts.dart';
 
 // Main user dashboard page
 class UserApp extends StatelessWidget {
@@ -62,172 +16,163 @@ class UserApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.backgroundColor,
-      body: Padding(
-        padding: const EdgeInsets.all(26.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const CircleAvatar(radius: 25),
-                const SizedBox(width: 20),
-                Text(
-                  'Welcome Back!',
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.textColor,
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header
+              Row(
+                children: [
+                  const CircleAvatar(
+                    radius: 25,
+                    backgroundColor: Colors.grey,
+                    child: Icon(Icons.person, color: Colors.white),
+                  ),
+                  const SizedBox(width: 16),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        "Welcome Back!",
+                        style: GoogleFonts.poppins(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87,
+                        ),
+                      ),
+                      Text(
+                        "Manage your waste reports",
+                        style: GoogleFonts.poppins(
+                          fontSize: 16,
+                          color: Colors.black54,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+              // Actions
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    children: [
+                      Text(
+                        'Report Waste Fill',
+                        style: GoogleFonts.poppins(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.black87,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'We help keep your home clean by collecting waste fill.',
+                        style: GoogleFonts.poppins(
+                          fontSize: 14,
+                          color: Colors.black54,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (context) => const BinFillPage()),
+                            );
+                          },
+                          child: const Text('Bin Fill'),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              ],
-            ),
-            const SizedBox(height: 26),
-            Card(
-              elevation: 2,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
               ),
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  children: [
-                    Text(
-                      'Report Waste Fill',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.textColor,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'We help keep your home clean by collecting waste fill.',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: AppColors.textColor.withOpacity(0.7),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    ElevatedButton(
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const BinFillPage(),
-                          ),
-                        );
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.accentColor,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
+              const SizedBox(height: 8),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    children: [
+                      Text(
+                        'Report Public Waste',
+                        style: GoogleFonts.poppins(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.black87,
                         ),
                       ),
-                      child: const Text('Bin Fill'),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Card(
-              elevation: 2,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  children: [
-                    Text(
-                      'Report Public Waste',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.textColor,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Help keep your community clean by reporting waste.',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: AppColors.textColor.withOpacity(0.7),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    ElevatedButton(
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const ReportPage(),
-                          ),
-                        );
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.accentColor,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Help keep your community clean by reporting waste.',
+                        style: GoogleFonts.poppins(
+                          fontSize: 14,
+                          color: Colors.black54,
                         ),
                       ),
-                      child: const Text('Report Waste'),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Card(
-              elevation: 2,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  children: [
-                    Text(
-                      'View Collection Requests',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.textColor,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Check the status of your waste collection requests.',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: AppColors.textColor.withOpacity(0.7),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    ElevatedButton(
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder:
-                                (context) => const CollectionRequestsPage(),
-                          ),
-                        );
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.accentColor,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (context) => const ReportPage()),
+                            );
+                          },
+                          child: const Text('Report Waste'),
                         ),
                       ),
-                      child: const Text('View Requests'),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
-            ),
-          ],
+              const SizedBox(height: 8),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    children: [
+                      Text(
+                        'View Collection Requests',
+                        style: GoogleFonts.poppins(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.black87,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Check the status of your waste collection requests.',
+                        style: GoogleFonts.poppins(
+                          fontSize: 14,
+                          color: Colors.black54,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (context) => const CollectionRequestsPage()),
+                            );
+                          },
+                          child: const Text('View Requests'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -279,9 +224,7 @@ class _ReportPageState extends State<ReportPage> {
 
     if (permission == LocationPermission.deniedForever) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Location permissions are permanently denied'),
-        ),
+        const SnackBar(content: Text('Location permissions are permanently denied')),
       );
       return;
     }
@@ -300,9 +243,7 @@ class _ReportPageState extends State<ReportPage> {
 
   Future<void> _takePicture() async {
     final ImagePicker picker = ImagePicker();
-    final XFile? pickedImage = await picker.pickImage(
-      source: ImageSource.camera,
-    );
+    final XFile? pickedImage = await picker.pickImage(source: ImageSource.camera);
 
     if (pickedImage != null) {
       setState(() {
@@ -314,9 +255,7 @@ class _ReportPageState extends State<ReportPage> {
   Future<void> _submitReport() async {
     if (_image == null || locationController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Please take a photo and provide a location!"),
-        ),
+        const SnackBar(content: Text("Please take a photo and provide a location!")),
       );
       return;
     }
@@ -332,15 +271,10 @@ class _ReportPageState extends State<ReportPage> {
       );
       request.headers['Authorization'] = 'Bearer $token';
       request.fields['location'] = locationController.text;
-      request.files.add(
-        await http.MultipartFile.fromPath('image', _image!.path),
-      );
+      request.files.add(await http.MultipartFile.fromPath('image', _image!.path));
 
       var response = await request.send();
       var responseBody = await response.stream.bytesToString();
-
-      print('Response status: ${response.statusCode}');
-      print('Response body: $responseBody');
 
       if (response.statusCode == 201) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -348,30 +282,11 @@ class _ReportPageState extends State<ReportPage> {
         );
         Navigator.pop(context);
       } else {
-        try {
-          final error =
-              jsonDecode(responseBody)['message'] ??
-              'Failed to submit report with status ${response.statusCode}';
-          throw Exception(error);
-        } catch (parseError) {
-          throw Exception('Invalid server response: $responseBody');
-        }
+        final error = jsonDecode(responseBody)['message'] ?? 'Failed to submit report';
+        throw Exception(error);
       }
     } catch (e) {
-      print('Error during submit report: $e');
-      String errorMessage;
-      if (e.toString().contains('Failed to fetch')) {
-        errorMessage =
-            'Unable to reach the server. Please check your internet connection or try again later.';
-      } else if (e.toString().contains('Request timed out')) {
-        errorMessage =
-            'Request timed out. Please check your internet connection or server status.';
-      } else {
-        errorMessage = e.toString();
-      }
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(errorMessage)));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
     } finally {
       setState(() => _isLoading = false);
     }
@@ -381,62 +296,97 @@ class _ReportPageState extends State<ReportPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Report Issue"),
-        backgroundColor: AppColors.accentColor,
+        title: const Text("Report Public Waste"),
       ),
-      backgroundColor: AppColors.backgroundColor,
-      body:
-          _isLoading
-              ? const Center(child: CircularProgressIndicator())
-              : Padding(
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : SafeArea(
+              child: Padding(
                 padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      "Take a Picture",
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.textColor,
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Header
+                      Text(
+                        "Report Public Waste",
+                        style: GoogleFonts.poppins(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 10),
-                    Center(
-                      child: Column(
-                        children: [
-                          _image == null
-                              ? const Text(
-                                "No Image Taken",
-                                style: TextStyle(color: AppColors.textColor),
-                              )
-                              : Image.file(_image!, height: 200),
-                          const SizedBox(height: 10),
-                          buildButton(
-                            "Open Camera",
-                            AppColors.buttonColor,
-                            _takePicture,
-                          ),
-                        ],
+                      const SizedBox(height: 8),
+                      Text(
+                        "Help keep your community clean",
+                        style: GoogleFonts.poppins(
+                          fontSize: 16,
+                          color: Colors.black54,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 20),
-                    buildTextField(
-                      "Location",
-                      locationController,
-                      readOnly: true,
-                    ),
-                    const SizedBox(height: 20),
-                    Center(
-                      child: buildButton(
-                        "Submit Report",
-                        AppColors.accentColor,
-                        _submitReport,
+                      const SizedBox(height: 24),
+                      // Image Section
+                      Text(
+                        "Take a Picture",
+                        style: GoogleFonts.poppins(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.black87,
+                        ),
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 8),
+                      Center(
+                        child: Column(
+                          children: [
+                            _image == null
+                                ? const Text(
+                                    "No Image Taken",
+                                    style: TextStyle(color: Colors.black54),
+                                  )
+                                : ClipRRect(
+                                    borderRadius: BorderRadius.circular(12),
+                                    child: Image.file(
+                                      _image!,
+                                      height: 200,
+                                      fit: BoxFit.cover,
+                                    ),
+                                  ),
+                            const SizedBox(height: 16),
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton.icon(
+                                icon: const Icon(Icons.camera_alt),
+                                label: const Text("Open Camera"),
+                                onPressed: _takePicture,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      // Location Field
+                      TextFormField(
+                        controller: locationController,
+                        readOnly: true,
+                        decoration: const InputDecoration(
+                          labelText: "Location",
+                          prefixIcon: Icon(Icons.location_on_outlined),
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      // Submit Button
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: _submitReport,
+                          child: const Text("Submit Report"),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
+            ),
     );
   }
 }
@@ -487,9 +437,7 @@ class _BinFillPageState extends State<BinFillPage> {
 
     if (permission == LocationPermission.deniedForever) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Location permissions are permanently denied'),
-        ),
+        const SnackBar(content: Text('Location permissions are permanently denied')),
       );
       return;
     }
@@ -521,66 +469,43 @@ class _BinFillPageState extends State<BinFillPage> {
       return;
     }
     if (locationController.text.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("Please provide location")));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please provide location")),
+      );
       return;
     }
 
     setState(() => _isLoading = true);
-    const maxRetries = 3;
-    for (int attempt = 1; attempt <= maxRetries; attempt++) {
-      try {
-        final token = await _getToken();
-        if (token == null) throw Exception('No token found');
+    try {
+      final token = await _getToken();
+      if (token == null) throw Exception('No token found');
 
-        final fillLevel = is80Checked ? 80 : 100;
+      final fillLevel = is80Checked ? 80 : 100;
 
-        final response = await http
-            .post(
-              Uri.parse('$apiBaseUrl/user/bin-fill'),
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': 'Bearer $token',
-              },
-              body: jsonEncode({
-                'location': locationController.text,
-                'fillLevel': fillLevel,
-              }),
-            )
-            .timeout(const Duration(seconds: 30));
+      final response = await http.post(
+        Uri.parse('$apiBaseUrl/user/bin-fill'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({
+          'location': locationController.text,
+          'fillLevel': fillLevel,
+        }),
+      );
 
-        print('Attempt $attempt - Response status: ${response.statusCode}');
-        print('Response body: ${response.body}');
-
-        if (response.statusCode == 201) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Bin Fill details submitted!")),
-          );
-          Navigator.pop(context);
-          break;
-        } else {
-          throw Exception(
-            jsonDecode(response.body)['message'] ??
-                'Failed with status ${response.statusCode}',
-          );
-        }
-      } catch (e) {
-        print('Attempt $attempt failed: $e');
-        if (attempt == maxRetries) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Failed after $maxRetries attempts: $e')),
-          );
-        } else {
-          await Future.delayed(
-            Duration(seconds: 2 * attempt),
-          ); // Exponential backoff
-        }
-      } finally {
-        if (attempt == maxRetries || !_isLoading) {
-          setState(() => _isLoading = false);
-        }
+      if (response.statusCode == 201) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Bin Fill details submitted!")),
+        );
+        Navigator.pop(context);
+      } else {
+        throw Exception(jsonDecode(response.body)['message'] ?? 'Failed to submit');
       }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+    } finally {
+      setState(() => _isLoading = false);
     }
   }
 
@@ -588,66 +513,94 @@ class _BinFillPageState extends State<BinFillPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Bin Fill Details"),
-        backgroundColor: AppColors.accentColor,
+        title: const Text("Report Bin Fill"),
       ),
-      backgroundColor: AppColors.backgroundColor,
-      body:
-          _isLoading
-              ? const Center(child: CircularProgressIndicator())
-              : Padding(
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : SafeArea(
+              child: Padding(
                 padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    buildTextField(
-                      "User Location",
-                      locationController,
-                      readOnly: true,
-                    ),
-                    const SizedBox(height: 20),
-                    const Text(
-                      "Bin Fill Level",
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.textColor,
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Header
+                      Text(
+                        "Report Bin Fill",
+                        style: GoogleFonts.poppins(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87,
+                        ),
                       ),
-                    ),
-                    buildCheckbox(
-                      "80% Bin Fill",
-                      is80Checked,
-                      () => _updateCheckbox(true),
-                    ),
-                    buildCheckbox(
-                      "100% Bin Fill",
-                      is100Checked,
-                      () => _updateCheckbox(false),
-                    ),
-                    const SizedBox(height: 20),
-                    Center(
-                      child: buildButton(
-                        "Submit",
-                        AppColors.accentColor,
-                        _submitBinFill,
+                      const SizedBox(height: 8),
+                      Text(
+                        "Help us collect waste efficiently",
+                        style: GoogleFonts.poppins(
+                          fontSize: 16,
+                          color: Colors.black54,
+                        ),
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 24),
+                      // Location Field
+                      TextFormField(
+                        controller: locationController,
+                        readOnly: true,
+                        decoration: const InputDecoration(
+                          labelText: "User Location",
+                          prefixIcon: Icon(Icons.location_on_outlined),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      // Bin Fill Level
+                      Text(
+                        "Bin Fill Level",
+                        style: GoogleFonts.poppins(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.black87,
+                        ),
+                      ),
+                      Row(
+                        children: [
+                          Checkbox(
+                            value: is80Checked,
+                            onChanged: (val) => _updateCheckbox(true),
+                            activeColor: AppColors.primaryColor,
+                          ),
+                          Text(
+                            "80% Bin Fill",
+                            style: GoogleFonts.poppins(color: Colors.black87),
+                          ),
+                        ],
+                      ),
+                      Row(
+                        children: [
+                          Checkbox(
+                            value: is100Checked,
+                            onChanged: (val) => _updateCheckbox(false),
+                            activeColor: AppColors.primaryColor,
+                          ),
+                          Text(
+                            "100% Bin Fill",
+                            style: GoogleFonts.poppins(color: Colors.black87),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 24),
+                      // Submit Button
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: _submitBinFill,
+                          child: const Text("Submit"),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-    );
-  }
-
-  Widget buildCheckbox(String label, bool value, VoidCallback onChanged) {
-    return Row(
-      children: [
-        Checkbox(
-          value: value,
-          onChanged: (val) => onChanged(),
-          activeColor: AppColors.accentColor,
-        ),
-        Text(label, style: TextStyle(color: AppColors.textColor)),
-      ],
+            ),
     );
   }
 }
@@ -681,60 +634,24 @@ class _CollectionRequestsPageState extends State<CollectionRequestsPage> {
       final token = await _getToken();
       if (token == null) throw Exception('No token found');
 
-      print('JWT Token: $token'); // Debug: Print the token
-
-      final response = await http
-          .get(
-            Uri.parse('$apiBaseUrl/user/collection-requests'),
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': 'Bearer $token',
-            },
-          )
-          .timeout(
-            const Duration(seconds: 10),
-            onTimeout: () {
-              throw Exception(
-                'Request timed out. Please check your internet connection or server status.',
-              );
-            },
-          );
-
-      print('Response status: ${response.statusCode}');
-      print('Response body: ${response.body}');
+      final response = await http.get(
+        Uri.parse('$apiBaseUrl/user/collection-requests'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         setState(() {
-          garbageReports = List<Map<String, dynamic>>.from(
-            data['garbageReports'] ?? [],
-          );
+          garbageReports = List<Map<String, dynamic>>.from(data['garbageReports'] ?? []);
         });
       } else {
-        try {
-          final error =
-              jsonDecode(response.body)['message'] ??
-              'Failed to fetch requests with status ${response.statusCode}';
-          throw Exception(error);
-        } catch (parseError) {
-          throw Exception('Invalid server response: ${response.body}');
-        }
+        throw Exception(jsonDecode(response.body)['message'] ?? 'Failed to fetch requests');
       }
     } catch (e) {
-      print('Error during fetch requests: $e');
-      String errorMessage;
-      if (e.toString().contains('Failed to fetch')) {
-        errorMessage =
-            'Unable to reach the server. Please check your internet connection or try again later.';
-      } else if (e.toString().contains('Request timed out')) {
-        errorMessage =
-            'Request timed out. Please check your internet connection or server status.';
-      } else {
-        errorMessage = e.toString();
-      }
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(errorMessage)));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
     } finally {
       setState(() => _isLoading = false);
     }
@@ -745,79 +662,142 @@ class _CollectionRequestsPageState extends State<CollectionRequestsPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text("Collection Requests"),
-        backgroundColor: AppColors.accentColor,
       ),
-      backgroundColor: AppColors.backgroundColor,
-      body:
-          _isLoading
-              ? const Center(child: CircularProgressIndicator())
-              : Padding(
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : SafeArea(
+              child: Padding(
                 padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      "Garbage Reports",
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.textColor,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    garbageReports.isEmpty
-                        ? const Text(
-                          "No garbage reports found.",
-                          style: TextStyle(color: AppColors.textColor),
-                        )
-                        : Expanded(
-                          child: ListView.builder(
-                            itemCount: garbageReports.length,
-                            itemBuilder: (context, index) {
-                              final report = garbageReports[index];
-                              return Card(
-                                elevation: 2,
-                                margin: const EdgeInsets.symmetric(vertical: 5),
-                                child: ListTile(
-                                  title: Text(
-                                    "Report ID: ${report['reportid']}",
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  subtitle: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text("Location: ${report['location']}"),
-                                      Text("Status: ${report['status']}"),
-                                      Text("Time: ${report['datetime']}"),
-                                      Text(
-                                        "Waste Type: ${report['wastetype']}",
-                                      ),
-                                      if (report['comments'] != null)
-                                        Text("Comments: ${report['comments']}"),
-                                      report['imageurl'] != null
-                                          ? Image.network(
-                                            report['imageurl'],
-                                            height: 100,
-                                            errorBuilder:
-                                                (context, error, stackTrace) =>
-                                                    const Text(
-                                                      "Image unavailable",
-                                                    ),
-                                          )
-                                          : const Text("No Image"),
-                                    ],
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
+                child: RefreshIndicator(
+                  onRefresh: _fetchRequests,
+                  color: AppColors.primaryColor,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Header
+                      Text(
+                        "Collection Requests",
+                        style: GoogleFonts.poppins(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87,
                         ),
-                  ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        "View your submitted requests",
+                        style: GoogleFonts.poppins(
+                          fontSize: 16,
+                          color: Colors.black54,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      // Garbage Reports
+                      Expanded(
+                        child: garbageReports.isEmpty
+                            ? const Center(
+                                child: Text(
+                                  "No garbage reports found.",
+                                  style: TextStyle(color: Colors.black54),
+                                ),
+                              )
+                            : ListView.builder(
+                                itemCount: garbageReports.length,
+                                itemBuilder: (context, index) {
+                                  final report = garbageReports[index];
+                                  return Card(
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(16.0),
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Row(
+                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                            children: [
+                                              Text(
+                                                "Report ID: ${report['reportid']}",
+                                                style: GoogleFonts.poppins(
+                                                  fontWeight: FontWeight.w600,
+                                                  color: Colors.black87,
+                                                ),
+                                              ),
+                                              Container(
+                                                padding: const EdgeInsets.symmetric(
+                                                  horizontal: 8,
+                                                  vertical: 4,
+                                                ),
+                                                decoration: BoxDecoration(
+                                                  color: report['status'] == 'Pending'
+                                                      ? Colors.orange.shade700
+                                                      : report['status'] == 'Completed'
+                                                          ? Colors.green.shade700
+                                                          : Colors.red.shade700,
+                                                  borderRadius: BorderRadius.circular(12),
+                                                ),
+                                                child: Text(
+                                                  report['status'] ?? 'Unknown',
+                                                  style: GoogleFonts.poppins(
+                                                    fontSize: 12,
+                                                    color: Colors.white,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 8),
+                                          Text(
+                                            "Location: ${report['location']}",
+                                            style: GoogleFonts.poppins(color: Colors.black54),
+                                          ),
+                                          Text(
+                                            "Time: ${report['datetime']}",
+                                            style: GoogleFonts.poppins(color: Colors.black54),
+                                          ),
+                                          Text(
+                                            "Waste Type: ${report['wastetype']}",
+                                            style: GoogleFonts.poppins(color: Colors.black54),
+                                          ),
+                                          if (report['comments'] != null)
+                                            Text(
+                                              "Comments: ${report['comments']}",
+                                              style: GoogleFonts.poppins(color: Colors.black54),
+                                            ),
+                                          if (report['imageurl'] != null) ...[
+                                            const SizedBox(height: 8),
+                                            ClipRRect(
+                                              borderRadius: BorderRadius.circular(12),
+                                              child: Image.network(
+                                                report['imageurl'],
+                                                height: 150,
+                                                width: double.infinity,
+                                                fit: BoxFit.cover,
+                                                errorBuilder: (context, error, stackTrace) =>
+                                                    Container(
+                                                  height: 150,
+                                                  width: double.infinity,
+                                                  color: Colors.grey.shade200,
+                                                  child: const Center(
+                                                    child: Text(
+                                                      "Image unavailable",
+                                                      style: TextStyle(color: Colors.black54),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
+            ),
     );
   }
 }

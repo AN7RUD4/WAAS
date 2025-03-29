@@ -74,8 +74,8 @@ router.post('/signup', validateSignup, async (req, res) => {
     const hashedPassword = await bcryptjs.hash(password, 10);
 
     const newUser = await client.query(
-      'INSERT INTO users (name, email, password, role) VALUES ($1, $2, $3, $4) RETURNING userid, name, email',
-      [name, email, hashedPassword, 'user']
+      'INSERT INTO users (name, email, password, role, status) VALUES ($1, $2, $3, $4, $5) RETURNING userid, name, email',
+      [name, email, hashedPassword, 'user', 'available']
     );
 
     await client.query('COMMIT');
