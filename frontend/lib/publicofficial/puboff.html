@@ -3,242 +3,273 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Waste Management - Official Portal</title>
+    <title>Waste Management - Reporting Portal</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.5/xlsx.full.min.js"></script>
     <style>
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
-            font-family: 'Segoe UI', Arial, sans-serif;
+            font-family: 'Arial', sans-serif;
         }
 
         body {
-            background-color: #f0f7f4;
-            color: #2d5522;
+            background-color: #f4f7f6;
+            color: #2c3e50;
             line-height: 1.6;
         }
 
         .container {
-            max-width: 1200px;
+            max-width: 1400px;
             margin: 0 auto;
             padding: 30px;
         }
 
         h1 {
             text-align: center;
-            color: #2d5522;
+            color: #2c3e50;
             margin-bottom: 30px;
             font-size: 2.5em;
-            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.1);
+            font-weight: 300;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 15px;
         }
 
-        nav {
-            margin-bottom: 30px;
-            text-align: center;
-            background-color: #4a8c3b;
-            padding: 10px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        }
-
-        nav button {
-            padding: 12px 25px;
-            margin: 0 10px;
-            cursor: pointer;
-            background-color: #6bb356;
-            border: none;
-            border-radius: 5px;
-            color: white;
-            font-weight: bold;
-            transition: background-color 0.3s;
-        }
-
-        nav button:hover {
-            background-color: #559944;
-        }
-
-        .section {
-            display: none;
-            padding: 25px;
-            background-color: white;
-            border-radius: 10px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            margin-bottom: 30px;
-        }
-
-        .section.active {
-            display: block;
-        }
-
-        h2 {
-            color: #4a8c3b;
+        .report-controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
             margin-bottom: 20px;
         }
 
-        h3 {
-            color: #6bb356;
-            margin-bottom: 15px;
-        }
-
-        form {
-            display: grid;
+        .report-form {
+            display: flex;
             gap: 15px;
-            max-width: 500px;
-            background-color: #f0f7f4;
-            padding: 20px;
-            border-radius: 8px;
+            align-items: center;
         }
 
-        label {
-            font-weight: bold;
+        .report-form input, 
+        .report-form select, 
+        .report-form button {
+            padding: 10px;
+            border: 1px solid #bdc3c7;
+            border-radius: 4px;
+            font-size: 0.9em;
         }
 
-        input, select, button {
-            padding: 12px;
-            border: 1px solid #a8d39c;
-            border-radius: 5px;
+        .export-buttons {
+            position: relative;
+            display: inline-block;
+        }
+
+        .export-dropdown {
+            display: none;
+            position: absolute;
+            right: 0;
+            top: 100%;
             background-color: white;
-            font-size: 1em;
+            border: 1px solid #bdc3c7;
+            border-radius: 4px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            z-index: 10;
+            min-width: 150px;
         }
 
-        button {
-            background-color: #6bb356;
-            color: white;
-            cursor: pointer;
-            border: none;
-            transition: background-color 0.3s;
-        }
-
-        button:hover {
-            background-color: #559944;
-        }
-
-        table {
+        .export-dropdown button {
+            display: block;
             width: 100%;
-            border-collapse: collapse;
-            margin-top: 25px;
-            background-color: white;
-            border-radius: 8px;
-            overflow: hidden;
-        }
-
-        th, td {
-            padding: 15px;
             text-align: left;
-            border-bottom: 1px solid #e6f0e5;
+            padding: 10px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
         }
 
-        th {
-            background-color: #4a8c3b;
+        .export-dropdown button:hover {
+            background-color: #f4f6f7;
+        }
+
+        .export-dropdown button:disabled {
+            color: #bdc3c7;
+            cursor: not-allowed;
+        }
+
+        .export-trigger {
+            background-color: #3498db;
             color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            transition: background-color 0.3s ease;
         }
 
-        tr:nth-child(even) {
-            background-color: #f8faf7;
+        .export-trigger:hover {
+            background-color: #2980b9;
         }
 
-        tr:hover {
-            background-color: #e6f0e5;
-        }
-
-        .worker-form {
-            margin-bottom: 40px;
+        .export-trigger::after {
+            content: '▼';
+            font-size: 0.7em;
+            margin-left: 5px;
         }
 
         #reportResult {
-            margin-top: 20px;
-            padding: 15px;
-            background-color: #f0f7f4;
+            background-color: white;
             border-radius: 5px;
-            border-left: 4px solid #6bb356;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            padding: 20px;
+            margin-top: 20px;
+        }
+
+        .report-item {
+            border-bottom: 1px solid #ecf0f1;
+            padding: 15px 0;
+        }
+
+        .report-item:last-child {
+            border-bottom: none;
+        }
+
+        .report-item-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .report-item-details {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+        }
+
+        .status-badge {
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 0.8em;
+            font-weight: bold;
+        }
+
+        .status-green { background-color: #2ecc71; color: white; }
+        .status-yellow { background-color: #f39c12; color: white; }
+        .status-orange { background-color: #e67e22; color: white; }
+        .status-gray { background-color: #95a5a6; color: white; }
+
+        .no-reports {
+            text-align: center;
+            color: #7f8c8d;
+            padding: 20px;
+        }
+
+        #loader {
+            text-align: center;
+            padding: 20px;
+            display: none;
+        }
+
+        .loading {
+            color: #3498db;
+            font-size: 1.2em;
+        }
+
+        @media (max-width: 768px) {
+            .report-controls {
+                flex-direction: column;
+                gap: 15px;
+            }
+
+            .report-form {
+                width: 100%;
+                flex-direction: column;
+            }
+
+            .report-form input, 
+            .report-form button {
+                width: 100%;
+            }
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>Waste Management Official Portal</h1>
+        <h1>Waste Management Reporting Portal</h1>
         
-        <nav>
-            <button onclick="showSection('report')">Reports</button>
-            <button onclick="showSection('workers')">Workers</button>
-        </nav>
-
-        <section id="report" class="section">
-            <h2>Generate Report</h2>
-            <form id="reportForm">
-                <label for="month">Month:</label>
+        <div class="report-controls">
+            <form id="reportForm" class="report-form">
                 <input type="month" id="month" required>
-                <label for="reportid">Report ID (Optional):</label>
-                <input type="text" id="reportid" placeholder="Enter Report ID">
+                <input type="text" id="reportid" placeholder="Report ID (Optional)">
                 <button type="submit">Generate Report</button>
             </form>
-            <div id="reportResult"></div>
-        </section>
-
-        <section id="workers" class="section">
-            <h2>Worker Management</h2>
-            <div class="worker-form">
-                <h3>Add New Worker</h3>
-                <form id="workerForm">
-                    <label for="workerName">Worker Name:</label>
-                    <input type="text" id="workerName" placeholder="Enter name" required>
-                    <label for="workerId">Worker ID:</label>
-                    <input type="text" id="workerId" placeholder="Enter ID" required>
-                    <label for="workerEmail">Worker Email:</label>
-                    <input type="email" id="workerEmail" placeholder="Enter email" required>
-                    <label for="workerPhone">Worker Phone:</label>
-                    <input type="tel" id="workerPhone" placeholder="Enter phone" required>
-                    <label for="workerAddress">Worker Address:</label>
-                    <input type="text" id="workerAddress" placeholder="Enter address" required>
-                    <button type="submit">Add Worker</button>
-                </form>
+            <div class="export-buttons">
+                <button class="export-trigger">Export</button>
+                <div class="export-dropdown">
+                    <button id="exportExcel">Excel (.xlsx)</button>
+                    <button id="exportPDF" disabled>PDF (.pdf)</button>
+                </div>
             </div>
+        </div>
 
-            <div class="worker-list">
-                <h3>Worker List</h3>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>ID</th>
-                            <th>Name</th>
-                            <th>Email</th>
-                            <th>Status</th>
-                            <th>Action</th>
-                        </tr>
-                    </thead>
-                    <tbody id="workerTableBody"></tbody>
-                </table>
-            </div>
-        </section>
+        <div id="loader" class="loading">
+            Loading reports...
+        </div>
+
+        <div id="reportResult"></div>
     </div>
 
     <script>
-        const SUPABASE_URL = 'https://hrzroqrgkvzhomsosqzl.supabase.co';
+        
+const SUPABASE_URL = 'https://hrzroqrgkvzhomsosqzl.supabase.co';
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhyenJvcXJna3Z6aG9tc29zcXpsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDE5MjQ0NDQsImV4cCI6MjA1NzUwMDQ0NH0.qBDNsN0DvMKZ8JBAmoh2DsN8WW74uj2hZZuG_-gxF4g';
         const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
         const RENDER_URL = 'https://waas-9pr6.onrender.com';
 
-        document.addEventListener('DOMContentLoaded', async () => {
-            showSection('report');
-            await fetchWorkers();
+        let currentReportData = [];
 
-            // Generate Report Form Submission
+        document.addEventListener('DOMContentLoaded', () => {
             const reportForm = document.getElementById('reportForm');
+            const reportResult = document.getElementById('reportResult');
+            const loader = document.getElementById('loader');
+            const exportExcel = document.getElementById('exportExcel');
+            const exportPDF = document.getElementById('exportPDF');
+            const exportTrigger = document.querySelector('.export-trigger');
+            const exportDropdown = document.querySelector('.export-dropdown');
+
+            // Dropdown toggle
+            exportTrigger.addEventListener('click', () => {
+                exportDropdown.style.display = 
+                    exportDropdown.style.display === 'block' ? 'none' : 'block';
+            });
+
+            // Close dropdown when clicking outside
+            document.addEventListener('click', (event) => {
+                if (!exportTrigger.contains(event.target) && 
+                    !exportDropdown.contains(event.target)) {
+                    exportDropdown.style.display = 'none';
+                }
+            });
+
             reportForm.addEventListener('submit', async (e) => {
                 e.preventDefault();
-                const month = document.getElementById('month').value; // Format: "YYYY-MM"
+                const month = document.getElementById('month').value;
                 const reportid = document.getElementById('reportid').value;
-                const resultDiv = document.getElementById('reportResult');
                 
+                loader.style.display = 'block';
+                reportResult.innerHTML = '';
+                exportExcel.disabled = true;
+                exportPDF.disabled = true;
+
                 try {
-                    // Calculate the start and end of the month
                     const [year, monthNum] = month.split('-').map(Number);
                     const startOfMonth = `${year}-${monthNum.toString().padStart(2, '0')}-01T00:00:00Z`;
-                    const lastDay = new Date(year, monthNum, 0).getDate(); // Get the last day of the month
+                    const lastDay = new Date(year, monthNum, 0).getDate();
                     const endOfMonth = `${year}-${monthNum.toString().padStart(2, '0')}-${lastDay}T23:59:59Z`;
 
-                    // Build the query
                     let query = supabaseClient
                         .from('garbagereports')
                         .select(`
@@ -257,7 +288,6 @@
                         .gte('publicofficialapprovals.datetime', startOfMonth)
                         .lte('publicofficialapprovals.datetime', endOfMonth);
 
-                    // If reportid is provided, add it to the query
                     if (reportid) {
                         query = query.eq('reportid', reportid);
                     }
@@ -266,156 +296,81 @@
 
                     if (reportError) throw reportError;
 
-                    resultDiv.innerHTML = reportData.length > 0 
-                        ? reportData.map(report => {
+                    currentReportData = reportData;
+
+                    loader.style.display = 'none';
+
+                    if (reportData.length > 0) {
+                        exportExcel.disabled = false;
+                        exportPDF.disabled = false;
+
+                        reportResult.innerHTML = reportData.map(report => {
                             const approval = report.publicofficialapprovals[0] || {};
                             return `
-                                <div>
-                                    <strong>Report ID:</strong> ${report.reportid}<br>
-                                    <strong>Reported by:</strong> ${report.users.name || 'Unknown'}<br>
-                                    <strong>Waste Type:</strong> ${report.wastetype || 'N/A'}<br>
-                                    <strong>Attended By:</strong> ${approval.users?.name || 'Not Assigned'}<br>
-                                    <strong>Status:</strong> ${approval.status || 'N/A'}<br>
-                                    <strong>Comments:</strong> ${approval.comments || 'None'}<br>
-                                    <strong>Date:</strong> ${approval.datetime ? new Date(approval.datetime).toLocaleString() : 'N/A'}
-                                </div><hr>
+                                <div class="report-item">
+                                    <div class="report-item-header">
+                                        <h3>Report ID: ${report.reportid}</h3>
+                                        <span class="status-badge ${getStatusColor(approval.status)}">
+                                            ${approval.status || 'N/A'}
+                                        </span>
+                                    </div>
+                                    <div class="report-item-details">
+                                        <div><strong>Reported By:</strong> ${report.users.name || 'Unknown'}</div>
+                                        <div><strong>Waste Type:</strong> ${report.wastetype || 'N/A'}</div>
+                                        <div><strong>Attended By:</strong> ${approval.users?.name || 'Not Assigned'}</div>
+                                        <div><strong>Date:</strong> ${approval.datetime ? new Date(approval.datetime).toLocaleString() : 'N/A'}</div>
+                                    </div>
+                                    <div class="report-item-comments">
+                                        <strong>Comments:</strong> ${approval.comments || 'None'}
+                                    </div>
+                                </div>
                             `;
-                        }).join('')
-                        : `No reports found${reportid ? ` with ID ${reportid}` : ''} for the month of ${new Date(year, monthNum - 1).toLocaleString('default', { month: 'long', year: 'numeric' })}`;
+                        }).join('');
+                    } else {
+                        reportResult.innerHTML = `
+                            <div class="no-reports">
+                                No reports found${reportid ? ` with ID ${reportid}` : ''} for ${new Date(year, monthNum - 1).toLocaleString('default', { month: 'long', year: 'numeric' })}
+                            </div>
+                        `;
+                    }
                 } catch (error) {
-                    resultDiv.innerHTML = `Error generating report: ${error.message}`;
+                    loader.style.display = 'none';
+                    reportResult.innerHTML = `<div class="no-reports">Error generating report: ${error.message}</div>`;
                 }
             });
 
-            // Add Worker Form Submission
-            const workerForm = document.getElementById('workerForm');
-            workerForm.addEventListener('submit', async (e) => {
-                e.preventDefault();
-                const worker = {
-                    userid: document.getElementById('workerId').value,
-                    name: document.getElementById('workerName').value,
-                    email: document.getElementById('workerEmail').value,
-                    phone: document.getElementById('workerPhone').value,
-                    address: document.getElementById('workerAddress').value,
-                    role: 'worker',
-                    status: 'available'
-                };
+            exportExcel.addEventListener('click', () => {
+                if (currentReportData.length === 0) return;
 
-                try {
-                    const { error } = await supabaseClient
-                        .from('users')
-                        .insert([worker]);
-                    
-                    if (error) throw error;
-                    workerForm.reset();
-                    await fetchWorkers();
-                } catch (error) {
-                    alert(`Error adding worker: ${error.message}`);
-                }
+                const exportData = currentReportData.map(report => {
+                    const approval = report.publicofficialapprovals[0] || {};
+                    return {
+                        'Report ID': report.reportid,
+                        'Reported By': report.users.name || 'Unknown',
+                        'Waste Type': report.wastetype || 'N/A',
+                        'Status': approval.status || 'N/A',
+                        'Attended By': approval.users?.name || 'Not Assigned',
+                        'Date': approval.datetime ? new Date(approval.datetime).toLocaleString() : 'N/A',
+                        'Comments': approval.comments || 'None'
+                    };
+                });
+
+                const worksheet = XLSX.utils.json_to_sheet(exportData);
+                const workbook = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(workbook, worksheet, 'Waste Reports');
+                
+                const monthName = document.getElementById('month').value;
+                XLSX.writeFile(workbook, `Waste_Management_Report_${monthName}.xlsx`);
+                exportDropdown.style.display = 'none';
             });
         });
 
-        function showSection(sectionId) {
-            document.querySelectorAll('.section').forEach(section => {
-                section.classList.remove('active');
-            });
-            document.getElementById(sectionId).classList.add('active');
-        }
-
-        async function fetchWorkers() {
-            try {
-                const { data, error } = await supabaseClient
-                    .from('users')
-                    .select('*, taskrequests!taskrequests_assignedworkerid_fkey(status)')
-                    .eq('role', 'worker');
-                
-                if (error) throw error;
-                updateWorkerTable(data);
-            } catch (error) {
-                alert(`Error fetching workers: ${error.message}`);
-            }
-        }
-
-        function updateWorkerTable(workers) {
-            const tbody = document.getElementById('workerTableBody');
-            tbody.innerHTML = '';
-            
-            workers.forEach((worker) => {
-                const taskStatus = worker.taskrequests && worker.taskrequests.length > 0 
-                    ? worker.taskrequests[0].status 
-                    : 'Not Collecting';
-                const isCollecting = taskStatus === 'Collecting';
-                
-                const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td>${worker.userid}</td>
-                    <td>${worker.name}</td>
-                    <td>${worker.email}</td>
-                    <td>${taskStatus}</td>
-                    <td>
-                        <button onclick="toggleStatus('${worker.userid}', '${taskStatus}')">
-                            ${isCollecting ? 'Stop' : 'Start'} Collecting
-                        </button>
-                    </td>
-                `;
-                tbody.appendChild(row);
-            });
-        }
-
-        async function toggleStatus(workerId, currentStatus) {
-            const newStatus = currentStatus === 'Collecting' ? 'Not Collecting' : 'Collecting';
-            try {
-                const { data: existingTasks, error: fetchError } = await supabaseClient
-                    .from('taskrequests')
-                    .select('reportid')
-                    .eq('assignedworkerid', workerId)
-                    .eq('status', 'Collecting');
-                
-                if (fetchError) throw fetchError;
-
-                if (existingTasks.length > 0) {
-                    // Call backend to complete collection using RENDER_URL
-                    const response = await fetch(`${RENDER_URL}/complete-collection`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ 
-                            groupid: existingTasks[0].reportid.split('_')[1], 
-                            workerid: workerId 
-                        })
-                    });
-
-                    if (!response.ok) {
-                        const data = await response.json();
-                        throw new Error(data.error);
-                    }
-
-                    const { error } = await supabaseClient
-                        .from('taskrequests')
-                        .update({
-                            status: newStatus,
-                            endtime: newStatus === 'Not Collecting' ? new Date().toISOString() : null
-                        })
-                        .eq('assignedworkerid', workerId)
-                        .eq('status', 'Collecting');
-                    
-                    if (error) throw error;
-                } else if (newStatus === 'Collecting') {
-                    const { error } = await supabaseClient
-                        .from('taskrequests')
-                        .insert([{
-                            reportid: `task_${workerId}_${Date.now()}`,
-                            assignedworkerid: workerId,
-                            status: newStatus,
-                            progress: 'Started',
-                            starttime: new Date().toISOString()
-                        }]);
-                    
-                    if (error) throw error;
-                }
-
-                await fetchWorkers();
-            } catch (error) {
-                alert(`Error updating status: ${error.message}`);
+        function getStatusColor(status) {
+            switch(status) {
+                case 'Completed': return 'status-green';
+                case 'In Progress': return 'status-yellow';
+                case 'Pending': return 'status-orange';
+                default: return 'status-gray';
             }
         }
     </script>
