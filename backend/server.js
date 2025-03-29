@@ -21,7 +21,24 @@ app.get('/', (req, res) => {
 app.use('/api', authRouter);
 app.use('/api/profile', profileRouter);
 app.use('/api/user', userRouter);
-app.use('/api/worker', workerRouter); // Mount worker routes
+app.use('/api/worker', workerRouter); 
+
+const cron = require('node-cron');
+const axios = require('axios');
+
+// Schedule to run every hour
+cron.schedule('0 * * * *', async () => {
+  try {
+    const response = await axios.post(
+      'http://localhost:3000/api/worker/group-and-assign-reports',
+      {},
+      { headers: { Authorization: 'Bearer <admin-jwt-token>' } }
+    );
+    console.log('Scheduled assignment completed:', response.data);
+  } catch (error) {
+    console.error('Scheduled assignment failed:', error.message);
+  }
+});
 
 // Error handling middleware
 app.use((err, req, res, next) => {

@@ -35,7 +35,7 @@ const authenticateToken = (req, res, next) => {
   }
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'passwordKey');
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'Anusucha@01');
     if (!decoded.userid || !decoded.role) {
       return res.status(403).json({ message: 'Invalid token: Missing userid or role' });
     }
@@ -114,7 +114,7 @@ function expandCluster(point, neighbors, points, eps, minPts, visited) {
 // New Endpoint: Group and Assign Reports
 router.post('/group-and-assign-reports', authenticateToken, checkWorkerOrAdminRole, async (req, res) => {
   try {
-    const { startDate } = req.body; // Optional: Start date to process reports from
+    const { startDate } = req.body; // Start date to process reports from
     const eps = 2; // 2 km radius for clustering
     const minPts = 2; // Minimum 2 reports to form a cluster
 
@@ -170,7 +170,7 @@ router.post('/group-and-assign-reports', authenticateToken, checkWorkerOrAdminRo
           lng: cluster.reduce((sum, r) => sum + r.lng, 0) / cluster.length,
         };
 
-        // Fetch available workers (assuming role 'worker' and not overloaded)
+        // Fetch available workers (assuming not overloaded)
         const workerResult = await pool.query(
           `SELECT userid, location
            FROM users
@@ -194,7 +194,7 @@ router.post('/group-and-assign-reports', authenticateToken, checkWorkerOrAdminRo
         });
 
         if (workers.length === 0) {
-          continue; // Skip if no workers available
+          continue; 
         }
 
         // Assign closest worker
@@ -219,7 +219,6 @@ router.post('/group-and-assign-reports', authenticateToken, checkWorkerOrAdminRo
         }
       }
 
-      // Remove processed reports
       reports = reports.filter(r => !processedReports.has(r.reportid));
     }
 
