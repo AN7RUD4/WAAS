@@ -4,7 +4,7 @@ const { Pool } = require('pg');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const KMeans = require('kmeans-js'); // For K-Means clustering
-const Munkres = require('munkres-algorithm-js'); // For Hungarian Algorithm
+const Munkres = require('munkres-algorithm');  // For Hungarian Algorithm
 
 const router = express.Router();
 router.use(cors());
@@ -93,8 +93,6 @@ function kmeansClustering(points, k) {
 }
 
 // Step 2: Munkres Algorithm for Worker Allocation
-const { minWeightAssign } = require('munkres-algorithm'); 
-
 function assignWorkersToClusters(clusters, workers) {
   const assignments = [];
 
@@ -107,16 +105,17 @@ function assignWorkersToClusters(clusters, workers) {
     };
 
     // Create a cost matrix: distance between each worker and the cluster centroid
-    const costMatrix = workers.map(worker => [
-      haversineDistance(worker.lat, worker.lng, centroid.lat, centroid.lng),
-    ]);
+    const costMatrix = workers.map(worker =>
+      haversineDistance(worker.lat, worker.lng, centroid.lat, centroid.lng)
+    );
 
-    // Run Hungarian Algorithm (munkres-algorithm) to find the optimal worker
-    const result = minWeightAssign(costMatrix);
+    // Run Hungarian Algorithm using munkres-js
+    const munkres = new Munkres();
+    const indices = munkres.compute(costMatrix.map(row => [row])); // Convert to 2D array
 
-    // result.assignments[i] gives the column (cluster) assigned to row (worker) i
-    const workerIdx = result.assignments.findIndex(col => col !== null);
-    if (workerIdx === -1) continue; // No assignment possible
+    // Find the first valid assignment
+    const workerIdx = indices.find(([workerIdx]) => workerIdx !== null)?.[0];
+    if (workerIdx === undefined || workerIdx >= workers.length) continue; // No valid assignment
 
     const assignedWorker = workers[workerIdx];
 
