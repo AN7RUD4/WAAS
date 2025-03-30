@@ -4,7 +4,7 @@ const { Pool } = require('pg');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const KMeans = require('kmeans-js'); // For K-Means clustering
-const Munkres = require('munkres-algorithm');  // For Hungarian Algorithm
+const Munkres = require('munkres-js'); // For Hungarian Algorithm
 
 const router = express.Router();
 router.use(cors());
