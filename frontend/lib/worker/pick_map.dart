@@ -19,7 +19,7 @@ class MapScreen extends StatefulWidget {
 
 class _MapScreenState extends State<MapScreen> {
   final MapController _mapController = MapController();
-  List<LatLng> _locations = []; // Collection points
+  final List<LatLng> _locations = []; // Collection points
   List<LatLng> _route = []; // Road-based route from OSRM
   List<LatLng> _completeRoute =
       []; // Complete route including worker's location
@@ -34,7 +34,7 @@ class _MapScreenState extends State<MapScreen> {
   double _distanceToNearest = 0.0;
   double _totalDistance = 0.0;
   String _directions = "Calculating directions...";
-  List<String> _turnByTurnInstructions = []; // Store all instructions from OSRM
+  final List<String> _turnByTurnInstructions = []; // Store all instructions from OSRM
   int _currentInstructionIndex = 0; // Track the current instruction
 
   @override
@@ -535,7 +535,7 @@ class _MapScreenState extends State<MapScreen> {
                         ),
                       ),
                     );
-                  }).toList(),
+                  }),
                 ],
               ),
             ],
