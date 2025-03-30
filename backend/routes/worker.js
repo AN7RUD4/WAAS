@@ -37,7 +37,7 @@ const authenticateToken = (req, res, next) => {
   }
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'Anusucha@01');
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'passwordKey');
     if (!decoded.userid || !decoded.role) {
       return res.status(403).json({ message: 'Invalid token: Missing userid or role' });
     }
