@@ -4,7 +4,7 @@ const { Pool } = require('pg');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const KMeans = require('kmeans-js'); // For K-Means clustering
-const Hungarian = require('hungarian-algorithm-js'); // For Hungarian Algorithm
+const Munkres = require('munkres-algorithm-js'); // For Hungarian Algorithm
 
 const router = express.Router();
 router.use(cors());
@@ -92,8 +92,8 @@ function kmeansClustering(points, k) {
   return clusters.filter(cluster => cluster.length > 0); // Remove empty clusters
 }
 
-// Step 2: Hungarian Algorithm for Worker Allocation
-const { minWeightAssign } = require('munkres-algorithm'); // Use munkres-algorithm
+// Step 2: Munkres Algorithm for Worker Allocation
+const { minWeightAssign } = require('munkres-algorithm'); 
 
 function assignWorkersToClusters(clusters, workers) {
   const assignments = [];
