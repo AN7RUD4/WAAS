@@ -74,7 +74,7 @@ class MyApp extends StatelessWidget {
             backgroundColor: AppColors.primaryColor,
             foregroundColor: Colors.white,
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12), // Rounded buttons
+              borderRadius: BorderRadius.circular(12), 
             ),
             padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
             textStyle: GoogleFonts.poppins(

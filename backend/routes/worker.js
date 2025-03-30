@@ -3,6 +3,8 @@ const express = require('express');
 const { Pool } = require('pg');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
+const KMeans = require('kmeans-js'); // For K-Means clustering
+const Hungarian = require('hungarian-algorithm-js'); // For Hungarian Algorithm
 
 const router = express.Router();
 router.use(cors());
@@ -47,7 +49,7 @@ const authenticateToken = (req, res, next) => {
   }
 };
 
-// Middleware to check if the user is a worker or admin (for assignment endpoint)
+// Middleware to check if the user is a worker or admin
 const checkWorkerOrAdminRole = (req, res, next) => {
   if (!req.user || (req.user.role.toLowerCase() !== 'worker' && req.user.role.toLowerCase() !== 'admin')) {
     return res.status(403).json({ message: 'Access denied: Only workers or admins can access this endpoint' });
@@ -60,63 +62,102 @@ function haversineDistance(lat1, lon1, lat2, lon2) {
   const R = 6371; // Earth radius in kilometers
   const dLat = (lat2 - lat1) * Math.PI / 180;
   const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-            Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c; // Distance in kilometers
 }
 
-// DBSCAN Clustering
-function dbscan(points, eps, minPts) {
-  const clusters = [];
-  const visited = new Set();
+// Step 1: K-Means Clustering
+function kmeansClustering(points, k) {
+  if (points.length < k) return points.map(point => [point]); // Not enough points to cluster
 
-  for (const point of points) {
-    if (visited.has(point.reportid)) continue;
-    visited.add(point.reportid);
+  const kmeans = new KMeans();
+  const data = points.map(p => [p.lat, p.lng]);
+  kmeans.cluster(data, k);
 
-    const neighbors = points.filter(p =>
-      p.reportid !== point.reportid &&
-      haversineDistance(point.lat, point.lng, p.lat, p.lng) <= eps
-    );
-
-    if (neighbors.length >= minPts - 1) { // -1 because point itself is included
-      const cluster = expandCluster(point, neighbors, points, eps, minPts, visited);
-      clusters.push(cluster);
-    }
+  // Wait for clustering to complete
+  while (kmeans.step()) {
+    // Continue iterating until convergence
   }
 
-  return clusters;
+  const clusters = Array.from({ length: k }, () => []);
+  points.forEach((point, idx) => {
+    const clusterIdx = kmeans.nearest([point.lat, point.lng])[0];
+    clusters[clusterIdx].push(point);
+  });
+
+  return clusters.filter(cluster => cluster.length > 0); // Remove empty clusters
 }
 
-function expandCluster(point, neighbors, points, eps, minPts, visited) {
-  const cluster = [point];
+// Step 2: Hungarian Algorithm for Worker Allocation
+const { minWeightAssign } = require('munkres-algorithm'); // Use munkres-algorithm
 
-  for (const neighbor of neighbors) {
-    if (!visited.has(neighbor.reportid)) {
-      visited.add(neighbor.reportid);
-      const newNeighbors = points.filter(p =>
-        p.reportid !== neighbor.reportid &&
-        haversineDistance(neighbor.lat, neighbor.lng, p.lat, p.lng) <= eps
-      );
+function assignWorkersToClusters(clusters, workers) {
+  const assignments = [];
 
-      if (newNeighbors.length >= minPts - 1) {
-        neighbors.push(...newNeighbors);
-      }
-      cluster.push(neighbor);
-    }
+  for (const cluster of clusters) {
+    if (workers.length === 0) break;
+
+    const centroid = {
+      lat: cluster.reduce((sum, r) => sum + r.lat, 0) / cluster.length,
+      lng: cluster.reduce((sum, r) => sum + r.lng, 0) / cluster.length,
+    };
+
+    // Create a cost matrix: distance between each worker and the cluster centroid
+    const costMatrix = workers.map(worker => [
+      haversineDistance(worker.lat, worker.lng, centroid.lat, centroid.lng),
+    ]);
+
+    // Run Hungarian Algorithm (munkres-algorithm) to find the optimal worker
+    const result = minWeightAssign(costMatrix);
+
+    // result.assignments[i] gives the column (cluster) assigned to row (worker) i
+    const workerIdx = result.assignments.findIndex(col => col !== null);
+    if (workerIdx === -1) continue; // No assignment possible
+
+    const assignedWorker = workers[workerIdx];
+
+    // Remove the assigned worker from the pool
+    workers.splice(workerIdx, 1);
+
+    assignments.push({ cluster, worker: assignedWorker });
   }
 
-  return cluster;
+  return assignments;
+}
+
+// Step 3: TSP Route Optimization (Nearest Neighbor Heuristic)
+function solveTSP(points, worker) {
+  if (points.length === 0) return [];
+
+  // Start from the worker's location
+  const route = [{ lat: worker.lat, lng: worker.lng }];
+  const unvisited = [...points];
+  let current = { lat: worker.lat, lng: worker.lng };
+
+  // Nearest Neighbor: Always go to the closest unvisited point
+  while (unvisited.length > 0) {
+    const nearest = unvisited.reduce((closest, point) => {
+      const distance = haversineDistance(current.lat, current.lng, point.lat, point.lng);
+      return (!closest || distance < closest.distance) ? { point, distance } : closest;
+    }, null);
+
+    route.push({ lat: nearest.point.lat, lng: nearest.point.lng });
+    current = { lat: nearest.point.lat, lng: nearest.point.lng };
+    unvisited.splice(unvisited.indexOf(nearest.point), 1);
+  }
+
+  return route;
 }
 
 // New Endpoint: Group and Assign Reports
 router.post('/group-and-assign-reports', authenticateToken, checkWorkerOrAdminRole, async (req, res) => {
   try {
     const { startDate } = req.body; // Start date to process reports from
-    const eps = 2; // 2 km radius for clustering
-    const minPts = 2; // Minimum 2 reports to form a cluster
+    const k = 3; // Number of clusters for K-Means (adjust as needed)
 
     // Step 1: Fetch all unassigned reports sorted by created_at
     const result = await pool.query(
@@ -141,6 +182,9 @@ router.post('/group-and-assign-reports', authenticateToken, checkWorkerOrAdminRo
       return res.status(200).json({ message: 'No unassigned reports found' });
     }
 
+    // Filter out reports with invalid locations
+    reports = reports.filter(r => r.lat !== null && r.lng !== null);
+
     // Step 2: Temporal Filtering and Clustering
     const processedReports = new Set();
     const assignments = [];
@@ -152,69 +196,73 @@ router.post('/group-and-assign-reports', authenticateToken, checkWorkerOrAdminRo
       T0Plus2Days.setDate(T0.getDate() + 2);
 
       // Filter reports within 2 days of T0
-      const timeFilteredReports = reports.filter(report =>
-        report.created_at >= T0 && report.created_at <= T0Plus2Days &&
-        !processedReports.has(report.reportid)
+      const timeFilteredReports = reports.filter(
+        report =>
+          report.created_at >= T0 &&
+          report.created_at <= T0Plus2Days &&
+          !processedReports.has(report.reportid)
       );
 
       if (timeFilteredReports.length === 0) break;
 
-      // Run DBSCAN on filtered reports
-      const clusters = dbscan(timeFilteredReports.filter(r => r.lat && r.lng), eps, minPts);
+      // Step 3: K-Means Clustering
+      const clusters = kmeansClustering(timeFilteredReports, Math.min(k, timeFilteredReports.length));
 
-      // Step 3: Assign Workers to Clusters
-      for (const cluster of clusters) {
-        // Calculate cluster centroid
-        const centroid = {
-          lat: cluster.reduce((sum, r) => sum + r.lat, 0) / cluster.length,
-          lng: cluster.reduce((sum, r) => sum + r.lng, 0) / cluster.length,
+      // Step 4: Fetch available workers
+      const workerResult = await pool.query(
+        `SELECT userid, location
+         FROM users
+         WHERE role = 'worker'
+         AND userid NOT IN (
+           SELECT assignedworkerid
+           FROM taskrequests
+           WHERE status != 'completed'
+           GROUP BY assignedworkerid
+           HAVING COUNT(*) >= 5
+         )`
+      );
+
+      let workers = workerResult.rows.map(row => {
+        const locMatch = row.location ? row.location.match(/POINT\(([^ ]+) ([^)]+)\)/) : null;
+        return {
+          userid: row.userid,
+          lat: locMatch ? parseFloat(locMatch[2]) : 10.235865, // Default worker location
+          lng: locMatch ? parseFloat(locMatch[1]) : 76.405676,
         };
+      });
 
-        // Fetch available workers (assuming not overloaded)
-        const workerResult = await pool.query(
-          `SELECT userid, location
-           FROM users
-           WHERE role = 'worker'
-           AND userid NOT IN (
-             SELECT assignedworkerid
-             FROM taskrequests
-             WHERE status != 'completed'
-             GROUP BY assignedworkerid
-             HAVING COUNT(*) >= 5
-           )`
-        );
+      if (workers.length === 0) {
+        break; // No workers available
+      }
 
-        const workers = workerResult.rows.map(row => {
-          const locMatch = row.location ? row.location.match(/POINT\(([^ ]+) ([^)]+)\)/) : null;
-          return {
-            userid: row.userid,
-            lat: locMatch ? parseFloat(locMatch[2]) : 10.235865, // Default worker location
-            lng: locMatch ? parseFloat(locMatch[1]) : 76.405676,
-          };
-        });
+      // Step 5: Assign Workers to Clusters using Hungarian Algorithm
+      const clusterAssignments = assignWorkersToClusters(clusters, workers);
 
-        if (workers.length === 0) {
-          continue; 
-        }
+      // Step 6: For each cluster, solve TSP and assign tasks
+      for (const { cluster, worker } of clusterAssignments) {
+        // Solve TSP for the cluster starting from the worker's location
+        const route = solveTSP(cluster, worker);
 
-        // Assign closest worker
-        const assignedWorker = workers.reduce((closest, worker) => {
-          const distance = haversineDistance(worker.lat, worker.lng, centroid.lat, centroid.lng);
-          return (!closest || distance < closest.distance) ? { ...worker, distance } : closest;
-        }, null);
+        // Format the route as a JSONB object
+        const routeJson = {
+          start: { lat: route[0].lat, lng: route[0].lng },
+          waypoints: route.slice(1, -1).map(point => ({ lat: point.lat, lng: point.lng })),
+          end: { lat: route[route.length - 1].lat, lng: route[route.length - 1].lng },
+        };
 
         // Insert tasks into taskrequests
         for (const report of cluster) {
           await pool.query(
-            `INSERT INTO taskrequests (reportid, assignedworkerid, status, starttime)
-             VALUES ($1, $2, 'assigned', NOW())`,
-            [report.reportid, assignedWorker.userid]
+            `INSERT INTO taskrequests (reportid, assignedworkerid, status, starttime, route)
+             VALUES ($1, $2, 'assigned', NOW(), $3)`,
+            [report.reportid, worker.userid, routeJson]
           );
           processedReports.add(report.reportid);
           assignments.push({
             reportid: report.reportid,
             wastetype: report.wastetype,
-            assignedWorkerId: assignedWorker.userid,
+            assignedWorkerId: worker.userid,
+            route: routeJson,
           });
         }
       }

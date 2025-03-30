@@ -2,7 +2,7 @@ const express = require('express');
 const authRouter = require('./routes/auth');
 const profileRouter = require('./routes/profile');
 const userRouter = require('./routes/user');
-const workerRouter = require('./routes/worker'); // Uncommented
+const workerRouter = require('./routes/worker'); 
 const cors = require('cors');
 
 const app = express();
@@ -30,7 +30,7 @@ const axios = require('axios');
 cron.schedule('0 * * * *', async () => {
   try {
     const response = await axios.post(
-      'http://localhost:3000/api/worker/group-and-assign-reports',
+      'https://waas-9pr6.onrender.com/api/worker/group-and-assign-reports',
       {},
       { headers: { Authorization: 'Bearer <admin-jwt-token>' } }
     );
