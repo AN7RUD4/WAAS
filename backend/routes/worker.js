@@ -254,6 +254,8 @@ router.post('/group-and-assign-reports', authenticateToken, checkWorkerOrAdminRo
         // Instead of creating a task per report, create one task per cluster
         const reportIds = cluster.map(report => report.reportid);
         
+        console.log('Inserting Task:', { reportIds, assignedWorkerId: worker.userid, routeJson });
+
         // Insert a single task with multiple report IDs
         const taskResult = await pool.query(
           `INSERT INTO taskrequests (reportids, assignedworkerid, status, starttime, route)
