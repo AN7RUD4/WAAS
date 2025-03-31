@@ -77,24 +77,23 @@ function haversineDistance(lat1, lon1, lat2, lon2) {
 
 // Step 1: K-Means Clustering
 function kmeansClustering(points, k) {
-  if (points.length < k) return points.map(point => [point]); // Not enough points to cluster
+  if (points.length < k) return points.map(point => [point]);
 
   const kmeans = new KMeans();
-  const data = points.map(p => [p.lat, p.lng]);
-  kmeans.cluster(data, k);
+  const data = points.map(p => [p.lat, p.lng]); // Convert points to (lat, lng) format
 
-  // Wait for clustering to complete
-  while (kmeans.step()) {
-    // Continue iterating until convergence
-  }
+  // Perform clustering
+  const clusters = kmeans.cluster(data, k);
 
-  const clusters = Array.from({ length: k }, () => []);
+  // Organize points into clusters
+  const groupedClusters = Array.from({ length: k }, () => []);
+
   points.forEach((point, idx) => {
-    const clusterIdx = kmeans.nearest([point.lat, point.lng])[0];
-    clusters[clusterIdx].push(point);
+    const clusterIdx = clusters[idx]; // Get cluster index for the point
+    groupedClusters[clusterIdx].push(point);
   });
-  
-  return clusters.filter(cluster => cluster.length > 0); // Remove empty clusters
+
+  return groupedClusters.filter(cluster => cluster.length > 0);
 }
 
 // Step 2: Munkres Algorithm for Worker Allocation

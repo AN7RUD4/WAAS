@@ -59,6 +59,18 @@ class _LoginPageState extends State<LoginPage> {
           throw Exception('No token received from server');
         }
 
+        await http.post(
+          Uri.parse('$apiBaseUrl/group-and-assign-reports'),
+          headers: {
+            'Authorization': 'Bearer $token',
+            'Content-Type': 'application/json',
+          },
+          body: jsonEncode({
+            'workerId': data['user']['userid'], 
+          }),
+        );
+
+
         final user = data['user'];
         if (user == null) throw Exception('No user data in response');
         final userID =

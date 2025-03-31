@@ -54,16 +54,11 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
   @override
   void initState() {
     super.initState();
-    http.MultipartRequest(
-        'POST',
-        Uri.parse('$apiBaseUrl/user/report-waste'),
-      );
     _assignedWorksFuture = fetchAssignedWorks();
   }
 
   Future<List<Map<String, dynamic>>> fetchAssignedWorks() async {
     final token = await storage.read(key: 'jwt_token');
-    print(token);
     if (token == null) {
       throw Exception('No authentication token found');
     }
