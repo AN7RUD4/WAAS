@@ -88,7 +88,7 @@ function kmeansClustering(points, k) {
     const clusterIdx = kmeans.nearest([point.lat, point.lng])[0];
     clusters[clusterIdx].push(point);
   });
-
+  
   return clusters.filter(cluster => cluster.length > 0); // Remove empty clusters
 }
 
@@ -155,10 +155,13 @@ function solveTSP(points, worker) {
 // Endpoint to group and assign reports
 router.post('/group-and-assign-reports', authenticateToken, checkWorkerOrAdminRole, async (req, res) => {
   try {
-    const { startDate } = req.body; // Start date to process reports from
-    const k = 3; // Number of clusters for K-Means (adjust as needed)
+    const { startDate } = req.body;
+    const k = 3;
+    console.log('Starting /group-and-assign-reports endpoint');
+    console.log('Request body:', req.body);
 
-    // Step 1: Fetch all unassigned reports sorted by created_at
+    // Step 1: Fetch all unassigned reports
+    console.log('Fetching unassigned reports from garbagereports...');
     const result = await pool.query(
       `SELECT reportid, wastetype, location, datetime
        FROM garbagereports
@@ -167,6 +170,7 @@ router.post('/group-and-assign-reports', authenticateToken, checkWorkerOrAdminRo
        )
        ORDER BY datetime ASC`
     );
+    console.log('Fetched reports:', result.rows);
 
     let reports = result.rows.map(row => {
       const locationMatch = row.location.match(/POINT\(([^ ]+) ([^)]+)\)/);
@@ -180,36 +184,43 @@ router.post('/group-and-assign-reports', authenticateToken, checkWorkerOrAdminRo
     });
 
     if (!reports.length) {
+      console.log('No unassigned reports found, exiting endpoint');
       return res.status(200).json({ message: 'No unassigned reports found' });
     }
 
-    // Filter out reports with invalid locations
     reports = reports.filter(r => r.lat !== null && r.lng !== null);
+    console.log('Filtered reports with valid locations:', reports);
 
-    // Step 2: Temporal Filtering and Clustering
     const processedReports = new Set();
     const assignments = [];
 
     while (reports.length > 0) {
-      // Get the earliest report
+      console.log('Entering temporal filtering loop, remaining reports:', reports.length);
       const T0 = startDate ? new Date(startDate) : reports[0].created_at;
       const T0Plus2Days = new Date(T0);
       T0Plus2Days.setDate(T0.getDate() + 2);
+      console.log('Temporal window - T0:', T0, 'T0Plus2Days:', T0Plus2Days);
 
-      // Filter reports within 2 days of T0
       const timeFilteredReports = reports.filter(
         report =>
           report.created_at >= T0 &&
           report.created_at <= T0Plus2Days &&
           !processedReports.has(report.reportid)
       );
+      console.log('Time-filtered reports:', timeFilteredReports);
 
-      if (timeFilteredReports.length === 0) break;
+      if (timeFilteredReports.length === 0) {
+        console.log('No reports within temporal window, breaking loop');
+        break;
+      }
 
       // Step 3: K-Means Clustering
+      console.log('Performing K-Means clustering...');
       const clusters = kmeansClustering(timeFilteredReports, Math.min(k, timeFilteredReports.length));
+      console.log('Clusters formed:', clusters);
 
       // Step 4: Fetch available workers
+      console.log('Fetching available workers...');
       const workerResult = await pool.query(
         `SELECT userid, location
          FROM users
@@ -222,54 +233,65 @@ router.post('/group-and-assign-reports', authenticateToken, checkWorkerOrAdminRo
            HAVING COUNT(*) >= 5
          )`
       );
-
       let workers = workerResult.rows.map(row => {
         const locMatch = row.location ? row.location.match(/POINT\(([^ ]+) ([^)]+)\)/) : null;
         return {
           userid: row.userid,
-          lat: locMatch ? parseFloat(locMatch[2]) : 10.235865, // Default worker location
+          lat: locMatch ? parseFloat(locMatch[2]) : 10.235865,
           lng: locMatch ? parseFloat(locMatch[1]) : 76.405676,
         };
       });
+      console.log('Available workers:', workers);
 
       if (workers.length === 0) {
-        console.log("No workers available")
-        break; // No workers available
+        console.log('No workers available, breaking loop');
+        break;
       }
 
-      // Step 5: Assign Workers to Clusters using Hungarian Algorithm
+      // Step 5: Assign Workers to Clusters
+      console.log('Assigning workers to clusters using Hungarian algorithm...');
       const clusterAssignments = assignWorkersToClusters(clusters, workers);
+      console.log('Cluster assignments:', clusterAssignments);
 
-      // Step 6: For each cluster, solve TSP and assign tasks
+      if (clusterAssignments.length === 0) {
+        console.log('No assignments made, skipping insertion');
+        break;
+      }
+
+      // Step 6: Process each cluster assignment
       for (const { cluster, worker } of clusterAssignments) {
-        // Solve TSP for the cluster starting from the worker's location
-        const route = solveTSP(cluster, worker);
+        console.log(`Processing cluster for worker ${worker.userid}, reports:`, cluster);
 
-        // Format the route as a JSONB object
+        // Solve TSP
+        console.log('Solving TSP for route...');
+        const route = solveTSP(cluster, worker);
+        console.log('TSP Route:', route);
+
         const routeJson = {
           start: { lat: route[0].lat, lng: route[0].lng },
           waypoints: route.slice(1, -1).map(point => ({ lat: point.lat, lng: point.lng })),
           end: { lat: route[route.length - 1].lat, lng: route[route.length - 1].lng },
         };
+        console.log('Formatted routeJson:', routeJson);
 
-        // Instead of creating a task per report, create one task per cluster
         const reportIds = cluster.map(report => report.reportid);
+        console.log('Report IDs for task:', reportIds);
 
-        console.log('Inserting Task:', { reportIds, assignedWorkerId: worker.userid, routeJson });
-
-        // Insert a single task with multiple report IDs
+        // Insert task
+        console.log('Inserting task into taskrequests...');
         const taskResult = await pool.query(
           `INSERT INTO taskrequests (reportids, assignedworkerid, status, starttime, route)
            VALUES ($1, $2, 'assigned', NOW(), $3)
            RETURNING taskid`,
           [reportIds, worker.userid, routeJson]
         );
-        
         const taskId = taskResult.rows[0].taskid;
-        
-        // Mark all reports in this cluster as processed
+        console.log(`Task inserted successfully with taskId: ${taskId}`);
+
+        // Mark reports as processed
         cluster.forEach(report => processedReports.add(report.reportid));
-        
+        console.log('Processed reports updated:', Array.from(processedReports));
+
         assignments.push({
           taskId: taskId,
           reportIds: reportIds,
@@ -279,8 +301,10 @@ router.post('/group-and-assign-reports', authenticateToken, checkWorkerOrAdminRo
       }
 
       reports = reports.filter(r => !processedReports.has(r.reportid));
+      console.log('Remaining reports after iteration:', reports);
     }
 
+    console.log('Endpoint completed successfully, assignments:', assignments);
     res.status(200).json({
       message: 'Reports grouped and assigned successfully',
       assignments,
