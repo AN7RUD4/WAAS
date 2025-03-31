@@ -198,6 +198,7 @@ router.post('/group-and-assign-reports', authenticateToken, checkWorkerOrAdminRo
       console.log('No unassigned reports found, exiting endpoint');
       return res.status(200).json({ message: 'No unassigned reports found' });
     }
+    console.log(reports);
 
     reports = reports.filter(r => r.lat !== null && r.lng !== null);
     console.log('Filtered reports with valid locations:', reports);
