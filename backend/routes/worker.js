@@ -1,20 +1,30 @@
-require('dotenv').config();
+// Import required modules
 const express = require('express');
 const { Pool } = require('pg');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const KMeans = require('kmeans-js'); 
 const Munkres = require('munkres-js'); 
+require('dotenv').config();
 
+// Create an Express application
+const app = express();
 const router = express.Router();
-router.use(cors());
-router.use(express.json());
 
-// Database connection
-const pool = new Pool({
+// Enable CORS
+app.use(cors());
+
+// Enable JSON parsing
+app.use(express.json());
+
+// Database connection configuration
+const dbConfig = {
   connectionString: 'postgresql://postgres.hrzroqrgkvzhomsosqzl:7H.6k2wS*F$q2zY@aws-0-ap-south-1.pooler.supabase.com:6543/postgres',
   ssl: { rejectUnauthorized: false },
-});
+};
+
+// Create a PostgreSQL connection pool
+const pool = new Pool(dbConfig);
 
 // Test database connection on startup
 pool.connect((err, client, release) => {
@@ -27,12 +37,24 @@ pool.connect((err, client, release) => {
   }
 });
 
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  // Application specific logging, throwing an error, or other logic here
+});
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught Exception:', error);
+  // Application specific logging, throwing an error, or other logic here
+});
+
 // Middleware to verify JWT token
 const authenticateToken = (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-  if (!token) return res.status(401).json({ message: 'Authentication token required' });
   try {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+    if (!token) return res.status(401).json({ message: 'Authentication token required' });
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'passwordKey');
     if (!decoded.userid || !decoded.role) return res.status(403).json({ message: 'Invalid token: Missing userid or role' });
     req.user = decoded;
@@ -531,5 +553,3 @@ router.get('/completed-tasks', authenticateToken, checkWorkerRole, async (req, r
     });
   }
 });
-
-module.exports = router;
