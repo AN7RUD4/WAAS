@@ -233,6 +233,7 @@ router.post('/group-and-assign-reports', authenticateToken, checkWorkerOrAdminRo
       });
 
       if (workers.length === 0) {
+        console.log("No workers available")
         break; // No workers available
       }
 
@@ -253,7 +254,7 @@ router.post('/group-and-assign-reports', authenticateToken, checkWorkerOrAdminRo
 
         // Instead of creating a task per report, create one task per cluster
         const reportIds = cluster.map(report => report.reportid);
-        
+
         console.log('Inserting Task:', { reportIds, assignedWorkerId: worker.userid, routeJson });
 
         // Insert a single task with multiple report IDs
