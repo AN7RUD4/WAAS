@@ -134,10 +134,10 @@ router.post('/group-and-assign-reports', authenticateToken, checkWorkerOrAdminRo
 
     // Fetch all unassigned reports
     const result = await pool.query(
-      `SELECT reportid, wastetype, location, created_at
+      `SELECT reportid, wastetype, location
        FROM garbagereports
        WHERE reportid NOT IN (SELECT UNNEST(reportids) FROM taskrequests)
-       ORDER BY created_at ASC`
+       ORDER BY reportid ASC`
     );
 
     let reports = result.rows.map(row => {
