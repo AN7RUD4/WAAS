@@ -298,7 +298,7 @@ router.get('/assigned-tasks', authenticateToken, checkWorkerOrAdminRole, async (
 
     // First get all tasks assigned to this worker
     const tasksResult = await pool.query(
-      `SELECT taskid, reportids, status,progress, starttime, route 
+      `SELECT taskid, reportids, status, starttime, route 
        FROM taskrequests 
        WHERE assignedworkerid = $1 AND status != 'completed'`,
       [workerId]
@@ -345,7 +345,6 @@ router.get('/assigned-tasks', authenticateToken, checkWorkerOrAdminRole, async (
           distance: distance,
           time: task.starttime ? task.starttime.toISOString() : 'Not Started',
           status: task.status,
-          progress: task.progress,
         });
       }
     }
@@ -367,7 +366,7 @@ router.get('/task-route/:taskid', authenticateToken, checkWorkerOrAdminRole, asy
   try {
     // Fetch the task details, ensuring it belongs to the worker
     const taskResult = await pool.query(
-      `SELECT taskid, reportids, assignedworkerid, status, route, progress, starttime, endtime
+      `SELECT taskid, reportids, assignedworkerid, status, route, starttime, endtime
        FROM taskrequests
        WHERE taskid = $1 AND assignedworkerid = $2`,
       [taskId, workerId]
