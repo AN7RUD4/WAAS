@@ -93,7 +93,7 @@ function kmeansClustering(points, k) {
     groupedClusters[clusterIdx].push(point);
   });
 
-  return groupedClusters.filter(cluster => cluster.length > 0);
+  return groupedClusters.filter(cluster => cluster.length>0);
 }
 
 // Step 2: Munkres Algorithm for Worker Allocation
