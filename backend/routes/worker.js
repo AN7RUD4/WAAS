@@ -175,7 +175,7 @@ router.post('/group-and-assign-reports', authenticateToken, checkWorkerOrAdminRo
         wastetype: row.wastetype,
         lat: locationMatch ? parseFloat(locationMatch[2]) : null,
         lng: locationMatch ? parseFloat(locationMatch[1]) : null,
-        created_at: new Date(row.created_at),
+        created_at: new Date(row.datetime),
       };
     });
 
