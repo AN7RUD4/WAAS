@@ -170,7 +170,7 @@ router.post('/group-and-assign-reports', authenticateToken, checkWorkerOrAdminRo
     let result;
     try {
       result = await pool.query(
-        `SELECT reportid, wastetype, location, datetime
+        `SELECT reportid, wastetype, ST_AsText(location) AS location, datetime
          FROM garbagereports
          WHERE reportid NOT IN (
            SELECT unnest(reportids) FROM taskrequests

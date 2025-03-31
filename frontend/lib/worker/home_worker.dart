@@ -54,7 +54,10 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
   @override
   void initState() {
     super.initState();
-    Uri.parse('$apiBaseUrl/worker/group-and-assign-reports');
+    http.MultipartRequest(
+        'POST',
+        Uri.parse('$apiBaseUrl/user/report-waste'),
+      );
     _assignedWorksFuture = fetchAssignedWorks();
   }
 
