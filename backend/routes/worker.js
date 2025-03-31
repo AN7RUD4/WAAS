@@ -3,8 +3,8 @@ const express = require('express');
 const { Pool } = require('pg');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
-const KMeans = require('kmeans-js'); // For K-Means clustering
-const Munkres = require('munkres-js'); // For Hungarian Algorithm
+const KMeans = require('kmeans-js'); 
+const Munkres = require('munkres-js'); 
 
 const router = express.Router();
 router.use(cors());
