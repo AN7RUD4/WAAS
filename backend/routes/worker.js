@@ -3,17 +3,25 @@ const express = require('express');
 const { Pool } = require('pg');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
-const KMeans = require('kmeans-js'); 
-const Munkres = require('munkres-js'); 
+const KMeans = require('kmeans-js');
+const Munkres = require('munkres-js');
 
 const router = express.Router();
 router.use(cors());
 router.use(express.json());
 
-// Database connection
+// Database connection with better configuration
 const pool = new Pool({
   connectionString: 'postgresql://postgres.hrzroqrgkvzhomsosqzl:7H.6k2wS*F$q2zY@aws-0-ap-south-1.pooler.supabase.com:6543/postgres',
   ssl: { rejectUnauthorized: false },
+  max: 10, // Max connections (adjust based on Supabase limits)
+  idleTimeoutMillis: 30000, // Close idle connections after 30s
+  connectionTimeoutMillis: 2000, // Timeout if connection fails
+});
+
+// Handle pool errors to prevent crashes
+pool.on('error', (err, client) => {
+  console.error('Unexpected error on idle client:', err.message, err.stack);
 });
 
 // Test database connection on startup
@@ -59,7 +67,21 @@ const checkWorkerOrAdminRole = (req, res, next) => {
     console.log('Access denied: role not worker or admin');
     return res.status(403).json({ message: 'Access denied: Only workers or admins can access this endpoint' });
   }
+  console.log('Role check passed, proceeding to endpoint');
   next();
+};
+
+// Retry query function for transient failures
+const retryQuery = async (query, params, retries = 3, delay = 1000) => {
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await pool.query(query, params);
+    } catch (err) {
+      console.error(`Query attempt ${i + 1} failed:`, err.message);
+      if (i === retries - 1) throw err;
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
 };
 
 // Haversine Distance Calculation
@@ -77,96 +99,213 @@ function haversineDistance(lat1, lon1, lat2, lon2) {
 
 // Step 1: K-Means Clustering
 function kmeansClustering(points, k) {
-  if (points.length < k) return points.map(point => [point]); // Not enough points to cluster
-
+  if (points.length < k) return points.map(point => [point]);
   const kmeans = new KMeans();
   const data = points.map(p => [p.lat, p.lng]);
   kmeans.cluster(data, k);
-
-  // Wait for clustering to complete
-  while (kmeans.step()) {
-    // Continue iterating until convergence
-  }
-
+  while (kmeans.step()) {}
   const clusters = Array.from({ length: k }, () => []);
   points.forEach((point, idx) => {
     const clusterIdx = kmeans.nearest([point.lat, point.lng])[0];
     clusters[clusterIdx].push(point);
   });
-  
-  return clusters.filter(cluster => cluster.length > 0); // Remove empty clusters
+  return clusters.filter(cluster => cluster.length > 0);
 }
 
 // Step 2: Munkres Algorithm for Worker Allocation
 function assignWorkersToClusters(clusters, workers) {
   const assignments = [];
-
   for (const cluster of clusters) {
     if (workers.length === 0) break;
-
     const centroid = {
       lat: cluster.reduce((sum, r) => sum + r.lat, 0) / cluster.length,
       lng: cluster.reduce((sum, r) => sum + r.lng, 0) / cluster.length,
     };
-
-    // Create a cost matrix: distance between each worker and the cluster centroid
     const costMatrix = workers.map(worker =>
       haversineDistance(worker.lat, worker.lng, centroid.lat, centroid.lng)
     );
-
-    // Run Hungarian Algorithm using munkres-js
     const munkres = new Munkres();
-    const indices = munkres.compute(costMatrix.map(row => [row])); // Convert to 2D array
-
-    // Find the first valid assignment
+    const indices = munkres.compute(costMatrix.map(row => [row]));
     const workerIdx = indices.find(([workerIdx]) => workerIdx !== null)?.[0];
-    if (workerIdx === undefined || workerIdx >= workers.length) continue; // No valid assignment
-
+    if (workerIdx === undefined || workerIdx >= workers.length) continue;
     const assignedWorker = workers[workerIdx];
-
-    // Remove the assigned worker from the pool
     workers.splice(workerIdx, 1);
-
     assignments.push({ cluster, worker: assignedWorker });
   }
-
   return assignments;
 }
 
 // Step 3: TSP Route Optimization (Nearest Neighbor Heuristic)
 function solveTSP(points, worker) {
   if (points.length === 0) return [];
-
-  // Start from the worker's location
   const route = [{ lat: worker.lat, lng: worker.lng }];
   const unvisited = [...points];
   let current = { lat: worker.lat, lng: worker.lng };
-
-  // Nearest Neighbor: Always go to the closest unvisited point
   while (unvisited.length > 0) {
     const nearest = unvisited.reduce((closest, point) => {
       const distance = haversineDistance(current.lat, current.lng, point.lat, point.lng);
       return (!closest || distance < closest.distance) ? { point, distance } : closest;
     }, null);
-
     route.push({ lat: nearest.point.lat, lng: nearest.point.lng });
     current = { lat: nearest.point.lat, lng: nearest.point.lng };
     unvisited.splice(unvisited.indexOf(nearest.point), 1);
   }
-
   return route;
 }
 
 router.post('/group-and-assign-reports', authenticateToken, checkWorkerOrAdminRole, async (req, res) => {
   console.log('Reached /group-and-assign-reports endpoint');
   try {
+    console.log('Starting /group-and-assign-reports execution');
+    const { startDate } = req.body;
+    const k = 3;
+    console.log('Request body:', req.body);
+
+    // Test connection
     console.log('Testing database connection...');
-    const testResult = await pool.query('SELECT NOW()');
+    const testResult = await retryQuery('SELECT NOW()');
     console.log('Database test result:', testResult.rows);
-    res.status(200).json({ message: 'DB test successful', time: testResult.rows[0].now });
+
+    // Step 1: Fetch all unassigned reports
+    console.log('Fetching unassigned reports from garbagereports...');
+    const result = await retryQuery(
+      `SELECT reportid, wastetype, location, datetime
+       FROM garbagereports
+       WHERE reportid NOT IN (
+         SELECT unnest(reportids) FROM taskrequests
+       )
+       ORDER BY datetime ASC`
+    );
+    console.log('Fetched reports:', result.rows);
+
+    let reports = result.rows.map(row => {
+      const locationMatch = row.location.match(/POINT\(([^ ]+) ([^)]+)\)/);
+      return {
+        reportid: row.reportid,
+        wastetype: row.wastetype,
+        lat: locationMatch ? parseFloat(locationMatch[2]) : null,
+        lng: locationMatch ? parseFloat(locationMatch[1]) : null,
+        created_at: new Date(row.datetime),
+      };
+    });
+
+    if (!reports.length) {
+      console.log('No unassigned reports found, exiting endpoint');
+      return res.status(200).json({ message: 'No unassigned reports found' });
+    }
+
+    reports = reports.filter(r => r.lat !== null && r.lng !== null);
+    console.log('Filtered reports with valid locations:', reports);
+
+    const processedReports = new Set();
+    const assignments = [];
+
+    while (reports.length > 0) {
+      console.log('Entering temporal filtering loop, remaining reports:', reports.length);
+      const T0 = startDate ? new Date(startDate) : reports[0].created_at;
+      const T0Plus2Days = new Date(T0);
+      T0Plus2Days.setDate(T0.getDate() + 2);
+      console.log('Temporal window - T0:', T0, 'T0Plus2Days:', T0Plus2Days);
+
+      const timeFilteredReports = reports.filter(
+        report =>
+          report.created_at >= T0 &&
+          report.created_at <= T0Plus2Days &&
+          !processedReports.has(report.reportid)
+      );
+      console.log('Time-filtered reports:', timeFilteredReports);
+
+      if (timeFilteredReports.length === 0) {
+        console.log('No reports within temporal window, breaking loop');
+        break;
+      }
+
+      console.log('Performing K-Means clustering...');
+      const clusters = kmeansClustering(timeFilteredReports, Math.min(k, timeFilteredReports.length));
+      console.log('Clusters formed:', clusters);
+
+      console.log('Fetching available workers...');
+      const workerResult = await retryQuery(
+        `SELECT userid, location
+         FROM users
+         WHERE role = 'worker'
+         AND userid NOT IN (
+           SELECT assignedworkerid
+           FROM taskrequests
+           WHERE status != 'completed'
+           GROUP BY assignedworkerid
+           HAVING COUNT(*) >= 5
+         )`
+      );
+      let workers = workerResult.rows.map(row => {
+        const locMatch = row.location ? row.location.match(/POINT\(([^ ]+) ([^)]+)\)/) : null;
+        return {
+          userid: row.userid,
+          lat: locMatch ? parseFloat(locMatch[2]) : 10.235865,
+          lng: locMatch ? parseFloat(locMatch[1]) : 76.405676,
+        };
+      });
+      console.log('Available workers:', workers);
+
+      if (workers.length === 0) {
+        console.log('No workers available, breaking loop');
+        break;
+      }
+
+      console.log('Assigning workers to clusters...');
+      const clusterAssignments = assignWorkersToClusters(clusters, workers);
+      console.log('Cluster assignments:', clusterAssignments);
+
+      if (clusterAssignments.length === 0) {
+        console.log('No assignments made, skipping insertion');
+        break;
+      }
+
+      for (const { cluster, worker } of clusterAssignments) {
+        console.log(`Processing cluster for worker ${worker.userid}, reports:`, cluster);
+        const route = solveTSP(cluster, worker);
+        console.log('TSP Route:', route);
+
+        const routeJson = {
+          start: { lat: route[0].lat, lng: route[0].lng },
+          waypoints: route.slice(1, -1).map(point => ({ lat: point.lat, lng: point.lng })),
+          end: { lat: route[route.length - 1].lat, lng: route[route.length - 1].lng },
+        };
+        console.log('Formatted routeJson:', routeJson);
+
+        const reportIds = cluster.map(report => report.reportid);
+        console.log('Report IDs for task:', reportIds);
+
+        console.log('Inserting task into taskrequests...');
+        const taskResult = await retryQuery(
+          `INSERT INTO taskrequests (reportids, assignedworkerid, status, starttime, route)
+           VALUES ($1, $2, 'assigned', NOW(), $3)
+           RETURNING taskid`,
+          [reportIds, worker.userid, routeJson]
+        );
+        const taskId = taskResult.rows[0].taskid;
+        console.log(`Task inserted successfully with taskId: ${taskId}`);
+
+        cluster.forEach(report => processedReports.add(report.reportid));
+        assignments.push({
+          taskId: taskId,
+          reportIds: reportIds,
+          assignedWorkerId: worker.userid,
+          route: routeJson,
+        });
+      }
+
+      reports = reports.filter(r => !processedReports.has(r.reportid));
+    }
+
+    console.log('Endpoint completed successfully, assignments:', assignments);
+    res.status(200).json({
+      message: 'Reports grouped and assigned successfully',
+      assignments,
+    });
   } catch (error) {
-    console.error('DB test error:', error.message, error.stack);
-    res.status(500).json({ error: 'DB Error', details: error.message });
+    console.error('Error in group-and-assign-reports:', error.message, error.stack);
+    res.status(500).json({ error: 'Internal Server Error', details: error.message });
   }
 });
 
