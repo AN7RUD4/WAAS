@@ -3,25 +3,17 @@ const express = require('express');
 const { Pool } = require('pg');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
-const KMeans = require('kmeans-js');
-const Munkres = require('munkres-js');
+const KMeans = require('kmeans-js'); 
+const Munkres = require('munkres-js'); 
 
 const router = express.Router();
 router.use(cors());
 router.use(express.json());
 
-// Database connection with better configuration
+// Database connection
 const pool = new Pool({
   connectionString: 'postgresql://postgres.hrzroqrgkvzhomsosqzl:7H.6k2wS*F$q2zY@aws-0-ap-south-1.pooler.supabase.com:6543/postgres',
   ssl: { rejectUnauthorized: false },
-  max: 10, // Max connections (adjust based on Supabase limits)
-  idleTimeoutMillis: 30000, // Close idle connections after 30s
-  connectionTimeoutMillis: 2000, // Timeout if connection fails
-});
-
-// Handle pool errors to prevent crashes
-pool.on('error', (err, client) => {
-  console.error('Unexpected error on idle client:', err.message, err.stack);
 });
 
 // Test database connection on startup
@@ -67,21 +59,6 @@ const checkWorkerOrAdminRole = (req, res, next) => {
     console.log('Access denied: role not worker or admin');
     return res.status(403).json({ message: 'Access denied: Only workers or admins can access this endpoint' });
   }
-  console.log('Role check passed, proceeding to endpoint');
-  next();
-};
-
-// Retry query function for transient failures
-const retryQuery = async (query, params, retries = 3, delay = 1000) => {
-  for (let i = 0; i < retries; i++) {
-    try {
-      return await pool.query(query, params);
-    } catch (err) {
-      console.error(`Query attempt ${i + 1} failed:`, err.message);
-      if (i === retries - 1) throw err;
-      await new Promise(resolve => setTimeout(resolve, delay));
-    }
-  }
 };
 
 // Haversine Distance Calculation
@@ -99,83 +76,110 @@ function haversineDistance(lat1, lon1, lat2, lon2) {
 
 // Step 1: K-Means Clustering
 function kmeansClustering(points, k) {
-  if (points.length < k) return points.map(point => [point]);
+  if (points.length < k) return points.map(point => [point]); // Not enough points to cluster
+
   const kmeans = new KMeans();
   const data = points.map(p => [p.lat, p.lng]);
   kmeans.cluster(data, k);
-  while (kmeans.step()) {}
+
+  // Wait for clustering to complete
+  while (kmeans.step()) {
+    // Continue iterating until convergence
+  }
+
   const clusters = Array.from({ length: k }, () => []);
   points.forEach((point, idx) => {
     const clusterIdx = kmeans.nearest([point.lat, point.lng])[0];
     clusters[clusterIdx].push(point);
   });
-  return clusters.filter(cluster => cluster.length > 0);
+  
+  return clusters.filter(cluster => cluster.length > 0); // Remove empty clusters
 }
 
 // Step 2: Munkres Algorithm for Worker Allocation
 function assignWorkersToClusters(clusters, workers) {
   const assignments = [];
+
   for (const cluster of clusters) {
     if (workers.length === 0) break;
+
     const centroid = {
       lat: cluster.reduce((sum, r) => sum + r.lat, 0) / cluster.length,
       lng: cluster.reduce((sum, r) => sum + r.lng, 0) / cluster.length,
     };
+
+    // Create a cost matrix: distance between each worker and the cluster centroid
     const costMatrix = workers.map(worker =>
       haversineDistance(worker.lat, worker.lng, centroid.lat, centroid.lng)
     );
+
+    // Run Hungarian Algorithm using munkres-js
     const munkres = new Munkres();
-    const indices = munkres.compute(costMatrix.map(row => [row]));
+    const indices = munkres.compute(costMatrix.map(row => [row])); // Convert to 2D array
+
+    // Find the first valid assignment
     const workerIdx = indices.find(([workerIdx]) => workerIdx !== null)?.[0];
-    if (workerIdx === undefined || workerIdx >= workers.length) continue;
+    if (workerIdx === undefined || workerIdx >= workers.length) continue; // No valid assignment
+
     const assignedWorker = workers[workerIdx];
+
+    // Remove the assigned worker from the pool
     workers.splice(workerIdx, 1);
+
     assignments.push({ cluster, worker: assignedWorker });
   }
+
   return assignments;
 }
 
 // Step 3: TSP Route Optimization (Nearest Neighbor Heuristic)
 function solveTSP(points, worker) {
   if (points.length === 0) return [];
+
+  // Start from the worker's location
   const route = [{ lat: worker.lat, lng: worker.lng }];
   const unvisited = [...points];
   let current = { lat: worker.lat, lng: worker.lng };
+
+  // Nearest Neighbor: Always go to the closest unvisited point
   while (unvisited.length > 0) {
     const nearest = unvisited.reduce((closest, point) => {
       const distance = haversineDistance(current.lat, current.lng, point.lat, point.lng);
       return (!closest || distance < closest.distance) ? { point, distance } : closest;
     }, null);
+
     route.push({ lat: nearest.point.lat, lng: nearest.point.lng });
     current = { lat: nearest.point.lat, lng: nearest.point.lng };
     unvisited.splice(unvisited.indexOf(nearest.point), 1);
   }
+
   return route;
 }
 
 router.post('/group-and-assign-reports', authenticateToken, checkWorkerOrAdminRole, async (req, res) => {
-  console.log('Reached /group-and-assign-reports endpoint');
+  console.log('Reached /group-and-assign-reports endpoint'); // Confirm endpoint is hit
   try {
     console.log('Starting /group-and-assign-reports execution');
     const { startDate } = req.body;
     const k = 3;
     console.log('Request body:', req.body);
 
-    // Test connection
-    console.log('Testing database connection...');
-    const testResult = await retryQuery('SELECT NOW()');
-    console.log('Database test result:', testResult.rows);
-
     // Step 1: Fetch all unassigned reports
     console.log('Fetching unassigned reports from garbagereports...');
-    const result = await retryQuery(
-      `SELECT reportid, wastetype, location, datetime
-       FROM garbagereports
-       WHERE reportid NOT IN (
-         SELECT unnest(reportids) FROM taskrequests
-       )
-       ORDER BY datetime ASC`
-    );
+    let result;
+    try {
+      result = await pool.query(
+        `SELECT reportid, wastetype, location, datetime
+         FROM garbagereports
+         WHERE reportid NOT IN (
+           SELECT unnest(reportids) FROM taskrequests
+         )
+         ORDER BY datetime ASC`
+      );
+    } catch (dbError) {
+      console.error('Database query error:', dbError.message, dbError.stack);
+      throw dbError;
+    }
     console.log('Fetched reports:', result.rows);
 
     let reports = result.rows.map(row => {
@@ -225,18 +229,24 @@ router.post('/group-and-assign-reports', authenticateToken, checkWorkerOrAdminRo
       console.log('Clusters formed:', clusters);
 
       console.log('Fetching available workers...');
-      const workerResult = await retryQuery(
-        `SELECT userid, location
-         FROM users
-         WHERE role = 'worker'
-         AND userid NOT IN (
-           SELECT assignedworkerid
-           FROM taskrequests
-           WHERE status != 'completed'
-           GROUP BY assignedworkerid
-           HAVING COUNT(*) >= 5
-         )`
-      );
+      let workerResult;
+      try {
+        workerResult = await pool.query(
+          `SELECT userid, location
+           FROM users
+           WHERE role = 'worker'
+           AND userid NOT IN (
+             SELECT assignedworkerid
+             FROM taskrequests
+             WHERE status != 'completed'
+             GROUP BY assignedworkerid
+             HAVING COUNT(*) >= 5
+           )`
+        );
+      } catch (dbError) {
+        console.error('Worker query error:', dbError.message, dbError.stack);
+        throw dbError;
+      }
       let workers = workerResult.rows.map(row => {
         const locMatch = row.location ? row.location.match(/POINT\(([^ ]+) ([^)]+)\)/) : null;
         return {
@@ -277,12 +287,18 @@ router.post('/group-and-assign-reports', authenticateToken, checkWorkerOrAdminRo
         console.log('Report IDs for task:', reportIds);
 
         console.log('Inserting task into taskrequests...');
-        const taskResult = await retryQuery(
-          `INSERT INTO taskrequests (reportids, assignedworkerid, status, starttime, route)
-           VALUES ($1, $2, 'assigned', NOW(), $3)
-           RETURNING taskid`,
-          [reportIds, worker.userid, routeJson]
-        );
+        let taskResult;
+        try {
+          taskResult = await pool.query(
+            `INSERT INTO taskrequests (reportids, assignedworkerid, status, starttime, route)
+             VALUES ($1, $2, 'assigned', NOW(), $3)
+             RETURNING taskid`,
+            [reportIds, worker.userid, routeJson]
+          );
+        } catch (dbError) {
+          console.error('Task insertion error:', dbError.message, dbError.stack);
+          throw dbError;
+        }
         const taskId = taskResult.rows[0].taskid;
         console.log(`Task inserted successfully with taskId: ${taskId}`);
 
