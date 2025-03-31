@@ -27,40 +27,6 @@ pool.connect((err, client, release) => {
   }
 });
 
-// Middleware to verify JWT token
-const authenticateToken = (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-  console.log('Auth header:', authHeader);
-
-  if (!token) {
-    console.log('No token provided');
-    return res.status(401).json({ message: 'Authentication token required' });
-  }
-
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'passwordKey');
-    console.log('Decoded token:', decoded);
-    if (!decoded.userid || !decoded.role) {
-      console.log('Invalid token: missing userid or role');
-      return res.status(403).json({ message: 'Invalid token: Missing userid or role' });
-    }
-    req.user = decoded;
-    next();
-  } catch (err) {
-    console.error('Token verification error:', err.message);
-    return res.status(403).json({ message: 'Invalid or expired token' });
-  }
-};
-
-const checkWorkerOrAdminRole = (req, res, next) => {
-  console.log('Checking role for user:', req.user);
-  if (!req.user || (req.user.role.toLowerCase() !== 'worker' && req.user.role.toLowerCase() !== 'admin')) {
-    console.log('Access denied: role not worker or admin');
-    return res.status(403).json({ message: 'Access denied: Only workers or admins can access this endpoint' });
-  }
-};
-
 // Haversine Distance Calculation
 function haversineDistance(lat1, lon1, lat2, lon2) {
   const R = 6371; // Earth radius in kilometers
@@ -155,6 +121,39 @@ function solveTSP(points, worker) {
 
   return route;
 }
+
+// Middleware to verify JWT token
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+  console.log('Auth header:', authHeader);
+
+  if (!token) {
+    console.log('No token provided');
+    return res.status(401).json({ message: 'Authentication token required' });
+  }
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'passwordKey');
+    console.log('Decoded token:', decoded);
+    if (!decoded.userid || !decoded.role) {
+      console.log('Invalid token: missing userid or role');
+      return res.status(403).json({ message: 'Invalid token: Missing userid or role' });
+    }
+    req.user = decoded;
+    next();
+  } catch (err) {
+    console.error('Token verification error:', err.message);
+    return res.status(403).json({ message: 'Invalid or expired token' });
+  }
+};
+
+const checkWorkerOrAdminRole = (req, res, next) => {
+  console.log('Checking role for user:', req.user);
+  if (!req.user || (req.user.role.toLowerCase() !== 'worker' && req.user.role.toLowerCase() !== 'admin')) {
+    console.log('Access denied: role not worker or admin');
+    return res.status(403).json({ message: 'Access denied: Only workers or admins can access this endpoint' });
+  }
 
 router.post('/group-and-assign-reports', authenticateToken, checkWorkerOrAdminRole, async (req, res) => {
   console.log('Reached /group-and-assign-reports endpoint'); // Confirm endpoint is hit
@@ -613,6 +612,6 @@ router.get('/completed-tasks', authenticateToken, checkWorkerOrAdminRole, async 
     console.error('Error fetching completed tasks in worker.js:', error.message, error.stack);
     res.status(500).json({ error: 'Internal Server Error', details: error.message });
   }
-});
+});}
 
 module.exports=router;
