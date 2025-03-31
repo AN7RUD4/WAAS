@@ -31,27 +31,32 @@ pool.connect((err, client, release) => {
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
+  console.log('Auth header:', authHeader);
 
   if (!token) {
+    console.log('No token provided');
     return res.status(401).json({ message: 'Authentication token required' });
   }
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'passwordKey');
+    console.log('Decoded token:', decoded);
     if (!decoded.userid || !decoded.role) {
+      console.log('Invalid token: missing userid or role');
       return res.status(403).json({ message: 'Invalid token: Missing userid or role' });
     }
     req.user = decoded;
     next();
   } catch (err) {
-    console.error('Token verification error in worker.js:', err.message);
+    console.error('Token verification error:', err.message);
     return res.status(403).json({ message: 'Invalid or expired token' });
   }
 };
 
-// Middleware to check if the user is a worker or admin
 const checkWorkerOrAdminRole = (req, res, next) => {
+  console.log('Checking role for user:', req.user);
   if (!req.user || (req.user.role.toLowerCase() !== 'worker' && req.user.role.toLowerCase() !== 'admin')) {
+    console.log('Access denied: role not worker or admin');
     return res.status(403).json({ message: 'Access denied: Only workers or admins can access this endpoint' });
   }
   next();
