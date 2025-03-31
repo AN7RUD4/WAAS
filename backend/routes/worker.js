@@ -298,7 +298,7 @@ router.get('/assigned-tasks', authenticateToken, checkWorkerOrAdminRole, async (
 
     // First get all tasks assigned to this worker
     const tasksResult = await pool.query(
-      `SELECT taskid, reportids, status, progress, starttime, route 
+      `SELECT taskid, reportids, status, starttime, route 
        FROM taskrequests 
        WHERE assignedworkerid = $1 AND status != 'completed'`,
       [workerId]
