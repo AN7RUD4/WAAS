@@ -289,7 +289,7 @@ router.post('/group-and-assign-reports', authenticateToken, checkWorkerOrAdminRo
 });
 
 // Fetch Assigned Tasks for Worker
-router.get('/assigned-tasks', authenticateToken, checkWorkerRole, async (req, res) => {
+router.get('/assigned-tasks', authenticateToken, checkWorkerOrAdminRole, async (req, res) => {
   try {
     const workerId = parseInt(req.user.userid, 10);
     if (isNaN(workerId)) {
@@ -358,7 +358,7 @@ router.get('/assigned-tasks', authenticateToken, checkWorkerRole, async (req, re
 });
 
 // Updated /task-route/:taskid endpoint
-router.get('/task-route/:taskid', authenticateToken, checkWorkerRole, async (req, res) => {
+router.get('/task-route/:taskid', authenticateToken, checkWorkerOrAdminRole, async (req, res) => {
   const taskId = parseInt(req.params.taskid, 10);
   const workerId = req.user.userid;
   const workerLat = parseFloat(req.query.workerLat) || 10.235865;
@@ -474,7 +474,7 @@ router.get('/task-route/:taskid', authenticateToken, checkWorkerRole, async (req
 });
 
 // Update Task Progress
-router.patch('/update-progress', authenticateToken, checkWorkerRole, async (req, res) => {
+router.patch('/update-progress', authenticateToken, checkWorkerOrAdminRole, async (req, res) => {
   try {
     const { taskId, progress, status } = req.body;
     if (!taskId || progress === undefined || !status) {
@@ -534,7 +534,7 @@ router.patch('/update-progress', authenticateToken, checkWorkerRole, async (req,
 });
 
 // Fetch Completed Tasks
-router.get('/completed-tasks', authenticateToken, checkWorkerRole, async (req, res) => {
+router.get('/completed-tasks', authenticateToken, checkWorkerOrAdminRole, async (req, res) => {
   try {
     const workerId = parseInt(req.user.userid, 10);
     if (isNaN(workerId)) {
