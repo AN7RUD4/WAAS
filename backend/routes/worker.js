@@ -77,6 +77,10 @@ function haversineDistance(lat1, lon1, lat2, lon2) {
 
 // Step 1: K-Means Clustering
 function kmeansClustering(points, k) {
+  if (!Array.isArray(points) || points.length === 0) {
+    console.log('kmeansClustering: Invalid or empty points array, returning empty clusters');
+    return [];
+  }
   if (points.length < k) return points.map(point => [point]);
 
   const kmeans = new KMeans();
@@ -85,11 +89,9 @@ function kmeansClustering(points, k) {
 
   while (kmeans.step()) {}
 
-  // Retrieve centroids
   const centroids = kmeans.means;
   const clusters = Array.from({ length: k }, () => []);
 
-  // Manually assign each point to the closest centroid
   points.forEach(point => {
     let minDist = Infinity;
     let bestCluster = 0;
@@ -105,7 +107,7 @@ function kmeansClustering(points, k) {
     clusters[bestCluster].push(point);
   });
 
-  return clusters.filter(cluster => cluster.length >0);
+  return clusters.filter(cluster => cluster.length > 0);
 }
 
 // Step 2: Munkres Algorithm for Worker Allocation
