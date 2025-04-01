@@ -77,75 +77,35 @@ function haversineDistance(lat1, lon1, lat2, lon2) {
 
 // Step 1: K-Means Clustering
 function kmeansClustering(points, k) {
-  // Input validation
-  if (!points || !Array.isArray(points)) throw new Error('Invalid points array');
-  if (points.length === 0) return [];
-  if (k <= 0) throw new Error('k must be positive');
-  
-  // If fewer points than clusters, return each point as its own cluster
-  if (points.length <= k) {
-    return points.map(point => [point]);
-  }
+  if (points.length < k) return points.map(point => [point]);
 
-  try {
-    // Convert points to [lat,lng] arrays
-    const data = points.map(p => [p.lat, p.lng]);
-    
-    // Initialize K-means with geographic distance function
-    const kmeans = new KMeans({
-      k: k,
-      maxIterations: 100,
-      distanceFunction: (a, b) => haversineDistance(a[0], a[1], b[0], b[1])
-    });
+  const kmeans = new KMeans();
+  const data = points.map(p => [p.lat, p.lng]);
+  kmeans.cluster(data, k);
 
-    // Run clustering
-    const result = kmeans.cluster(data);
-    
-    // Verify we got the expected number of clusters
-    if (!result.clusters || result.clusters.length !== data.length) {
-      throw new Error('Clustering failed');
-    }
+  while (kmeans.step()) {}
 
-    // Group points by their cluster assignments
-    const clusters = Array.from({ length: k }, () => []);
-    points.forEach((point, index) => {
-      const clusterIndex = result.clusters[index];
-      if (clusterIndex !== undefined && clusterIndex < k) {
-        clusters[clusterIndex].push(point);
+  // Retrieve centroids
+  const centroids = kmeans.means;
+  const clusters = Array.from({ length: k }, () => []);
+
+  // Manually assign each point to the closest centroid
+  points.forEach(point => {
+    let minDist = Infinity;
+    let bestCluster = 0;
+
+    centroids.forEach((centroid, idx) => {
+      const dist = haversineDistance(point.lat, point.lng, centroid[0], centroid[1]);
+      if (dist < minDist) {
+        minDist = dist;
+        bestCluster = idx;
       }
     });
 
-    // Filter out empty clusters and return
-    return clusters.filter(cluster => cluster.length > 0);
+    clusters[bestCluster].push(point);
+  });
 
-  } catch (error) {
-    console.error('K-means clustering failed, using fallback:', error);
-    
-    // Fallback 1: Simple geographic grouping
-    try {
-      return geographicFallbackClustering(points, k);
-    } catch (fallbackError) {
-      console.error('Fallback clustering failed:', fallbackError);
-      // Final fallback: return all points in one cluster
-      return [points];
-    }
-  }
-}
-
-// Fallback clustering when K-means fails
-function geographicFallbackClustering(points, k) {
-  // Sort points by latitude
-  const sorted = [...points].sort((a, b) => a.lat - b.lat);
-  
-  // Simple grouping - divide sorted points into k equal parts
-  const clusterSize = Math.ceil(sorted.length / k);
-  const clusters = [];
-  
-  for (let i = 0; i < sorted.length; i += clusterSize) {
-    clusters.push(sorted.slice(i, i + clusterSize));
-  }
-  
-  return clusters;
+  return clusters.filter(cluster => cluster.length >0);
 }
 
 // Step 2: Munkres Algorithm for Worker Allocation
