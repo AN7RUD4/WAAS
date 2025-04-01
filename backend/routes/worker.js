@@ -3,20 +3,18 @@ const express = require('express');
 const { Pool } = require('pg');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
-const KMeans = require('kmeans-js'); 
-const Munkres = require('munkres-js'); 
+const { kmeans } = require('ml-kmeans');
+const Munkres = require('munkres-js');
 
 const router = express.Router();
 router.use(cors());
 router.use(express.json());
 
-// Database connection
 const pool = new Pool({
   connectionString: 'postgresql://postgres.hrzroqrgkvzhomsosqzl:7H.6k2wS*F$q2zY@aws-0-ap-south-1.pooler.supabase.com:6543/postgres',
   ssl: { rejectUnauthorized: false },
 });
 
-// Test database connection on startup
 pool.connect((err, client, release) => {
   if (err) {
     console.error('Error connecting to the database in worker.js:', err.stack);
@@ -27,24 +25,17 @@ pool.connect((err, client, release) => {
   }
 });
 
-// Middleware to verify JWT token
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
   console.log('Auth header:', authHeader);
 
-  if (!token) {
-    console.log('No token provided');
-    return res.status(401).json({ message: 'Authentication token required' });
-  }
+  if (!token) return res.status(401).json({ message: 'Authentication token required' });
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'passwordKey');
     console.log('Decoded token:', decoded);
-    if (!decoded.userid || !decoded.role) {
-      console.log('Invalid token: missing userid or role');
-      return res.status(403).json({ message: 'Invalid token: Missing userid or role' });
-    }
+    if (!decoded.userid || !decoded.role) return res.status(403).json({ message: 'Invalid token: Missing userid or role' });
     req.user = decoded;
     next();
   } catch (err) {
@@ -56,15 +47,13 @@ const authenticateToken = (req, res, next) => {
 const checkWorkerOrAdminRole = (req, res, next) => {
   console.log('Checking role for user:', req.user);
   if (!req.user || (req.user.role.toLowerCase() !== 'worker' && req.user.role.toLowerCase() !== 'admin')) {
-    console.log('Access denied: role not worker or admin');
     return res.status(403).json({ message: 'Access denied: Only workers or admins can access this endpoint' });
   }
   next();
 };
 
-// Haversine Distance Calculation
 function haversineDistance(lat1, lon1, lat2, lon2) {
-  const R = 6371; // Earth radius in kilometers
+  const R = 6371;
   const dLat = (lat2 - lat1) * Math.PI / 180;
   const dLon = (lon2 - lon1) * Math.PI / 180;
   const a =
@@ -72,10 +61,9 @@ function haversineDistance(lat1, lon1, lat2, lon2) {
     Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
     Math.sin(dLon / 2) * Math.sin(dLon / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c; // Distance in kilometers
+  return R * c;
 }
 
-// Step 1: K-Means Clustering
 function kmeansClustering(points, k) {
   if (!Array.isArray(points) || points.length === 0) {
     console.log('kmeansClustering: Invalid or empty points array, returning empty clusters');
@@ -87,29 +75,27 @@ function kmeansClustering(points, k) {
   }
 
   console.log('kmeansClustering: Starting with points:', points);
-  const kmeans = new KMeans();
   const data = points.map(p => [p.lat, p.lng]);
   console.log('kmeansClustering: Data for clustering:', data);
 
   try {
-    kmeans.cluster(data, k);
-    let iterations = 0;
-    const maxIterations = 100; // Prevent infinite loop
-    while (kmeans.step() && iterations < maxIterations) {
-      iterations++;
-    }
-    console.log(`kmeansClustering: Completed ${iterations} iterations`);
+    const result = kmeans(data, k, { maxIterations: 100 });
+    const centroids = result.centroids.map(c => [c[0], c[1]]);
+    console.log('kmeansClustering: Centroids:', centroids);
+    console.log('kmeansClustering: Cluster assignments:', result.clusters);
+
+    const clusters = Array.from({ length: k }, () => []);
+    points.forEach((point, idx) => {
+      const clusterIdx = result.clusters[idx];
+      clusters[clusterIdx].push(point);
+    });
+
+    const validClusters = clusters.filter(cluster => cluster.length > 0);
+    console.log('kmeansClustering: Resulting clusters:', validClusters);
+    return validClusters;
   } catch (error) {
     console.error('kmeansClustering: Clustering failed:', error.message);
-    return points.map(point => [point]);
-  }
-
-  const centroids = kmeans.means;
-  console.log('kmeansClustering: Centroids:', centroids);
-
-  if (!Array.isArray(centroids) || centroids.length === 0) {
     console.log('kmeansClustering: No valid centroids, attempting manual clustering');
-    // Manual fallback: Split points into k groups based on latitude
     const sortedPoints = [...points].sort((a, b) => a.lat - b.lat);
     const clusterSize = Math.ceil(points.length / k);
     const clusters = [];
@@ -123,29 +109,8 @@ function kmeansClustering(points, k) {
     console.log('kmeansClustering: Manual clusters:', clusters);
     return clusters;
   }
-
-  const clusters = Array.from({ length: k }, () => []);
-  points.forEach(point => {
-    let minDist = Infinity;
-    let bestCluster = 0;
-
-    centroids.forEach((centroid, idx) => {
-      const dist = haversineDistance(point.lat, point.lng, centroid[0], centroid[1]);
-      if (dist < minDist) {
-        minDist = dist;
-        bestCluster = idx;
-      }
-    });
-
-    clusters[bestCluster].push(point);
-  });
-
-  const validClusters = clusters.filter(cluster => cluster.length > 0);
-  console.log('kmeansClustering: Resulting clusters:', validClusters);
-  return validClusters;
 }
 
-// Step 2: Munkres Algorithm for Worker Allocation
 function assignWorkersToClusters(clusters, workers) {
   if (!clusters.length || !workers.length) {
     console.log('assignWorkersToClusters: No clusters or workers, returning empty assignments');
@@ -155,7 +120,6 @@ function assignWorkersToClusters(clusters, workers) {
   console.log('assignWorkersToClusters: Clusters:', clusters);
   console.log('assignWorkersToClusters: Workers:', workers);
 
-  // Compute full cost matrix: rows = clusters, columns = workers
   const costMatrix = clusters.map(cluster => {
     const centroid = {
       lat: cluster.reduce((sum, r) => sum + r.lat, 0) / cluster.length,
@@ -167,50 +131,71 @@ function assignWorkersToClusters(clusters, workers) {
   });
   console.log('assignWorkersToClusters: Cost matrix:', costMatrix);
 
-  // Pad matrix if necessary (more clusters than workers or vice versa)
+  if (!Array.isArray(costMatrix) || costMatrix.some(row => !Array.isArray(row))) {
+    console.error('assignWorkersToClusters: Invalid cost matrix:', costMatrix);
+    return [];
+  }
+
   const maxDim = Math.max(clusters.length, workers.length);
   const paddedMatrix = costMatrix.map(row => {
-    while (row.length < maxDim) row.push(Infinity); // Pad with Infinity for unassignable cases
-    return row;
+    const paddedRow = [...row];
+    while (paddedRow.length < maxDim) paddedRow.push(Infinity);
+    return paddedRow;
   });
   while (paddedMatrix.length < maxDim) {
     paddedMatrix.push(Array(maxDim).fill(Infinity));
   }
   console.log('assignWorkersToClusters: Padded cost matrix:', paddedMatrix);
 
-  // Run Munkres
-  const munkres = new Munkres();
-  const indices = munkres.compute(paddedMatrix);
-  console.log('assignWorkersToClusters: Munkres indices:', indices);
+  try {
+    const munkres = new Munkres();
+    const indices = munkres.compute(paddedMatrix);
+    console.log('assignWorkersToClusters: Munkres indices:', indices);
 
-  // Process assignments
-  const assignments = [];
-  const usedWorkers = new Set();
+    const assignments = [];
+    const usedWorkers = new Set();
 
-  indices.forEach(([clusterIdx, workerIdx]) => {
-    if (clusterIdx < clusters.length && workerIdx < workers.length && !usedWorkers.has(workerIdx)) {
-      assignments.push({
-        cluster: clusters[clusterIdx],
-        worker: workers[workerIdx],
-      });
-      usedWorkers.add(workerIdx);
+    indices.forEach(([clusterIdx, workerIdx]) => {
+      if (clusterIdx < clusters.length && workerIdx < workers.length && !usedWorkers.has(workerIdx)) {
+        assignments.push({
+          cluster: clusters[clusterIdx],
+          worker: workers[workerIdx],
+        });
+        usedWorkers.add(workerIdx);
+      }
+    });
+
+    console.log('assignWorkersToClusters: Assignments:', assignments);
+    return assignments;
+  } catch (error) {
+    console.error('assignWorkersToClusters: Munkres failed:', error.message);
+    const assignments = [];
+    const availableWorkers = [...workers];
+    for (const cluster of clusters) {
+      if (availableWorkers.length === 0) break;
+      const centroid = {
+        lat: cluster.reduce((sum, r) => sum + r.lat, 0) / cluster.length,
+        lng: cluster.reduce((sum, r) => sum + r.lng, 0) / cluster.length,
+      };
+      const workerIdx = availableWorkers.reduce((best, w, idx) => {
+        const dist = haversineDistance(w.lat, w.lng, centroid.lat, centroid.lng);
+        return dist < best.dist ? { idx, dist } : best;
+      }, { idx: 0, dist: Infinity }).idx;
+      assignments.push({ cluster, worker: availableWorkers[workerIdx] });
+      availableWorkers.splice(workerIdx, 1);
     }
-  });
-
-  console.log('assignWorkersToClusters: Assignments:', assignments);
-  return assignments;
+    console.log('assignWorkersToClusters: Fallback assignments:', assignments);
+    return assignments;
+  }
 }
 
-// Step 3: TSP Route Optimization (Nearest Neighbor Heuristic)
 function solveTSP(points, worker) {
   if (points.length === 0) return [];
 
-  // Start from the worker's location
   const route = [{ lat: worker.lat, lng: worker.lng }];
   const unvisited = [...points];
   let current = { lat: worker.lat, lng: worker.lng };
 
-  // Nearest Neighbor: Always go to the closest unvisited point
   while (unvisited.length > 0) {
     const nearest = unvisited.reduce((closest, point) => {
       const distance = haversineDistance(current.lat, current.lng, point.lat, point.lng);
@@ -226,33 +211,25 @@ function solveTSP(points, worker) {
 }
 
 router.post('/group-and-assign-reports', authenticateToken, checkWorkerOrAdminRole, async (req, res) => {
-  console.log('Reached /group-and-assign-reports endpoint'); // Confirm endpoint is hit
+  console.log('Reached /group-and-assign-reports endpoint');
   try {
     console.log('Starting /group-and-assign-reports execution');
     const { startDate } = req.body;
     const k = 3;
     console.log('Request body:', req.body);
 
-    // Step 1: Fetch all unassigned reports
-    console.log('Fetching unassigned reports from garbagereports...');
-    let result;
-    try {
-      result = await pool.query(
-        `SELECT reportid, wastetype, ST_AsText(location) AS location, datetime
-         FROM garbagereports
-         WHERE reportid NOT IN (
-           SELECT unnest(reportids) FROM taskrequests
-         )
-         ORDER BY datetime ASC`
-      );
-    } catch (dbError) {
-      console.error('Database query error:', dbError.message, dbError.stack);
-      throw dbError;
-    }
+    const result = await pool.query(
+      `SELECT reportid, wastetype, ST_AsText(location) AS location, datetime
+       FROM garbagereports
+       WHERE reportid NOT IN (
+         SELECT unnest(reportids) FROM taskrequests
+       )
+       ORDER BY datetime ASC`
+    );
     console.log('Fetched reports:', result.rows);
 
     let reports = result.rows.map(row => {
-      const locationMatch = row.location.match(/POINT\(([^ ]+) ([^)]+)\)/);
+      const locationMatch = row.location?.match(/POINT\(([^ ]+) ([^)]+)\)/);
       return {
         reportid: row.reportid,
         wastetype: row.wastetype,
@@ -262,20 +239,17 @@ router.post('/group-and-assign-reports', authenticateToken, checkWorkerOrAdminRo
       };
     });
 
-    if (!reports.length) {
-      console.log('No unassigned reports found, exiting endpoint');
-      return res.status(200).json({ message: 'No unassigned reports found' });
-    }
-    console.log(reports);
-
     reports = reports.filter(r => r.lat !== null && r.lng !== null);
     console.log('Filtered reports with valid locations:', reports);
+
+    if (!reports.length) {
+      return res.status(200).json({ message: 'No unassigned reports found' });
+    }
 
     const processedReports = new Set();
     const assignments = [];
 
     while (reports.length > 0) {
-      console.log('Entering temporal filtering loop, remaining reports:', reports.length);
       const T0 = startDate ? new Date(startDate) : reports[0].created_at;
       const T0Plus2Days = new Date(T0);
       T0Plus2Days.setDate(T0.getDate() + 2);
@@ -289,34 +263,24 @@ router.post('/group-and-assign-reports', authenticateToken, checkWorkerOrAdminRo
       );
       console.log('Time-filtered reports:', timeFilteredReports);
 
-      if (timeFilteredReports.length === 0) {
-        console.log('No reports within temporal window, breaking loop');
-        break;
-      }
+      if (timeFilteredReports.length === 0) break;
 
       console.log('Performing K-Means clustering...');
       const clusters = kmeansClustering(timeFilteredReports, Math.min(k, timeFilteredReports.length));
       console.log('Clusters formed:', clusters);
 
-      console.log('Fetching available workers...');
-      let workerResult;
-      try {
-        workerResult = await pool.query(
-          `SELECT userid, location
-           FROM users
-           WHERE role = 'worker'
-           AND userid NOT IN (
-             SELECT assignedworkerid
-             FROM taskrequests
-             WHERE status != 'completed'
-             GROUP BY assignedworkerid
-             HAVING COUNT(*) >= 5
-           )`
-        );
-      } catch (dbError) {
-        console.error('Worker query error:', dbError.message, dbError.stack);
-        throw dbError;
-      }
+      const workerResult = await pool.query(
+        `SELECT userid, location
+         FROM users
+         WHERE role = 'worker'
+         AND userid NOT IN (
+           SELECT assignedworkerid
+           FROM taskrequests
+           WHERE status != 'completed'
+           GROUP BY assignedworkerid
+           HAVING COUNT(*) >= 5
+         )`
+      );
       let workers = workerResult.rows.map(row => {
         const locMatch = row.location ? row.location.match(/POINT\(([^ ]+) ([^)]+)\)/) : null;
         return {
@@ -327,50 +291,30 @@ router.post('/group-and-assign-reports', authenticateToken, checkWorkerOrAdminRo
       });
       console.log('Available workers:', workers);
 
-      if (workers.length === 0) {
-        console.log('No workers available, breaking loop');
-        break;
-      }
+      if (workers.length === 0) break;
 
       console.log('Assigning workers to clusters...');
       const clusterAssignments = assignWorkersToClusters(clusters, workers);
       console.log('Cluster assignments:', clusterAssignments);
 
-      if (clusterAssignments.length === 0) {
-        console.log('No assignments made, skipping insertion');
-        break;
-      }
+      if (clusterAssignments.length === 0) break;
 
       for (const { cluster, worker } of clusterAssignments) {
-        console.log(`Processing cluster for worker ${worker.userid}, reports:`, cluster);
         const route = solveTSP(cluster, worker);
-        console.log('TSP Route:', route);
-
         const routeJson = {
           start: { lat: route[0].lat, lng: route[0].lng },
           waypoints: route.slice(1, -1).map(point => ({ lat: point.lat, lng: point.lng })),
           end: { lat: route[route.length - 1].lat, lng: route[route.length - 1].lng },
         };
-        console.log('Formatted routeJson:', routeJson);
-
         const reportIds = cluster.map(report => report.reportid);
-        console.log('Report IDs for task:', reportIds);
 
-        console.log('Inserting task into taskrequests...');
-        let taskResult;
-        try {
-          taskResult = await pool.query(
-            `INSERT INTO taskrequests (reportids, assignedworkerid, status, starttime, route)
-             VALUES ($1, $2, 'assigned', NOW(), $3)
-             RETURNING taskid`,
-            [reportIds, worker.userid, routeJson]
-          );
-        } catch (dbError) {
-          console.error('Task insertion error:', dbError.message, dbError.stack);
-          throw dbError;
-        }
+        const taskResult = await pool.query(
+          `INSERT INTO taskrequests (reportids, assignedworkerid, status, starttime, route)
+           VALUES ($1, $2, 'assigned', NOW(), $3)
+           RETURNING taskid`,
+          [reportIds, worker.userid, routeJson]
+        );
         const taskId = taskResult.rows[0].taskid;
-        console.log(`Task inserted successfully with taskId: ${taskId}`);
 
         cluster.forEach(report => processedReports.add(report.reportid));
         assignments.push({
@@ -382,9 +326,9 @@ router.post('/group-and-assign-reports', authenticateToken, checkWorkerOrAdminRo
       }
 
       reports = reports.filter(r => !processedReports.has(r.reportid));
+      console.log('Reports after filtering:', reports);
     }
 
-    console.log('Endpoint completed successfully, assignments:', assignments);
     res.status(200).json({
       message: 'Reports grouped and assigned successfully',
       assignments,
@@ -395,294 +339,298 @@ router.post('/group-and-assign-reports', authenticateToken, checkWorkerOrAdminRo
   }
 });
 
-// Fetch Assigned Tasks for Worker
-router.get('/assigned-tasks', authenticateToken, checkWorkerOrAdminRole, async (req, res) => {
-  try {
-    const workerId = parseInt(req.user.userid, 10);
-    if (isNaN(workerId)) {
-      return res.status(400).json({ error: 'Invalid worker ID in token' });
+// [Rest of your routes remain unchanged]
+
+module.exports = router;
+
+  // Fetch Assigned Tasks for Worker
+  router.get('/assigned-tasks', authenticateToken, checkWorkerOrAdminRole, async (req, res) => {
+    try {
+      const workerId = parseInt(req.user.userid, 10);
+      if (isNaN(workerId)) {
+        return res.status(400).json({ error: 'Invalid worker ID in token' });
+      }
+
+      // First get all tasks assigned to this worker
+      const tasksResult = await pool.query(
+        `SELECT taskid, reportids, status, starttime, route 
+        FROM taskrequests 
+        WHERE assignedworkerid = $1 AND status != 'completed'`,
+        [workerId]
+      );
+
+      if (tasksResult.rows.length === 0) {
+        return res.json({ assignedWorks: [] });
+      }
+
+      // For each task, get the reports information
+      const assignedWorks = [];
+      
+      for (const task of tasksResult.rows) {
+        // Get the first report for the title (you can change this logic if needed)
+        const reportsResult = await pool.query(
+          `SELECT reportid, wastetype, location 
+          FROM garbagereports 
+          WHERE reportid = ANY($1) 
+          LIMIT 1`,
+          [task.reportids]
+        );
+        
+        if (reportsResult.rows.length > 0) {
+          const report = reportsResult.rows[0];
+          const locationMatch = report.location.match(/POINT\(([^ ]+) ([^)]+)\)/);
+          const reportLat = locationMatch ? parseFloat(locationMatch[2]) : null;
+          const reportLng = locationMatch ? parseFloat(locationMatch[1]) : null;
+
+          // Worker location (replace with actual worker location if available)
+          const workerLat = 10.235865;
+          const workerLng = 76.405676;
+
+          // Calculate distance to first report
+          let distance = '0km';
+          if (reportLat && reportLng) {
+            distance = (haversineDistance(workerLat, workerLng, reportLat, reportLng)).toFixed(2) + 'km';
+          }
+
+          assignedWorks.push({
+            taskId: task.taskid.toString(),
+            title: report.wastetype ?? 'Unknown',
+            reportCount: task.reportids.length,
+            firstLocation: report.location,
+            distance: distance,
+            time: task.starttime ? task.starttime.toISOString() : 'Not Started',
+            status: task.status,
+          });
+        }
+      }
+
+      res.json({ assignedWorks });
+    } catch (error) {
+      console.error('Error fetching assigned tasks in worker.js:', error.message, error.stack);
+      res.status(500).json({ error: 'Internal Server Error', details: error.message });
     }
+  });
 
-    // First get all tasks assigned to this worker
-    const tasksResult = await pool.query(
-      `SELECT taskid, reportids, status, starttime, route 
-       FROM taskrequests 
-       WHERE assignedworkerid = $1 AND status != 'completed'`,
-      [workerId]
-    );
+  // Updated /task-route/:taskid endpoint
+  router.get('/task-route/:taskid', authenticateToken, checkWorkerOrAdminRole, async (req, res) => {
+    const taskId = parseInt(req.params.taskid, 10);
+    const workerId = req.user.userid;
+    const workerLat = parseFloat(req.query.workerLat) || 10.235865;
+    const workerLng = parseFloat(req.query.workerLng) || 76.405676;
 
-    if (tasksResult.rows.length === 0) {
-      return res.json({ assignedWorks: [] });
-    }
+    try {
+      // Fetch the task details, ensuring it belongs to the worker
+      const taskResult = await pool.query(
+        `SELECT taskid, reportids, assignedworkerid, status, route, starttime, endtime
+        FROM taskrequests
+        WHERE taskid = $1 AND assignedworkerid = $2`,
+        [taskId, workerId]
+      );
 
-    // For each task, get the reports information
-    const assignedWorks = [];
-    
-    for (const task of tasksResult.rows) {
-      // Get the first report for the title (you can change this logic if needed)
+      if (taskResult.rows.length === 0) {
+        return res.status(404).json({ message: 'Task not found or not assigned to this worker' });
+      }
+
+      const task = taskResult.rows[0];
+      
+      // Fetch all reports in this task
       const reportsResult = await pool.query(
         `SELECT reportid, wastetype, location 
-         FROM garbagereports 
-         WHERE reportid = ANY($1) 
-         LIMIT 1`,
+        FROM garbagereports 
+        WHERE reportid = ANY($1)`,
         [task.reportids]
       );
       
-      if (reportsResult.rows.length > 0) {
-        const report = reportsResult.rows[0];
-        const locationMatch = report.location.match(/POINT\(([^ ]+) ([^)]+)\)/);
-        const reportLat = locationMatch ? parseFloat(locationMatch[2]) : null;
-        const reportLng = locationMatch ? parseFloat(locationMatch[1]) : null;
-
-        // Worker location (replace with actual worker location if available)
-        const workerLat = 10.235865;
-        const workerLng = 76.405676;
-
-        // Calculate distance to first report
-        let distance = '0km';
-        if (reportLat && reportLng) {
-          distance = (haversineDistance(workerLat, workerLng, reportLat, reportLng)).toFixed(2) + 'km';
-        }
-
-        assignedWorks.push({
-          taskId: task.taskid.toString(),
-          title: report.wastetype ?? 'Unknown',
-          reportCount: task.reportids.length,
-          firstLocation: report.location,
-          distance: distance,
-          time: task.starttime ? task.starttime.toISOString() : 'Not Started',
-          status: task.status,
-        });
-      }
-    }
-
-    res.json({ assignedWorks });
-  } catch (error) {
-    console.error('Error fetching assigned tasks in worker.js:', error.message, error.stack);
-    res.status(500).json({ error: 'Internal Server Error', details: error.message });
-  }
-});
-
-// Updated /task-route/:taskid endpoint
-router.get('/task-route/:taskid', authenticateToken, checkWorkerOrAdminRole, async (req, res) => {
-  const taskId = parseInt(req.params.taskid, 10);
-  const workerId = req.user.userid;
-  const workerLat = parseFloat(req.query.workerLat) || 10.235865;
-  const workerLng = parseFloat(req.query.workerLng) || 76.405676;
-
-  try {
-    // Fetch the task details, ensuring it belongs to the worker
-    const taskResult = await pool.query(
-      `SELECT taskid, reportids, assignedworkerid, status, route, starttime, endtime
-       FROM taskrequests
-       WHERE taskid = $1 AND assignedworkerid = $2`,
-      [taskId, workerId]
-    );
-
-    if (taskResult.rows.length === 0) {
-      return res.status(404).json({ message: 'Task not found or not assigned to this worker' });
-    }
-
-    const task = taskResult.rows[0];
-    
-    // Fetch all reports in this task
-    const reportsResult = await pool.query(
-      `SELECT reportid, wastetype, location 
-       FROM garbagereports 
-       WHERE reportid = ANY($1)`,
-      [task.reportids]
-    );
-    
-    // Parse collection points from all reports
-    const collectionPoints = [];
-    const wasteTypes = new Set();
-    
-    for (const report of reportsResult.rows) {
-      wasteTypes.add(report.wastetype);
+      // Parse collection points from all reports
+      const collectionPoints = [];
+      const wasteTypes = new Set();
       
-      if (report.location) {
-        const locationMatch = report.location.match(/POINT\(([^ ]+) ([^)]+)\)/);
-        if (locationMatch) {
-          collectionPoints.push({
-            reportid: report.reportid,
-            lat: parseFloat(locationMatch[2]),
-            lng: parseFloat(locationMatch[1]),
-            wastetype: report.wastetype
-          });
-        }
-      }
-    }
-
-    // Parse the route from the jsonb field or create one from worker location to all collection points
-    let routePoints = [];
-    const routeData = task.route || { start: {}, end: {}, waypoints: [] };
-
-    // If route is empty or invalid, construct a route from worker to collection points
-    if (
-      (!routeData.start || !routeData.start.lat || !routeData.start.lng) &&
-      (!routeData.end || !routeData.end.lat || !routeData.end.lng) &&
-      (!routeData.waypoints || routeData.waypoints.length === 0)
-    ) {
-      if (collectionPoints.length > 0) {
-        routePoints.push({
-          lat: workerLat,
-          lng: workerLng,
-        });
+      for (const report of reportsResult.rows) {
+        wasteTypes.add(report.wastetype);
         
-        // Add all collection points to route
-        collectionPoints.forEach(point => {
-          routePoints.push({
-            lat: point.lat,
-            lng: point.lng,
-          });
-        });
-      }
-    } else {
-      // Use the existing route
-      if (routeData.start && routeData.start.lat && routeData.start.lng) {
-        routePoints.push({
-          lat: parseFloat(routeData.start.lat),
-          lng: parseFloat(routeData.start.lng),
-        });
-      }
-
-      if (routeData.waypoints && Array.isArray(routeData.waypoints)) {
-        routeData.waypoints.forEach(waypoint => {
-          if (waypoint.lat && waypoint.lng) {
-            routePoints.push({
-              lat: parseFloat(waypoint.lat),
-              lng: parseFloat(waypoint.lng),
+        if (report.location) {
+          const locationMatch = report.location.match(/POINT\(([^ ]+) ([^)]+)\)/);
+          if (locationMatch) {
+            collectionPoints.push({
+              reportid: report.reportid,
+              lat: parseFloat(locationMatch[2]),
+              lng: parseFloat(locationMatch[1]),
+              wastetype: report.wastetype
             });
           }
-        });
+        }
       }
 
-      if (routeData.end && routeData.end.lat && routeData.end.lng) {
-        routePoints.push({
-          lat: parseFloat(routeData.end.lat),
-          lng: parseFloat(routeData.end.lng),
-        });
+      // Parse the route from the jsonb field or create one from worker location to all collection points
+      let routePoints = [];
+      const routeData = task.route || { start: {}, end: {}, waypoints: [] };
+
+      // If route is empty or invalid, construct a route from worker to collection points
+      if (
+        (!routeData.start || !routeData.start.lat || !routeData.start.lng) &&
+        (!routeData.end || !routeData.end.lat || !routeData.end.lng) &&
+        (!routeData.waypoints || routeData.waypoints.length === 0)
+      ) {
+        if (collectionPoints.length > 0) {
+          routePoints.push({
+            lat: workerLat,
+            lng: workerLng,
+          });
+          
+          // Add all collection points to route
+          collectionPoints.forEach(point => {
+            routePoints.push({
+              lat: point.lat,
+              lng: point.lng,
+            });
+          });
+        }
+      } else {
+        // Use the existing route
+        if (routeData.start && routeData.start.lat && routeData.start.lng) {
+          routePoints.push({
+            lat: parseFloat(routeData.start.lat),
+            lng: parseFloat(routeData.start.lng),
+          });
+        }
+
+        if (routeData.waypoints && Array.isArray(routeData.waypoints)) {
+          routeData.waypoints.forEach(waypoint => {
+            if (waypoint.lat && waypoint.lng) {
+              routePoints.push({
+                lat: parseFloat(waypoint.lat),
+                lng: parseFloat(waypoint.lng),
+              });
+            }
+          });
+        }
+
+        if (routeData.end && routeData.end.lat && routeData.end.lng) {
+          routePoints.push({
+            lat: parseFloat(routeData.end.lat),
+            lng: parseFloat(routeData.end.lng),
+          });
+        }
       }
+
+      res.status(200).json({
+        taskid: task.taskid,
+        reportids: task.reportids,
+        status: task.status,
+        route: [], // Let the app fetch the route from OSRM
+        locations: collectionPoints,
+        wasteTypes: Array.from(wasteTypes),
+      });
+    } catch (error) {
+      console.error('Error fetching task route:', error.message, error.stack);
+      res.status(500).json({ error: 'Internal Server Error', details: error.message });
     }
+  });
 
-    res.status(200).json({
-      taskid: task.taskid,
-      reportids: task.reportids,
-      status: task.status,
-      route: [], // Let the app fetch the route from OSRM
-      locations: collectionPoints,
-      wasteTypes: Array.from(wasteTypes),
-    });
-  } catch (error) {
-    console.error('Error fetching task route:', error.message, error.stack);
-    res.status(500).json({ error: 'Internal Server Error', details: error.message });
-  }
-});
+  // Update Task Progress
+  router.patch('/update-progress', authenticateToken, checkWorkerOrAdminRole, async (req, res) => {
+    try {
+      const { taskId, progress, status } = req.body;
+      if (!taskId || progress === undefined || !status) {
+        return res.status(400).json({ error: 'Task ID, progress, and status are required' });
+      }
 
-// Update Task Progress
-router.patch('/update-progress', authenticateToken, checkWorkerOrAdminRole, async (req, res) => {
-  try {
-    const { taskId, progress, status } = req.body;
-    if (!taskId || progress === undefined || !status) {
-      return res.status(400).json({ error: 'Task ID, progress, and status are required' });
-    }
+      const taskIdInt = parseInt(taskId, 10);
+      if (isNaN(taskIdInt)) {
+        return res.status(400).json({ error: 'Invalid Task ID' });
+      }
 
-    const taskIdInt = parseInt(taskId, 10);
-    if (isNaN(taskIdInt)) {
-      return res.status(400).json({ error: 'Invalid Task ID' });
-    }
+      const workerId = parseInt(req.user.userid, 10);
+      if (isNaN(workerId)) {
+        return res.status(400).json({ error: 'Invalid worker ID in token' });
+      }
 
-    const workerId = parseInt(req.user.userid, 10);
-    if (isNaN(workerId)) {
-      return res.status(400).json({ error: 'Invalid worker ID in token' });
-    }
+      const progressFloat = parseFloat(progress);
+      if (isNaN(progressFloat) || progressFloat < 0 || progressFloat > 1) {
+        return res.status(400).json({ error: 'Progress must be a number between 0 and 1' });
+      }
 
-    const progressFloat = parseFloat(progress);
-    if (isNaN(progressFloat) || progressFloat < 0 || progressFloat > 1) {
-      return res.status(400).json({ error: 'Progress must be a number between 0 and 1' });
-    }
+      const validStatuses = ['pending', 'assigned', 'in-progress', 'completed', 'failed'];
+      if (!validStatuses.includes(status)) {
+        return res.status(400).json({ error: `Invalid status. Must be one of: ${validStatuses.join(', ')}` });
+      }
 
-    const validStatuses = ['pending', 'assigned', 'in-progress', 'completed', 'failed'];
-    if (!validStatuses.includes(status)) {
-      return res.status(400).json({ error: `Invalid status. Must be one of: ${validStatuses.join(', ')}` });
-    }
-
-    const taskCheck = await pool.query(
-      `SELECT 1 
-       FROM taskrequests 
-       WHERE taskid = $1 AND assignedworkerid = $2`,
-      [taskIdInt, workerId]
-    );
-
-    if (taskCheck.rows.length === 0) {
-      return res.status(403).json({ error: 'Task not assigned to this worker' });
-    }
-
-    // Update task status and progress
-    const updateFields = ['progress = $1', 'status = $2'];
-    const updateValues = [progressFloat, status];
-    
-    // If task is completed, set endtime
-    if (status === 'completed') {
-      updateFields.push('endtime = NOW()');
-    }
-    
-    await pool.query(
-      `UPDATE taskrequests SET ${updateFields.join(', ')} WHERE taskid = $3`,
-      updateValues.concat([taskIdInt])
-    );
-
-    res.json({ message: 'Task updated successfully' });
-  } catch (error) {
-    console.error('Error updating task progress in worker.js:', error.message, error.stack);
-    res.status(500).json({ error: 'Internal Server Error', details: error.message });
-  }
-});
-
-// Fetch Completed Tasks
-router.get('/completed-tasks', authenticateToken, checkWorkerOrAdminRole, async (req, res) => {
-  try {
-    const workerId = parseInt(req.user.userid, 10);
-    if (isNaN(workerId)) {
-      return res.status(400).json({ error: 'Invalid worker ID in token' });
-    }
-
-    // Get all completed tasks
-    const tasksResult = await pool.query(
-      `SELECT taskid, reportids, endtime 
-       FROM taskrequests 
-       WHERE assignedworkerid = $1 AND status = 'completed'`,
-      [workerId]
-    );
-
-    const completedWorks = [];
-    
-    for (const task of tasksResult.rows) {
-      // Get summaries of waste types and locations for this task
-      const reportsResult = await pool.query(
-        `SELECT array_agg(DISTINCT wastetype) as wastetypes, COUNT(reportid) as report_count
-         FROM garbagereports 
-         WHERE reportid = ANY($1)`,
-        [task.reportids]
+      const taskCheck = await pool.query(
+        `SELECT 1 
+        FROM taskrequests 
+        WHERE taskid = $1 AND assignedworkerid = $2`,
+        [taskIdInt, workerId]
       );
-      
-      if (reportsResult.rows.length > 0) {
-        const report = reportsResult.rows[0];
-        
-        completedWorks.push({
-          taskId: task.taskid.toString(),
-          title: report.wastetypes.join(', '),
-          reportCount: report.report_count,
-          endTime: task.endtime ? task.endtime.toISOString() : null,
-        });
+
+      if (taskCheck.rows.length === 0) {
+        return res.status(403).json({ error: 'Task not assigned to this worker' });
       }
+
+      // Update task status and progress
+      const updateFields = ['progress = $1', 'status = $2'];
+      const updateValues = [progressFloat, status];
+      
+      // If task is completed, set endtime
+      if (status === 'completed') {
+        updateFields.push('endtime = NOW()');
+      }
+      
+      await pool.query(
+        `UPDATE taskrequests SET ${updateFields.join(', ')} WHERE taskid = $3`,
+        updateValues.concat([taskIdInt])
+      );
+
+      res.json({ message: 'Task updated successfully' });
+    } catch (error) {
+      console.error('Error updating task progress in worker.js:', error.message, error.stack);
+      res.status(500).json({ error: 'Internal Server Error', details: error.message });
     }
+  });
 
-    res.json({ completedWorks });
-  } catch (error) {
-    console.error('Error fetching completed tasks in worker.js:', error.message, error.stack);
-    res.status(500).json({ error: 'Internal Server Error', details: error.message });
-  }
-});
+  // Fetch Completed Tasks
+  router.get('/completed-tasks', authenticateToken, checkWorkerOrAdminRole, async (req, res) => {
+    try {
+      const workerId = parseInt(req.user.userid, 10);
+      if (isNaN(workerId)) {
+        return res.status(400).json({ error: 'Invalid worker ID in token' });
+      }
 
-module.exports=router;
+      // Get all completed tasks
+      const tasksResult = await pool.query(
+        `SELECT taskid, reportids, endtime 
+        FROM taskrequests 
+        WHERE assignedworkerid = $1 AND status = 'completed'`,
+        [workerId]
+      );
+
+      const completedWorks = [];
+      
+      for (const task of tasksResult.rows) {
+        // Get summaries of waste types and locations for this task
+        const reportsResult = await pool.query(
+          `SELECT array_agg(DISTINCT wastetype) as wastetypes, COUNT(reportid) as report_count
+          FROM garbagereports 
+          WHERE reportid = ANY($1)`,
+          [task.reportids]
+        );
+        
+        if (reportsResult.rows.length > 0) {
+          const report = reportsResult.rows[0];
+          
+          completedWorks.push({
+            taskId: task.taskid.toString(),
+            title: report.wastetypes.join(', '),
+            reportCount: report.report_count,
+            endTime: task.endtime ? task.endtime.toISOString() : null,
+          });
+        }
+      }
+
+      res.json({ completedWorks });
+    } catch (error) {
+      console.error('Error fetching completed tasks in worker.js:', error.message, error.stack);
+      res.status(500).json({ error: 'Internal Server Error', details: error.message });
+    }
+  });
+
+  module.exports=router;
