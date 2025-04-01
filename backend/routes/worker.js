@@ -81,17 +81,33 @@ function kmeansClustering(points, k) {
     console.log('kmeansClustering: Invalid or empty points array, returning empty clusters');
     return [];
   }
-  if (points.length < k) return points.map(point => [point]);
+  if (points.length < k) {
+    console.log(`kmeansClustering: Fewer points (${points.length}) than clusters (${k}), returning single-point clusters`);
+    return points.map(point => [point]);
+  }
 
+  console.log('kmeansClustering: Starting with points:', points);
   const kmeans = new KMeans();
   const data = points.map(p => [p.lat, p.lng]);
-  kmeans.cluster(data, k);
+  console.log('kmeansClustering: Data for clustering:', data);
 
-  while (kmeans.step()) {}
+  try {
+    kmeans.cluster(data, k);
+    while (kmeans.step()) {}
+  } catch (error) {
+    console.error('kmeansClustering: Clustering failed:', error.message);
+    return points.map(point => [point]); // Fallback to single-point clusters
+  }
 
   const centroids = kmeans.means;
-  const clusters = Array.from({ length: k }, () => []);
+  console.log('kmeansClustering: Centroids:', centroids);
 
+  if (!Array.isArray(centroids) || centroids.length === 0) {
+    console.log('kmeansClustering: No valid centroids, returning single-point clusters');
+    return points.map(point => [point]);
+  }
+
+  const clusters = Array.from({ length: k }, () => []);
   points.forEach(point => {
     let minDist = Infinity;
     let bestCluster = 0;
@@ -107,7 +123,9 @@ function kmeansClustering(points, k) {
     clusters[bestCluster].push(point);
   });
 
-  return clusters.filter(cluster => cluster.length > 0);
+  const validClusters = clusters.filter(cluster => cluster.length > 0);
+  console.log('kmeansClustering: Resulting clusters:', validClusters);
+  return validClusters;
 }
 
 // Step 2: Munkres Algorithm for Worker Allocation
