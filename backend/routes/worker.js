@@ -80,20 +80,32 @@ function kmeansClustering(points, k) {
   if (points.length < k) return points.map(point => [point]);
 
   const kmeans = new KMeans();
-  const data = points.map(p => [p.lat, p.lng]); // Convert points to (lat, lng) format
+  const data = points.map(p => [p.lat, p.lng]);
+  kmeans.cluster(data, k);
 
-  // Perform clustering
-  const clusters = kmeans.cluster(data, k);
+  while (kmeans.step()) {}
 
-  // Organize points into clusters
-  const groupedClusters = Array.from({ length: k }, () => []);
+  // Retrieve centroids
+  const centroids = kmeans.means;
+  const clusters = Array.from({ length: k }, () => []);
 
-  points.forEach((point, idx) => {
-    const clusterIdx = clusters[idx]; // Get cluster index for the point
-    groupedClusters[clusterIdx].push(point);
+  // Manually assign each point to the closest centroid
+  points.forEach(point => {
+    let minDist = Infinity;
+    let bestCluster = 0;
+
+    centroids.forEach((centroid, idx) => {
+      const dist = haversineDistance(point.lat, point.lng, centroid[0], centroid[1]);
+      if (dist < minDist) {
+        minDist = dist;
+        bestCluster = idx;
+      }
+    });
+
+    clusters[bestCluster].push(point);
   });
 
-  return groupedClusters.filter(cluster => cluster.length>0);
+  return clusters.filter(cluster => cluster.length > 0);
 }
 
 // Step 2: Munkres Algorithm for Worker Allocation

@@ -59,18 +59,6 @@ class _LoginPageState extends State<LoginPage> {
           throw Exception('No token received from server');
         }
 
-        await http.post(
-          Uri.parse('$apiBaseUrl/group-and-assign-reports'),
-          headers: {
-            'Authorization': 'Bearer $token',
-            'Content-Type': 'application/json',
-          },
-          body: jsonEncode({
-            'workerId': data['user']['userid'], 
-          }),
-        );
-
-
         final user = data['user'];
         if (user == null) throw Exception('No user data in response');
         final userID =
@@ -79,6 +67,33 @@ class _LoginPageState extends State<LoginPage> {
         final role =
             user['role'] as String? ?? (throw Exception('No role in response'));
 
+        if (role == 'worker') {
+          try {
+            final assignResponse = await http.post(
+              Uri.parse('$apiBaseUrl/worker/group-and-assign-reports'),
+              headers: {
+                'Authorization': 'Bearer $token',
+                'Content-Type': 'application/json',
+              },
+              body: jsonEncode({'workerId': data['user']['userid']}),
+            );
+
+            print('Assignment Response Status: ${assignResponse.statusCode}');
+            print('Assignment Response Body: ${assignResponse.body}');
+
+            if (assignResponse.statusCode != 200) {
+              throw Exception('Assignment failed: ${assignResponse.body}');
+            }
+          } catch (e) {
+            print('🔥 Critical Assignment Error: $e');
+            // Optional: Show error to user if critical
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Task assignment failed: ${e.toString()}'),
+              ),
+            );
+          }
+        }
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
