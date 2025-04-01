@@ -76,8 +76,6 @@ function haversineDistance(lat1, lon1, lat2, lon2) {
 }
 
 // Step 1: K-Means Clustering
-const KMeans = require('kmeans-js');
-
 function kmeansClustering(points, k) {
   // Input validation
   if (!points || !Array.isArray(points)) throw new Error('Invalid points array');
