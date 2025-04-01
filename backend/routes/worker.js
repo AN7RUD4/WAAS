@@ -77,35 +77,72 @@ function haversineDistance(lat1, lon1, lat2, lon2) {
 
 // Step 1: K-Means Clustering
 function kmeansClustering(points, k) {
-  if (points.length < k) return points.map(point => [point]);
+  // Input validation
+  if (!points || !Array.isArray(points)) {
+    throw new Error('Invalid points array');
+  }
+  if (points.length === 0) return [];
+  if (k <= 0) throw new Error('k must be positive');
+  
+  // If fewer points than clusters, return each point as its own cluster
+  if (points.length < k) {
+    return points.map(point => [point]);
+  }
 
-  const kmeans = new KMeans();
-  const data = points.map(p => [p.lat, p.lng]);
-  kmeans.cluster(data, k);
+  try {
+    const kmeans = new KMeans();
+    const data = points.map(p => [p.lat, p.lng]);
+    
+    // Initialize and run clustering
+    kmeans.init(data, k);
+    let iterations = 0;
+    const maxIterations = 100;
+    
+    while (kmeans.step() && iterations < maxIterations) {
+      iterations++;
+    }
 
-  while (kmeans.step()) {}
+    // Verify centroids exist
+    const centroids = kmeans.means;
+    if (!centroids || centroids.length === 0) {
+      throw new Error('Clustering failed to produce centroids');
+    }
 
-  // Retrieve centroids
-  const centroids = kmeans.means;
-  const clusters = Array.from({ length: k }, () => []);
+    // Assign points to nearest centroid
+    const clusters = Array.from({ length: centroids.length }, () => []);
+    
+    points.forEach(point => {
+      let minDist = Infinity;
+      let bestCluster = 0;
 
-  // Manually assign each point to the closest centroid
-  points.forEach(point => {
-    let minDist = Infinity;
-    let bestCluster = 0;
+      centroids.forEach((centroid, idx) => {
+        if (!centroid || centroid.length !== 2) return;
+        
+        const dist = haversineDistance(
+          point.lat, 
+          point.lng, 
+          centroid[0], 
+          centroid[1]
+        );
+        
+        if (dist < minDist) {
+          minDist = dist;
+          bestCluster = idx;
+        }
+      });
 
-    centroids.forEach((centroid, idx) => {
-      const dist = haversineDistance(point.lat, point.lng, centroid[0], centroid[1]);
-      if (dist < minDist) {
-        minDist = dist;
-        bestCluster = idx;
+      if (bestCluster < clusters.length) {
+        clusters[bestCluster].push(point);
       }
     });
 
-    clusters[bestCluster].push(point);
-  });
+    return clusters.filter(cluster => cluster.length > 0);
 
-  return clusters.filter(cluster => cluster.length > 0);
+  } catch (error) {
+    console.error('K-means clustering error:', error);
+    // Fallback: return all points in one cluster
+    return [points];
+  }
 }
 
 // Step 2: Munkres Algorithm for Worker Allocation
