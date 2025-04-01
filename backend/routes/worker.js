@@ -90,53 +90,35 @@ function kmeansClustering(points, k) {
   }
 
   try {
-    const kmeans = new KMeans();
-    const data = points.map(p => [p.lat, p.lng]);
-    
-    // Initialize and run clustering
-    kmeans.init(data, k);
-    let iterations = 0;
-    const maxIterations = 100;
-    
-    while (kmeans.step() && iterations < maxIterations) {
-      iterations++;
-    }
-
-    // Verify centroids exist
-    const centroids = kmeans.means;
-    if (!centroids || centroids.length === 0) {
-      throw new Error('Clustering failed to produce centroids');
-    }
-
-    // Assign points to nearest centroid
-    const clusters = Array.from({ length: centroids.length }, () => []);
-    
-    points.forEach(point => {
-      let minDist = Infinity;
-      let bestCluster = 0;
-
-      centroids.forEach((centroid, idx) => {
-        if (!centroid || centroid.length !== 2) return;
-        
-        const dist = haversineDistance(
-          point.lat, 
-          point.lng, 
-          centroid[0], 
-          centroid[1]
-        );
-        
-        if (dist < minDist) {
-          minDist = dist;
-          bestCluster = idx;
-        }
-      });
-
-      if (bestCluster < clusters.length) {
-        clusters[bestCluster].push(point);
+    const kmeans = new KMeans({
+      k: k,
+      maxIterations: 100,
+      distanceFunction: (a, b) => {
+        return haversineDistance(a[0], a[1], b[0], b[1]);
       }
     });
 
-    return clusters.filter(cluster => cluster.length > 0);
+    // Prepare data (convert points to [lat,lng] arrays)
+    const data = points.map(p => [p.lat, p.lng]);
+    
+    // Run clustering
+    const result = kmeans.cluster(data);
+    
+    // Verify clusters exist
+    if (!result.clusters || result.clusters.length === 0) {
+      throw new Error('Clustering failed to produce clusters');
+    }
+
+    // Map back to original points
+    const clusteredPoints = Array.from({ length: k }, () => []);
+    points.forEach((point, index) => {
+      const clusterIndex = result.clusters[index];
+      if (clusterIndex !== undefined && clusterIndex < k) {
+        clusteredPoints[clusterIndex].push(point);
+      }
+    });
+
+    return clusteredPoints.filter(cluster => cluster.length > 0);
 
   } catch (error) {
     console.error('K-means clustering error:', error);
