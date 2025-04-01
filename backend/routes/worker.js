@@ -93,18 +93,35 @@ function kmeansClustering(points, k) {
 
   try {
     kmeans.cluster(data, k);
-    while (kmeans.step()) {}
+    let iterations = 0;
+    const maxIterations = 100; // Prevent infinite loop
+    while (kmeans.step() && iterations < maxIterations) {
+      iterations++;
+    }
+    console.log(`kmeansClustering: Completed ${iterations} iterations`);
   } catch (error) {
     console.error('kmeansClustering: Clustering failed:', error.message);
-    return points.map(point => [point]); // Fallback to single-point clusters
+    return points.map(point => [point]);
   }
 
   const centroids = kmeans.means;
   console.log('kmeansClustering: Centroids:', centroids);
 
   if (!Array.isArray(centroids) || centroids.length === 0) {
-    console.log('kmeansClustering: No valid centroids, returning single-point clusters');
-    return points.map(point => [point]);
+    console.log('kmeansClustering: No valid centroids, attempting manual clustering');
+    // Manual fallback: Split points into k groups based on latitude
+    const sortedPoints = [...points].sort((a, b) => a.lat - b.lat);
+    const clusterSize = Math.ceil(points.length / k);
+    const clusters = [];
+    for (let i = 0; i < k; i++) {
+      const start = i * clusterSize;
+      const end = Math.min(start + clusterSize, points.length);
+      if (start < end) {
+        clusters.push(sortedPoints.slice(start, end));
+      }
+    }
+    console.log('kmeansClustering: Manual clusters:', clusters);
+    return clusters;
   }
 
   const clusters = Array.from({ length: k }, () => []);
@@ -130,37 +147,57 @@ function kmeansClustering(points, k) {
 
 // Step 2: Munkres Algorithm for Worker Allocation
 function assignWorkersToClusters(clusters, workers) {
-  const assignments = [];
+  if (!clusters.length || !workers.length) {
+    console.log('assignWorkersToClusters: No clusters or workers, returning empty assignments');
+    return [];
+  }
 
-  for (const cluster of clusters) {
-    if (workers.length === 0) break;
+  console.log('assignWorkersToClusters: Clusters:', clusters);
+  console.log('assignWorkersToClusters: Workers:', workers);
 
+  // Compute full cost matrix: rows = clusters, columns = workers
+  const costMatrix = clusters.map(cluster => {
     const centroid = {
       lat: cluster.reduce((sum, r) => sum + r.lat, 0) / cluster.length,
       lng: cluster.reduce((sum, r) => sum + r.lng, 0) / cluster.length,
     };
-
-    // Create a cost matrix: distance between each worker and the cluster centroid
-    const costMatrix = workers.map(worker =>
+    return workers.map(worker =>
       haversineDistance(worker.lat, worker.lng, centroid.lat, centroid.lng)
     );
+  });
+  console.log('assignWorkersToClusters: Cost matrix:', costMatrix);
 
-    // Run Hungarian Algorithm using munkres-js
-    const munkres = new Munkres();
-    const indices = munkres.compute(costMatrix.map(row => [row])); // Convert to 2D array
-
-    // Find the first valid assignment
-    const workerIdx = indices.find(([workerIdx]) => workerIdx !== null)?.[0];
-    if (workerIdx === undefined || workerIdx >= workers.length) continue; // No valid assignment
-
-    const assignedWorker = workers[workerIdx];
-
-    // Remove the assigned worker from the pool
-    workers.splice(workerIdx, 1);
-
-    assignments.push({ cluster, worker: assignedWorker });
+  // Pad matrix if necessary (more clusters than workers or vice versa)
+  const maxDim = Math.max(clusters.length, workers.length);
+  const paddedMatrix = costMatrix.map(row => {
+    while (row.length < maxDim) row.push(Infinity); // Pad with Infinity for unassignable cases
+    return row;
+  });
+  while (paddedMatrix.length < maxDim) {
+    paddedMatrix.push(Array(maxDim).fill(Infinity));
   }
+  console.log('assignWorkersToClusters: Padded cost matrix:', paddedMatrix);
 
+  // Run Munkres
+  const munkres = new Munkres();
+  const indices = munkres.compute(paddedMatrix);
+  console.log('assignWorkersToClusters: Munkres indices:', indices);
+
+  // Process assignments
+  const assignments = [];
+  const usedWorkers = new Set();
+
+  indices.forEach(([clusterIdx, workerIdx]) => {
+    if (clusterIdx < clusters.length && workerIdx < workers.length && !usedWorkers.has(workerIdx)) {
+      assignments.push({
+        cluster: clusters[clusterIdx],
+        worker: workers[workerIdx],
+      });
+      usedWorkers.add(workerIdx);
+    }
+  });
+
+  console.log('assignWorkersToClusters: Assignments:', assignments);
   return assignments;
 }
 
