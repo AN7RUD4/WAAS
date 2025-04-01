@@ -10,13 +10,11 @@ const router = express.Router();
 router.use(cors());
 router.use(express.json());
 
-// Database connection
 const pool = new Pool({
     connectionString: 'postgresql://postgres.hrzroqrgkvzhomsosqzl:7H.6k2wS*F$q2zY@aws-0-ap-south-1.pooler.supabase.com:6543/postgres',
     ssl: { rejectUnauthorized: false },
 });
 
-// Test database connection on startup
 pool.connect((err, client, release) => {
     if (err) {
         console.error('Error connecting to the database in worker.js:', err.stack);
@@ -27,7 +25,6 @@ pool.connect((err, client, release) => {
     }
 });
 
-// Middleware to verify JWT token
 const authenticateToken = (req, res, next) => {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
@@ -62,9 +59,8 @@ const checkWorkerOrAdminRole = (req, res, next) => {
     next();
 };
 
-// Haversine Distance Calculation
 function haversineDistance(lat1, lon1, lat2, lon2) {
-    const R = 6371; // Earth radius in kilometers
+    const R = 6371;
     const dLat = (lat2 - lat1) * Math.PI / 180;
     const dLon = (lon2 - lon1) * Math.PI / 180;
     const a =
@@ -72,17 +68,15 @@ function haversineDistance(lat1, lon1, lat2, lon2) {
         Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
         Math.sin(dLon / 2) * Math.sin(dLon / 2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return R * c; // Distance in kilometers
+    return R * c;
 }
 
-// Helper function to compute Euclidean distance (used in K-Means clustering)
 function calculateDistance(point1, point2) {
     const latDiff = point1[0] - point2[0];
     const lngDiff = point1[1] - point2[1];
     return Math.sqrt(latDiff * latDiff + lngDiff * lngDiff);
 }
 
-// Helper function to remove duplicate centroids
 function uniqueCentroids(centroids) {
     const unique = [];
     const seen = new Set();
@@ -98,7 +92,6 @@ function uniqueCentroids(centroids) {
     return unique;
 }
 
-// Step 1: K-Means Clustering (Updated with K-Means++ Initialization)
 function kmeansClustering(points, k) {
     if (!Array.isArray(points) || points.length === 0) {
         console.log('kmeansClustering: Invalid or empty points array, returning empty clusters');
@@ -111,17 +104,12 @@ function kmeansClustering(points, k) {
 
     console.log('kmeansClustering: Starting with points:', points);
     const kmeans = new KMeans();
-    const data = points.map(p => [p.lat, p.lng]); // Convert to [latitude, longitude] format
+    const data = points.map(p => [p.lat, p.lng]);
     console.log('kmeansClustering: Data for clustering:', data);
 
     try {
-        // Perform clustering using K-Means++ initialization
         let centroids = kmeans.cluster(data, k, "kmeans++");
-
-        // Ensure centroids are unique
         centroids = uniqueCentroids(centroids);
-
-        // Adjust k to match the actual number of centroids (in case duplicates reduced the count)
         k = Math.min(k, centroids.length);
         console.log('kmeansClustering: Centroids after unique filtering:', centroids);
 
@@ -130,14 +118,9 @@ function kmeansClustering(points, k) {
             return points.map(point => [point]);
         }
 
-        // Initialize empty clusters with the correct count
         const clusters = Array.from({ length: k }, () => []);
-
-        // Assign each point to the closest centroid
         points.forEach((point) => {
             const pointCoords = [point.lat, point.lng];
-
-            // Find the closest centroid
             let closestCentroidIdx = 0;
             let minDistance = calculateDistance(pointCoords, centroids[0]);
 
@@ -149,13 +132,11 @@ function kmeansClustering(points, k) {
                 }
             }
 
-            // Validate the centroid index before adding to the cluster
             if (closestCentroidIdx >= clusters.length) {
                 console.error(`⚠️ Invalid centroid index ${closestCentroidIdx} for point ${point.reportid}`);
                 return;
             }
 
-            // Add the point to the correct cluster
             clusters[closestCentroidIdx].push(point);
         });
 
@@ -164,56 +145,92 @@ function kmeansClustering(points, k) {
         return validClusters;
     } catch (error) {
         console.error('kmeansClustering: Clustering failed:', error.message);
-        return points.map(point => [point]); // Fallback to single-point clusters
+        return points.map(point => [point]);
     }
 }
 
-// Step 2: Munkres Algorithm for Worker Allocation
 function assignWorkersToClusters(clusters, workers) {
-    const assignments = [];
+    if (!clusters.length || !workers.length) {
+        console.log('assignWorkersToClusters: No clusters or workers, returning empty assignments');
+        return [];
+    }
 
-    for (const cluster of clusters) {
-        if (workers.length === 0) break;
+    console.log('assignWorkersToClusters: Clusters:', clusters);
+    console.log('assignWorkersToClusters: Workers:', workers);
 
+    const costMatrix = clusters.map(cluster => {
         const centroid = {
             lat: cluster.reduce((sum, r) => sum + r.lat, 0) / cluster.length,
             lng: cluster.reduce((sum, r) => sum + r.lng, 0) / cluster.length,
         };
-
-        // Create a cost matrix: distance between each worker and the cluster centroid
-        const costMatrix = workers.map(worker =>
+        return workers.map(worker =>
             haversineDistance(worker.lat, worker.lng, centroid.lat, centroid.lng)
         );
+    });
+    console.log('assignWorkersToClusters: Cost matrix:', costMatrix);
 
-        // Run Hungarian Algorithm using munkres-js
-        const munkres = new Munkres();
-        const indices = munkres.compute(costMatrix.map(row => [row])); // Convert to 2D array
-
-        // Find the first valid assignment
-        const workerIdx = indices.find(([workerIdx]) => workerIdx !== null)?.[0];
-        if (workerIdx === undefined || workerIdx >= workers.length) continue; // No valid assignment
-
-        const assignedWorker = workers[workerIdx];
-
-        // Remove the assigned worker from the pool
-        workers.splice(workerIdx, 1);
-
-        assignments.push({ cluster, worker: assignedWorker });
+    const maxDim = Math.max(clusters.length, workers.length);
+    const paddedMatrix = costMatrix.map(row => [...row]);
+    paddedMatrix.forEach(row => {
+        while (row.length < maxDim) row.push(Infinity);
+    });
+    while (paddedMatrix.length < maxDim) {
+        paddedMatrix.push(Array(maxDim).fill(Infinity));
     }
+    console.log('assignWorkersToClusters: Padded cost matrix:', paddedMatrix);
 
-    return assignments;
+    try {
+        const munkres = new Munkres();
+        const indices = munkres.compute(paddedMatrix);
+        console.log('assignWorkersToClusters: Munkres indices:', indices);
+
+        const assignments = [];
+        const usedWorkers = new Set();
+
+        indices.forEach(([clusterIdx, workerIdx]) => {
+            if (clusterIdx < clusters.length && workerIdx < workers.length && !usedWorkers.has(workerIdx)) {
+                assignments.push({
+                    cluster: clusters[clusterIdx],
+                    worker: workers[workerIdx],
+                });
+                usedWorkers.add(workerIdx);
+            }
+        });
+
+        console.log('assignWorkersToClusters: Assignments:', assignments);
+        return assignments;
+    } catch (error) {
+        console.error('assignWorkersToClusters: Munkres failed:', error.message);
+        const assignments = [];
+        const availableWorkers = [...workers];
+        for (const cluster of clusters) {
+            if (availableWorkers.length === 0) break;
+            const centroid = {
+                lat: cluster.reduce((sum, r) => sum + r.lat, 0) / cluster.length,
+                lng: cluster.reduce((sum, r) => sum + r.lng, 0) / cluster.length,
+            };
+            const bestWorkerIdx = availableWorkers.reduce((best, w, idx) => {
+                const dist = haversineDistance(w.lat, w.lng, centroid.lat, centroid.lng);
+                return dist < best.dist ? { idx, dist } : best;
+            }, { idx: 0, dist: Infinity }).idx;
+            assignments.push({
+                cluster,
+                worker: availableWorkers[bestWorkerIdx],
+            });
+            availableWorkers.splice(bestWorkerIdx, 1);
+        }
+        console.log('assignWorkersToClusters: Fallback assignments:', assignments);
+        return assignments;
+    }
 }
 
-// Step 3: TSP Route Optimization (Nearest Neighbor Heuristic)
 function solveTSP(points, worker) {
     if (points.length === 0) return [];
 
-    // Start from the worker's location
     const route = [{ lat: worker.lat, lng: worker.lng }];
     const unvisited = [...points];
     let current = { lat: worker.lat, lng: worker.lng };
 
-    // Nearest Neighbor: Always go to the closest unvisited point
     while (unvisited.length > 0) {
         const nearest = unvisited.reduce((closest, point) => {
             const distance = haversineDistance(current.lat, current.lng, point.lat, point.lng);
@@ -229,24 +246,23 @@ function solveTSP(points, worker) {
 }
 
 router.post('/group-and-assign-reports', authenticateToken, checkWorkerOrAdminRole, async (req, res) => {
-    console.log('Reached /group-and-assign-reports endpoint'); // Confirm endpoint is hit
+    console.log('Reached /group-and-assign-reports endpoint');
     try {
         console.log('Starting /group-and-assign-reports execution');
         const { startDate } = req.body;
         const k = 3;
         console.log('Request body:', req.body);
 
-        // Step 1: Fetch all unassigned reports
         console.log('Fetching unassigned reports from garbagereports...');
         let result;
         try {
             result = await pool.query(
                 `SELECT reportid, wastetype, ST_AsText(location) AS location, datetime
-         FROM garbagereports
-         WHERE reportid NOT IN (
-           SELECT unnest(reportids) FROM taskrequests
-         )
-         ORDER BY datetime ASC`
+                 FROM garbagereports
+                 WHERE reportid NOT IN (
+                   SELECT unnest(reportids) FROM taskrequests
+                 )
+                 ORDER BY datetime ASC`
             );
         } catch (dbError) {
             console.error('Database query error:', dbError.message, dbError.stack);
@@ -306,15 +322,15 @@ router.post('/group-and-assign-reports', authenticateToken, checkWorkerOrAdminRo
             try {
                 workerResult = await pool.query(
                     `SELECT userid, location
-           FROM users
-           WHERE role = 'worker'
-           AND userid NOT IN (
-             SELECT assignedworkerid
-             FROM taskrequests
-             WHERE status != 'completed'
-             GROUP BY assignedworkerid
-             HAVING COUNT(*) >= 5
-           )`
+                     FROM users
+                     WHERE role = 'worker'
+                     AND userid NOT IN (
+                       SELECT assignedworkerid
+                       FROM taskrequests
+                       WHERE status != 'completed'
+                       GROUP BY assignedworkerid
+                       HAVING COUNT(*) >= 5
+                     )`
                 );
             } catch (dbError) {
                 console.error('Worker query error:', dbError.message, dbError.stack);
@@ -364,8 +380,8 @@ router.post('/group-and-assign-reports', authenticateToken, checkWorkerOrAdminRo
                 try {
                     taskResult = await pool.query(
                         `INSERT INTO taskrequests (reportids, assignedworkerid, status, starttime, route)
-             VALUES ($1, $2, 'assigned', NOW(), $3)
-             RETURNING taskid`,
+                         VALUES ($1, $2, 'assigned', NOW(), $3)
+                         RETURNING taskid`,
                         [reportIds, worker.userid, routeJson]
                     );
                 } catch (dbError) {
