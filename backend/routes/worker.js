@@ -4,7 +4,7 @@ const { Pool } = require('pg');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const KMeans = require('kmeans-js');
-const munkres = require('munkres').default; // Updated import
+const munkres = require('munkres').default; 
 const twilio = require('twilio');
 
 const router = express.Router();
@@ -18,7 +18,7 @@ const twilioClient = new twilio(
 );
 
 const pool = new Pool({
-    connectionString: 'postgresql://postgres.hrzroqrgkvzhomsosqzl:7H.6k2wS*F$q2zY@aws-0-ap-south-1.pooler.supabase.com:6543/postgres',
+    connectionString: process.env.DATABASE_URL,
     ssl: { rejectUnauthorized: false },
 });
 
