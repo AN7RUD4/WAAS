@@ -318,33 +318,34 @@ router.post('/group-and-assign-reports', authenticateToken, checkWorkerOrAdminRo
             console.log('Clusters formed:', clusters);
 
             console.log('Fetching available workers...');
-            let workerResult;
-            try {
-                workerResult = await pool.query(
-                    `SELECT userid, location
-                     FROM users
-                     WHERE role = 'worker'
-                     AND userid NOT IN (
-                       SELECT assignedworkerid
-                       FROM taskrequests
-                       WHERE status != 'completed'
-                       GROUP BY assignedworkerid
-                       HAVING COUNT(*) >= 5
-                     )`
-                );
-            } catch (dbError) {
-                console.error('Worker query error:', dbError.message, dbError.stack);
-                throw dbError;
-            }
-            let workers = workerResult.rows.map(row => {
-                const locMatch = row.location ? row.location.match(/POINT\(([^ ]+) ([^)]+)\)/) : null;
-                return {
-                    userid: row.userid,
-                    lat: locMatch ? parseFloat(locMatch[2]) : 10.235865,
-                    lng: locMatch ? parseFloat(locMatch[1]) : 76.405676,
-                };
-            });
-            console.log('Available workers:', workers);
+            console.log('Fetching available workers...');
+let workerResult;
+try {
+    workerResult = await pool.query(
+        `SELECT userid, ST_AsText(location) AS location
+         FROM users
+         WHERE role = 'worker'
+         AND userid NOT IN (
+           SELECT assignedworkerid
+           FROM taskrequests
+           WHERE status != 'completed'
+           GROUP BY assignedworkerid
+           HAVING COUNT(*) >= 5
+         )`
+    );
+} catch (dbError) {
+    console.error('Worker query error:', dbError.message, dbError.stack);
+    throw dbError;
+}
+let workers = workerResult.rows.map(row => {
+    const locMatch = row.location ? row.location.match(/POINT\(([^ ]+) ([^)]+)\)/) : null;
+    return {
+        userid: row.userid,
+        lat: locMatch ? parseFloat(locMatch[2]) : 10.235865,
+        lng: locMatch ? parseFloat(locMatch[1]) : 76.405676,
+    };
+});
+console.log('Available workers:', workers);
 
             if (workers.length === 0) {
                 console.log('No workers available, breaking loop');
