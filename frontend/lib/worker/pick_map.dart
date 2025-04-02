@@ -4,10 +4,9 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:http/http.dart' as http;
-import 'dart:math' show sin, cos, sqrt, asin, pi;
+import 'dart:math' show sin, cos, sqrt, asin;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:waas/assets/constants.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 class MapScreen extends StatefulWidget {
   final int taskid;
@@ -34,7 +33,8 @@ class _MapScreenState extends State<MapScreen> {
   double _distanceToNearest = 0.0;
   double _totalDistance = 0.0;
   String _directions = "Calculating directions...";
-  final List<String> _turnByTurnInstructions = []; // Store all instructions from OSRM
+  final List<String> _turnByTurnInstructions =
+      []; // Store all instructions from OSRM
   int _currentInstructionIndex = 0; // Track the current instruction
 
   @override
@@ -426,12 +426,10 @@ class _MapScreenState extends State<MapScreen> {
     }
 
     double minDistance = double.infinity;
-    int closestPointIndex = 0;
     for (int i = 0; i < _completeRoute.length; i++) {
       final distance = _haversineDistance(_workerLocation!, _completeRoute[i]);
       if (distance < minDistance) {
         minDistance = distance;
-        closestPointIndex = i;
       }
     }
 
