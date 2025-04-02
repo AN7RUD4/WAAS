@@ -4,7 +4,7 @@ const { Pool } = require('pg');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const KMeans = require('kmeans-js');
-const Munkres = require('munkres-js');
+const munkres = require('munkres').default; // Updated import
 const twilio = require('twilio');
 
 const router = express.Router();
@@ -13,8 +13,8 @@ router.use(express.json());
 
 // Initialize Twilio client
 const twilioClient = new twilio(
-  process.env.TWILIO_ACCOUNT_SID,
-  process.env.TWILIO_AUTH_TOKEN
+    process.env.TWILIO_ACCOUNT_SID,
+    process.env.TWILIO_AUTH_TOKEN
 );
 
 const pool = new Pool({
@@ -162,7 +162,7 @@ function kmeansClustering(points, k) {
     }
 }
 
-// Assign workers to clusters
+// Updated assignWorkersToClusters function (using munkres)
 function assignWorkersToClusters(clusters, workers) {
     if (!clusters.length || !workers.length) {
         console.log('assignWorkersToClusters: No clusters or workers, returning empty assignments');
@@ -172,32 +172,37 @@ function assignWorkersToClusters(clusters, workers) {
     console.log('assignWorkersToClusters: Clusters:', clusters);
     console.log('assignWorkersToClusters: Workers:', workers);
 
+    // Step 1: Construct the cost matrix (distance between each cluster centroid and each worker)
     const costMatrix = clusters.map(cluster => {
         const centroid = {
             lat: cluster.reduce((sum, r) => sum + r.lat, 0) / cluster.length,
             lng: cluster.reduce((sum, r) => sum + r.lng, 0) / cluster.length,
         };
-        return workers.map(worker =>
-            haversineDistance(worker.lat, worker.lng, centroid.lat, centroid.lng)
-        );
+        return workers.map(worker => {
+            const distance = haversineDistance(worker.lat, worker.lng, centroid.lat, centroid.lng);
+            // Add small random noise to avoid numerical precision issues
+            return distance + Math.random() * 0.0001;
+        });
     });
     console.log('assignWorkersToClusters: Cost matrix:', costMatrix);
 
+    // Step 2: Pad the cost matrix to make it square (required by the Hungarian algorithm)
     const maxDim = Math.max(clusters.length, workers.length);
     const paddedMatrix = costMatrix.map(row => [...row]);
     paddedMatrix.forEach(row => {
-        while (row.length < maxDim) row.push(Infinity);
+        while (row.length < maxDim) row.push(Number.MAX_SAFE_INTEGER); // Use Number.MAX_SAFE_INTEGER instead of Infinity
     });
     while (paddedMatrix.length < maxDim) {
-        paddedMatrix.push(Array(maxDim).fill(Infinity));
+        paddedMatrix.push(Array(maxDim).fill(Number.MAX_SAFE_INTEGER));
     }
     console.log('assignWorkersToClusters: Padded cost matrix:', paddedMatrix);
 
     try {
-        const munkres = new Munkres();
-        const indices = munkres.compute(paddedMatrix);
+        // Step 3: Run the Hungarian algorithm using munkres
+        const indices = munkres(paddedMatrix);
         console.log('assignWorkersToClusters: Munkres indices:', indices);
 
+        // Step 4: Process the assignments
         const assignments = [];
         const usedWorkers = new Set();
 
@@ -215,6 +220,7 @@ function assignWorkersToClusters(clusters, workers) {
         return assignments;
     } catch (error) {
         console.error('assignWorkersToClusters: Munkres failed:', error.message);
+        // Fallback: Greedy assignment
         const assignments = [];
         const availableWorkers = [...workers];
         for (const cluster of clusters) {
@@ -632,6 +638,7 @@ router.get('/task-route/:taskid', authenticateToken, checkWorkerOrAdminRole, asy
 
             if (routeData.end && routeData.end.lat && routeData.end.lng) {
                 routePoints.push({
+
                     lat: parseFloat(routeData.end.lat),
                     lng: parseFloat(routeData.end.lng),
                 });
