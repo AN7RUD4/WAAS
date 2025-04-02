@@ -18,10 +18,9 @@ class MapScreen extends StatefulWidget {
 
 class _MapScreenState extends State<MapScreen> {
   final MapController _mapController = MapController();
-  final List<LatLng> _locations = []; // Collection points from reports or route
+  final List<LatLng> _locations = []; // Collection points from route
   List<LatLng> _route = []; // Route points (from JSONB or OSRM)
-  List<LatLng> _completeRoute =
-      []; // Complete route including worker's location
+  List<LatLng> _completeRoute = []; // Complete route including worker's location
   double _currentZoom = 14.0;
   LatLng _currentCenter = const LatLng(10.235865, 76.405676); // Default center
   LatLng? _workerLocation; // Worker's real-time location
@@ -43,7 +42,6 @@ class _MapScreenState extends State<MapScreen> {
     _fetchCollectionRequestData();
   }
 
-  // Get worker's real-time location
   void _getWorkerLocation() async {
     try {
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
@@ -68,13 +66,9 @@ class _MapScreenState extends State<MapScreen> {
       }
 
       if (permission == LocationPermission.deniedForever) {
-        setState(
-          () => _errorMessage = 'Location permissions are permanently denied',
-        );
+        setState(() => _errorMessage = 'Location permissions are permanently denied');
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Location permissions are permanently denied'),
-          ),
+          const SnackBar(content: Text('Location permissions are permanently denied')),
         );
         return;
       }
@@ -145,9 +139,7 @@ class _MapScreenState extends State<MapScreen> {
         }
 
         // Optionally use locations from reports if route is incomplete
-        if (_locations.isEmpty &&
-            data['locations'] != null &&
-            data['locations'].isNotEmpty) {
+        if (_locations.isEmpty && data['locations'] != null && data['locations'].isNotEmpty) {
           _parseLocations(data['locations']);
         }
 
@@ -164,44 +156,28 @@ class _MapScreenState extends State<MapScreen> {
           _route = await _fetchRouteFromOSRM();
           if (_route.isEmpty) {
             _route = _locations; // Fallback to straight-line route
-            setState(
-              () =>
-                  _errorMessage =
-                      'Failed to fetch route from OSRM. Showing straight-line path.',
-            );
+            setState(() => _errorMessage = 'Failed to fetch route from OSRM. Showing straight-line path.');
           }
           _updateCompleteRoute();
           _calculateDistances();
           _updateDirectionsBasedOnLocation();
 
-          final bounds = LatLngBounds.fromPoints([
-            _workerLocation!,
-            ..._locations,
-          ]);
+          final bounds = LatLngBounds.fromPoints([_workerLocation!, ..._locations]);
           _mapController.fitCamera(CameraFit.bounds(bounds: bounds));
         } else {
-          setState(
-            () =>
-                _errorMessage = 'Missing worker location or collection points',
-          );
+          setState(() => _errorMessage = 'Missing worker location or collection points');
         }
       } else {
-        setState(
-          () =>
-              _errorMessage =
-                  'Failed to fetch task data: ${response.statusCode}',
-        );
+        setState(() => _errorMessage = 'Failed to fetch task data: ${response.statusCode}');
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to fetch task data: ${response.statusCode}'),
-          ),
+          SnackBar(content: Text('Failed to fetch task data: ${response.statusCode}')),
         );
       }
     } catch (e) {
       setState(() => _errorMessage = 'Error fetching task data: $e');
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error fetching task data: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error fetching task data: $e')),
+      );
     } finally {
       setState(() => _isLoading = false);
     }
@@ -212,10 +188,10 @@ class _MapScreenState extends State<MapScreen> {
     _route.clear();
 
     // Add start point
-    if (routeData['start'] != null &&
-        routeData['start']['lat'] != null &&
-        routeData['start']['lng'] != null) {
-      _route.add(LatLng(routeData['start']['lat'], routeData['start']['lng']));
+    if (routeData['start'] != null && routeData['start']['lat'] != null && routeData['start']['lng'] != null) {
+      final startPoint = LatLng(routeData['start']['lat'], routeData['start']['lng']);
+      _locations.add(startPoint);
+      _route.add(startPoint);
     }
 
     // Add waypoints (these are the report locations)
@@ -223,21 +199,24 @@ class _MapScreenState extends State<MapScreen> {
       for (var waypoint in routeData['waypoints']) {
         if (waypoint['lat'] != null && waypoint['lng'] != null) {
           final latLng = LatLng(waypoint['lat'], waypoint['lng']);
-          _locations.add(latLng); // Treat waypoints as report locations
+          _locations.add(latLng);
           _route.add(latLng);
         }
       }
     }
 
     // Add end point
-    if (routeData['end'] != null &&
-        routeData['end']['lat'] != null &&
-        routeData['end']['lng'] != null) {
-      _route.add(LatLng(routeData['end']['lat'], routeData['end']['lng']));
+    if (routeData['end'] != null && routeData['end']['lat'] != null && routeData['end']['lng'] != null) {
+      final endPoint = LatLng(routeData['end']['lat'], routeData['end']['lng']);
+      _locations.add(endPoint);
+      _route.add(endPoint);
     }
 
     if (_locations.isEmpty) {
       setState(() => _errorMessage = 'No valid waypoints found in route');
+    } else {
+      print('Parsed _locations: $_locations');
+      print('Parsed _route: $_route');
     }
   }
 
@@ -261,64 +240,80 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   Future<List<LatLng>> _fetchRouteFromOSRM() async {
-    if (_workerLocation == null || _locations.isEmpty) return [];
+    if (_workerLocation == null || _locations.isEmpty) {
+      print('Cannot fetch OSRM route: Worker location or locations list is empty');
+      return [];
+    }
 
     List<LatLng> waypoints = [_workerLocation!, ..._locations];
-    final String osrmUrl =
-        'http://router.project-osrm.org/route/v1/driving/${waypoints.map((p) => '${p.longitude},${p.latitude}').join(';')}?overview=full&geometries=geojson&steps=true';
+    final String osrmBaseUrl = 'http://router.project-osrm.org/route/v1/driving/';
+    String coordinates = waypoints.map((point) => '${point.longitude},${point.latitude}').join(';');
+    final String osrmUrl = '$osrmBaseUrl$coordinates?overview=full&geometries=geojson&steps=true';
 
     try {
+      print('Fetching route from OSRM: $osrmUrl');
       final response = await http.get(Uri.parse(osrmUrl));
+      print('OSRM Response status: ${response.statusCode}');
+      print('OSRM Response body: ${response.body}');
+
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
+        final Map<String, dynamic> data = jsonDecode(response.body);
         if (data['code'] == 'Ok' && data['routes'].isNotEmpty) {
           final routeGeometry = data['routes'][0]['geometry']['coordinates'];
-          List<LatLng> routePoints =
-              routeGeometry
-                  .map<LatLng>((coord) => LatLng(coord[1], coord[0]))
-                  .toList();
+          List<LatLng> routePoints = routeGeometry.map<LatLng>((coord) {
+            return LatLng(coord[1], coord[0]);
+          }).toList();
 
           _turnByTurnInstructions.clear();
           final legs = data['routes'][0]['legs'];
           for (var leg in legs) {
             for (var step in leg['steps']) {
-              _turnByTurnInstructions.add(step['maneuver']['instruction']);
+              if (step['maneuver'] != null && step['maneuver']['instruction'] != null) {
+                _turnByTurnInstructions.add(step['maneuver']['instruction']);
+              }
             }
           }
+          print('Turn-by-turn instructions: $_turnByTurnInstructions');
           _currentInstructionIndex = 0;
-          _directions =
-              _turnByTurnInstructions.isNotEmpty
-                  ? _turnByTurnInstructions[0]
-                  : "Proceed to the first collection point";
+          _directions = _turnByTurnInstructions.isNotEmpty
+              ? _turnByTurnInstructions[0]
+              : "Proceed to the first collection point";
 
           return routePoints;
+        } else {
+          throw Exception('OSRM API error: ${data['message']}');
         }
+      } else {
+        throw Exception('Failed to fetch route from OSRM: ${response.statusCode}');
       }
-      return [];
     } catch (e) {
-      setState(() => _errorMessage = 'Error fetching route from OSRM: $e');
-      return [];
+      print('Error fetching route from OSRM: $e');
+      setState(() {
+        _errorMessage = 'Error fetching route from OSRM: $e';
+        _directions = 'Proceed to the collection point (straight-line path)';
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error fetching route from OSRM: $e')),
+      );
+      return _locations;
     }
   }
 
   void _updateCompleteRoute() {
-    if (_workerLocation == null) {
+    if (_workerLocation == null || _route.isEmpty) {
       _completeRoute = _route;
-    } else {
-      _completeRoute = [_workerLocation!, ..._route];
+      return;
     }
+    _completeRoute = [_workerLocation!, ..._route];
+    print('Updated _completeRoute: $_completeRoute');
   }
 
   double _haversineDistance(LatLng start, LatLng end) {
     const double earthRadius = 6371.0;
     final double dLat = _degreesToRadians(end.latitude - start.latitude);
     final double dLon = _degreesToRadians(end.longitude - start.longitude);
-    final double a =
-        sin(dLat / 2) * sin(dLat / 2) +
-        cos(_degreesToRadians(start.latitude)) *
-            cos(_degreesToRadians(end.latitude)) *
-            sin(dLon / 2) *
-            sin(dLon / 2);
+    final double a = sin(dLat / 2) * sin(dLat / 2) +
+        cos(_degreesToRadians(start.latitude)) * cos(_degreesToRadians(end.latitude)) * sin(dLon / 2) * sin(dLon / 2);
     final double c = 2 * asin(sqrt(a));
     return earthRadius * c;
   }
@@ -334,36 +329,28 @@ class _MapScreenState extends State<MapScreen> {
       return;
     }
 
-    _distanceToNearest = _haversineDistance(
-      _workerLocation!,
-      _completeRoute[1],
-    );
+    _distanceToNearest = _haversineDistance(_workerLocation!, _completeRoute[1]);
     _totalDistance = 0.0;
     for (int i = 0; i < _completeRoute.length - 1; i++) {
-      _totalDistance += _haversineDistance(
-        _completeRoute[i],
-        _completeRoute[i + 1],
-      );
+      _totalDistance += _haversineDistance(_completeRoute[i], _completeRoute[i + 1]);
     }
     setState(() {});
   }
 
   void _updateDirectionsBasedOnLocation() {
-    if (_workerLocation == null ||
-        _completeRoute.isEmpty ||
-        _turnByTurnInstructions.isEmpty)
-      return;
+    if (_workerLocation == null || _completeRoute.isEmpty || _turnByTurnInstructions.isEmpty) return;
 
     double minDistance = double.infinity;
+    int closestIndex = 0;
     for (int i = 0; i < _completeRoute.length; i++) {
       final distance = _haversineDistance(_workerLocation!, _completeRoute[i]);
       if (distance < minDistance) {
         minDistance = distance;
+        closestIndex = i;
       }
     }
 
-    if (minDistance < 0.05 &&
-        _currentInstructionIndex < _turnByTurnInstructions.length - 1) {
+    if (minDistance < 0.05 && _currentInstructionIndex < _turnByTurnInstructions.length - 1) {
       _currentInstructionIndex++;
       _directions = _turnByTurnInstructions[_currentInstructionIndex];
       setState(() {});
@@ -381,11 +368,7 @@ class _MapScreenState extends State<MapScreen> {
         ),
         title: const Text(
           'Collection Points',
-          style: TextStyle(
-            fontWeight: FontWeight.w600,
-            color: Colors.white,
-            fontSize: 20,
-          ),
+          style: TextStyle(fontWeight: FontWeight.w600, color: Colors.white, fontSize: 20),
         ),
       ),
       body: Stack(
@@ -408,8 +391,7 @@ class _MapScreenState extends State<MapScreen> {
             ),
             children: [
               TileLayer(
-                urlTemplate:
-                    "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+                urlTemplate: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
                 subdomains: ['a', 'b', 'c'],
               ),
               if (_completeRoute.isNotEmpty)
@@ -429,36 +411,24 @@ class _MapScreenState extends State<MapScreen> {
                       point: _workerLocation!,
                       width: 40,
                       height: 40,
-                      child: const Icon(
-                        Icons.person_pin_circle,
-                        color: Colors.blue,
-                        size: 40,
-                      ),
+                      child: const Icon(Icons.person_pin_circle, color: Colors.blue, size: 40),
                     ),
-                  ..._locations.map(
-                    (loc) => Marker(
-                      point: loc,
-                      width: 40,
-                      height: 40,
-                      child: GestureDetector(
-                        onTap: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                'Location: ${loc.latitude}, ${loc.longitude}',
+                  ..._locations.map((loc) => Marker(
+                        point: loc,
+                        width: 40,
+                        height: 40,
+                        child: GestureDetector(
+                          onTap: () {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Location: ${loc.latitude}, ${loc.longitude}'),
+                                duration: const Duration(seconds: 2),
                               ),
-                              duration: const Duration(seconds: 2),
-                            ),
-                          );
-                        },
-                        child: const Icon(
-                          Icons.location_pin,
-                          color: Colors.redAccent,
-                          size: 40,
+                            );
+                          },
+                          child: const Icon(Icons.location_pin, color: Colors.redAccent, size: 40),
                         ),
-                      ),
-                    ),
-                  ),
+                      )),
                 ],
               ),
             ],
@@ -479,11 +449,7 @@ class _MapScreenState extends State<MapScreen> {
                 children: [
                   Text(
                     'Directions: $_directions',
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
-                    ),
+                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white),
                   ),
                   const SizedBox(height: 8),
                   Text(
@@ -499,10 +465,7 @@ class _MapScreenState extends State<MapScreen> {
                     const SizedBox(height: 8),
                     Text(
                       'Error: $_errorMessage',
-                      style: const TextStyle(
-                        fontSize: 14,
-                        color: Colors.redAccent,
-                      ),
+                      style: const TextStyle(fontSize: 14, color: Colors.redAccent),
                     ),
                   ],
                 ],
@@ -536,8 +499,7 @@ class _MapScreenState extends State<MapScreen> {
               ],
             ),
           ),
-          if (_isLoading)
-            const Center(child: CircularProgressIndicator(color: Colors.green)),
+          if (_isLoading) const Center(child: CircularProgressIndicator(color: Colors.green)),
         ],
       ),
       floatingActionButton: FloatingActionButton(
