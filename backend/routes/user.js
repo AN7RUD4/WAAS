@@ -210,12 +210,6 @@ const { Pool } = require('pg');
 const jwt = require('jsonwebtoken');
 const multer = require('multer');
 
-//imports for ai
-const tf = require('@tensorflow/tfjs-node');
-const mobilenet = require('@tensorflow-models/mobilenet');
-const sharp = require('sharp');
-const fs = require('fs');
-
 const userRouter = express.Router();
 
 const pool = new Pool({
