@@ -552,7 +552,7 @@ router.get('/assigned-tasks', authenticateToken, checkWorkerOrAdminRole, async (
     }
 });
 
-// Updated /task-route/:taskid endpoint
+//map
 router.get('/task-route/:taskid', authenticateToken, checkWorkerOrAdminRole, async (req, res) => {
     const taskId = parseInt(req.params.taskid, 10);
     const workerId = req.user.userid;
@@ -563,8 +563,8 @@ router.get('/task-route/:taskid', authenticateToken, checkWorkerOrAdminRole, asy
         // Fetch the task details, ensuring it belongs to the worker
         const taskResult = await pool.query(
             `SELECT taskid, reportids, assignedworkerid, status, route, starttime, endtime
-       FROM taskrequests
-       WHERE taskid = $1 AND assignedworkerid = $2`,
+             FROM taskrequests
+             WHERE taskid = $1 AND assignedworkerid = $2`,
             [taskId, workerId]
         );
 
@@ -574,94 +574,36 @@ router.get('/task-route/:taskid', authenticateToken, checkWorkerOrAdminRole, asy
 
         const task = taskResult.rows[0];
 
-        // Fetch all reports in this task
+        // Fetch all reports in this task for additional context (optional)
         const reportsResult = await pool.query(
-            `SELECT reportid, wastetype, location 
-       FROM garbagereports 
-       WHERE reportid = ANY($1)`,
+            `SELECT reportid, wastetype, ST_AsText(location) AS location 
+             FROM garbagereports 
+             WHERE reportid = ANY($1)`,
             [task.reportids]
         );
 
-        // Parse collection points from all reports
-        const collectionPoints = [];
-        const wasteTypes = new Set();
+        // Parse collection points from reports
+        const collectionPoints = reportsResult.rows.map(report => {
+            const locationMatch = report.location.match(/POINT\(([^ ]+) ([^)]+)\)/);
+            return {
+                reportid: report.reportid,
+                wastetype: report.wastetype,
+                lat: locationMatch ? parseFloat(locationMatch[2]) : null,
+                lng: locationMatch ? parseFloat(locationMatch[1]) : null,
+            };
+        }).filter(point => point.lat !== null && point.lng !== null);
 
-        for (const report of reportsResult.rows) {
-            wasteTypes.add(report.wastetype);
-
-            if (report.location) {
-                const locationMatch = report.location.match(/POINT\(([^ ]+) ([^)]+)\)/);
-                if (locationMatch) {
-                    collectionPoints.push({
-                        reportid: report.reportid,
-                        lat: parseFloat(locationMatch[2]),
-                        lng: parseFloat(locationMatch[1]),
-                        wastetype: report.wastetype
-                    });
-                }
-            }
-        }
-
-        // Parse the route from the jsonb field or create one from worker location to all collection points
-        let routePoints = [];
-        const routeData = task.route || { start: {}, end: {}, waypoints: [] };
-
-        // If route is empty or invalid, construct a route from worker to collection points
-        if (
-            (!routeData.start || !routeData.start.lat || !routeData.start.lng) &&
-            (!routeData.end || !routeData.end.lat || !routeData.end.lng) &&
-            (!routeData.waypoints || routeData.waypoints.length === 0)
-        ) {
-            if (collectionPoints.length > 0) {
-                routePoints.push({
-                    lat: workerLat,
-                    lng: workerLng,
-                });
-
-                // Add all collection points to route
-                collectionPoints.forEach(point => {
-                    routePoints.push({
-                        lat: point.lat,
-                        lng: point.lng,
-                    });
-                });
-            }
-        } else {
-            // Use the existing route
-            if (routeData.start && routeData.start.lat && routeData.start.lng) {
-                routePoints.push({
-                    lat: parseFloat(routeData.start.lat),
-                    lng: parseFloat(routeData.start.lng),
-                });
-            }
-
-            if (routeData.waypoints && Array.isArray(routeData.waypoints)) {
-                routeData.waypoints.forEach(waypoint => {
-                    if (waypoint.lat && waypoint.lng) {
-                        routePoints.push({
-                            lat: parseFloat(waypoint.lat),
-                            lng: parseFloat(waypoint.lng),
-                        });
-                    }
-                });
-            }
-
-            if (routeData.end && routeData.end.lat && routeData.end.lng) {
-                routePoints.push({
-
-                    lat: parseFloat(routeData.end.lat),
-                    lng: parseFloat(routeData.end.lng),
-                });
-            }
-        }
+        // Use the route from the taskrequests table
+        const routeData = task.route || { start: {}, waypoints: [], end: {} };
 
         res.status(200).json({
             taskid: task.taskid,
             reportids: task.reportids,
             status: task.status,
-            route: [], // Let the app fetch the route from OSRM
-            locations: collectionPoints,
-            wasteTypes: Array.from(wasteTypes),
+            route: routeData, // Return the full route object from JSONB
+            locations: collectionPoints, // Include report locations for reference
+            wasteTypes: [...new Set(collectionPoints.map(p => p.wastetype))],
+            workerLocation: { lat: workerLat, lng: workerLng } // Include worker's location
         });
     } catch (error) {
         console.error('Error fetching task route:', error.message, error.stack);
