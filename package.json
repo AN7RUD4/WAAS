@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "dotenv": "^16.4.7",
     "ml-kmeans": "^6.0.0"
   }
 }
