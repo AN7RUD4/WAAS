@@ -5,10 +5,17 @@ const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const KMeans = require('kmeans-js');
 const Munkres = require('munkres-js');
+const twilio = require('twilio');
 
 const router = express.Router();
 router.use(cors());
 router.use(express.json());
+
+// Initialize Twilio client
+const twilioClient = new twilio(
+  process.env.TWILIO_ACCOUNT_SID,
+  process.env.TWILIO_AUTH_TOKEN
+);
 
 const pool = new Pool({
     connectionString: 'postgresql://postgres.hrzroqrgkvzhomsosqzl:7H.6k2wS*F$q2zY@aws-0-ap-south-1.pooler.supabase.com:6543/postgres',
@@ -25,6 +32,7 @@ pool.connect((err, client, release) => {
     }
 });
 
+// Authentication middleware
 const authenticateToken = (req, res, next) => {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
@@ -50,6 +58,7 @@ const authenticateToken = (req, res, next) => {
     }
 };
 
+// Role check middleware
 const checkWorkerOrAdminRole = (req, res, next) => {
     console.log('Checking role for user:', req.user);
     if (!req.user || (req.user.role.toLowerCase() !== 'worker' && req.user.role.toLowerCase() !== 'admin')) {
@@ -59,6 +68,7 @@ const checkWorkerOrAdminRole = (req, res, next) => {
     next();
 };
 
+// Haversine distance function
 function haversineDistance(lat1, lon1, lat2, lon2) {
     const R = 6371;
     const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -71,12 +81,14 @@ function haversineDistance(lat1, lon1, lat2, lon2) {
     return R * c;
 }
 
+// Distance calculation for clustering
 function calculateDistance(point1, point2) {
     const latDiff = point1[0] - point2[0];
     const lngDiff = point1[1] - point2[1];
     return Math.sqrt(latDiff * latDiff + lngDiff * lngDiff);
 }
 
+// Ensure unique centroids
 function uniqueCentroids(centroids) {
     const unique = [];
     const seen = new Set();
@@ -92,6 +104,7 @@ function uniqueCentroids(centroids) {
     return unique;
 }
 
+// K-Means clustering function
 function kmeansClustering(points, k) {
     if (!Array.isArray(points) || points.length === 0) {
         console.log('kmeansClustering: Invalid or empty points array, returning empty clusters');
@@ -149,6 +162,7 @@ function kmeansClustering(points, k) {
     }
 }
 
+// Assign workers to clusters
 function assignWorkersToClusters(clusters, workers) {
     if (!clusters.length || !workers.length) {
         console.log('assignWorkersToClusters: No clusters or workers, returning empty assignments');
@@ -224,6 +238,7 @@ function assignWorkersToClusters(clusters, workers) {
     }
 }
 
+// Solve TSP for route optimization
 function solveTSP(points, worker) {
     if (points.length === 0) return [];
 
@@ -245,6 +260,22 @@ function solveTSP(points, worker) {
     return route;
 }
 
+// Send SMS notification function
+async function sendSMS(phoneNumber, messageBody) {
+    try {
+        await twilioClient.messages.create({
+            body: messageBody,
+            from: process.env.TWILIO_PHONE_NUMBER,
+            to: phoneNumber,
+        });
+        console.log(`SMS sent to ${phoneNumber}: ${messageBody}`);
+    } catch (smsError) {
+        console.error('Error sending SMS:', smsError.message, smsError.stack);
+        throw new Error('Failed to send SMS notification');
+    }
+}
+
+// Group and assign reports endpoint with SMS notification
 router.post('/group-and-assign-reports', authenticateToken, checkWorkerOrAdminRole, async (req, res) => {
     console.log('Reached /group-and-assign-reports endpoint');
     try {
@@ -257,7 +288,7 @@ router.post('/group-and-assign-reports', authenticateToken, checkWorkerOrAdminRo
         let result;
         try {
             result = await pool.query(
-                `SELECT reportid, wastetype, ST_AsText(location) AS location, datetime
+                `SELECT reportid, wastetype, ST_AsText(location) AS location, datetime, userid
                  FROM garbagereports
                  WHERE reportid NOT IN (
                    SELECT unnest(reportids) FROM taskrequests
@@ -278,6 +309,7 @@ router.post('/group-and-assign-reports', authenticateToken, checkWorkerOrAdminRo
                 lat: locationMatch ? parseFloat(locationMatch[2]) : null,
                 lng: locationMatch ? parseFloat(locationMatch[1]) : null,
                 created_at: new Date(row.datetime),
+                userid: row.userid,
             };
         });
 
@@ -285,7 +317,7 @@ router.post('/group-and-assign-reports', authenticateToken, checkWorkerOrAdminRo
             console.log('No unassigned reports found, exiting endpoint');
             return res.status(200).json({ message: 'No unassigned reports found' });
         }
-        console.log(reports);
+        console.log('Reports with user IDs:', reports);
 
         reports = reports.filter(r => r.lat !== null && r.lng !== null);
         console.log('Filtered reports with valid locations:', reports);
@@ -318,34 +350,33 @@ router.post('/group-and-assign-reports', authenticateToken, checkWorkerOrAdminRo
             console.log('Clusters formed:', clusters);
 
             console.log('Fetching available workers...');
-            console.log('Fetching available workers...');
-let workerResult;
-try {
-    workerResult = await pool.query(
-        `SELECT userid, ST_AsText(location) AS location
-         FROM users
-         WHERE role = 'worker'
-         AND userid NOT IN (
-           SELECT assignedworkerid
-           FROM taskrequests
-           WHERE status != 'completed'
-           GROUP BY assignedworkerid
-           HAVING COUNT(*) >= 5
-         )`
-    );
-} catch (dbError) {
-    console.error('Worker query error:', dbError.message, dbError.stack);
-    throw dbError;
-}
-let workers = workerResult.rows.map(row => {
-    const locMatch = row.location ? row.location.match(/POINT\(([^ ]+) ([^)]+)\)/) : null;
-    return {
-        userid: row.userid,
-        lat: locMatch ? parseFloat(locMatch[2]) : 10.235865,
-        lng: locMatch ? parseFloat(locMatch[1]) : 76.405676,
-    };
-});
-console.log('Available workers:', workers);
+            let workerResult;
+            try {
+                workerResult = await pool.query(
+                    `SELECT userid, ST_AsText(location) AS location
+                     FROM users
+                     WHERE role = 'worker'
+                     AND userid NOT IN (
+                       SELECT assignedworkerid
+                       FROM taskrequests
+                       WHERE status != 'completed'
+                       GROUP BY assignedworkerid
+                       HAVING COUNT(*) >= 5
+                     )`
+                );
+            } catch (dbError) {
+                console.error('Worker query error:', dbError.message, dbError.stack);
+                throw dbError;
+            }
+            let workers = workerResult.rows.map(row => {
+                const locMatch = row.location ? row.location.match(/POINT\(([^ ]+) ([^)]+)\)/) : null;
+                return {
+                    userid: row.userid,
+                    lat: locMatch ? parseFloat(locMatch[2]) : 10.235865,
+                    lng: locMatch ? parseFloat(locMatch[1]) : 76.405676,
+                };
+            });
+            console.log('Available workers:', workers);
 
             if (workers.length === 0) {
                 console.log('No workers available, breaking loop');
@@ -392,6 +423,28 @@ console.log('Available workers:', workers);
                 const taskId = taskResult.rows[0].taskid;
                 console.log(`Task inserted successfully with taskId: ${taskId}`);
 
+                // Send SMS to users whose reports are in this cluster
+                const uniqueUserIds = [...new Set(cluster.map(report => report.userid))];
+                for (const userId of uniqueUserIds) {
+                    try {
+                        const userResult = await pool.query(
+                            `SELECT phone 
+                             FROM users 
+                             WHERE userid = $1`,
+                            [userId]
+                        );
+                        if (userResult.rows.length > 0 && userResult.rows[0].phone) {
+                            const phoneNumber = userResult.rows[0].phone;
+                            const messageBody = `Your garbage report has been assigned to a worker (Task ID: ${taskId}).`;
+                            await sendSMS(phoneNumber, messageBody);
+                        } else {
+                            console.warn(`No phone number found for user ${userId}`);
+                        }
+                    } catch (error) {
+                        console.error(`Failed to send SMS for user ${userId}:`, error.message);
+                    }
+                }
+
                 cluster.forEach(report => processedReports.add(report.reportid));
                 assignments.push({
                     taskId: taskId,
@@ -406,7 +459,7 @@ console.log('Available workers:', workers);
 
         console.log('Endpoint completed successfully, assignments:', assignments);
         res.status(200).json({
-            message: 'Reports grouped and assigned successfully',
+            message: 'Reports grouped and assigned successfully, SMS notifications sent where possible',
             assignments,
         });
     } catch (error) {
