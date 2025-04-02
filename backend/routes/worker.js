@@ -121,10 +121,20 @@ function kmeansClustering(points, k) {
     console.log('kmeansClustering: Data for clustering:', data);
 
     try {
-        let centroids = kmeans.cluster(data, k, "kmeans++");
-        centroids = uniqueCentroids(centroids);
-        k = Math.min(k, centroids.length);
-        console.log('kmeansClustering: Centroids after unique filtering:', centroids);
+        let centroids;
+        let attempts = 0;
+        const maxAttempts = 5; // Retry up to 5 times to get k unique centroids
+
+        // Keep trying until we get k unique centroids or reach max attempts
+        do {
+            centroids = kmeans.cluster(data, k, "kmeans++");
+            centroids = uniqueCentroids(centroids);
+            attempts++;
+            console.log(`kmeansClustering: Attempt ${attempts}, Centroids:`, centroids);
+        } while (centroids.length < k && attempts < maxAttempts);
+
+        k = Math.min(k, centroids.length); // Adjust k to the number of unique centroids
+        console.log('kmeansClustering: Final centroids after unique filtering:', centroids);
 
         if (!Array.isArray(centroids) || centroids.length === 0) {
             console.log('kmeansClustering: No valid centroids, returning single-point clusters');
