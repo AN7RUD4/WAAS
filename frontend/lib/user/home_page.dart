@@ -83,7 +83,9 @@ class UserApp extends StatelessWidget {
                           onPressed: () {
                             Navigator.push(
                               context,
-                              MaterialPageRoute(builder: (context) => const BinFillPage()),
+                              MaterialPageRoute(
+                                builder: (context) => const BinFillPage(),
+                              ),
                             );
                           },
                           child: const Text('Bin Fill'),
@@ -122,7 +124,9 @@ class UserApp extends StatelessWidget {
                           onPressed: () {
                             Navigator.push(
                               context,
-                              MaterialPageRoute(builder: (context) => const ReportPage()),
+                              MaterialPageRoute(
+                                builder: (context) => const ReportPage(),
+                              ),
                             );
                           },
                           child: const Text('Report Waste'),
@@ -161,7 +165,10 @@ class UserApp extends StatelessWidget {
                           onPressed: () {
                             Navigator.push(
                               context,
-                              MaterialPageRoute(builder: (context) => const CollectionRequestsPage()),
+                              MaterialPageRoute(
+                                builder:
+                                    (context) => const CollectionRequestsPage(),
+                              ),
                             );
                           },
                           child: const Text('View Requests'),
@@ -225,7 +232,9 @@ class _ReportPageState extends State<ReportPage> {
 
     if (permission == LocationPermission.deniedForever) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Location permissions are permanently denied')),
+        const SnackBar(
+          content: Text('Location permissions are permanently denied'),
+        ),
       );
       return;
     }
@@ -244,7 +253,9 @@ class _ReportPageState extends State<ReportPage> {
 
   Future<void> _takePicture() async {
     final ImagePicker picker = ImagePicker();
-    final XFile? pickedImage = await picker.pickImage(source: ImageSource.camera);
+    final XFile? pickedImage = await picker.pickImage(
+      source: ImageSource.camera,
+    );
 
     if (pickedImage != null) {
       setState(() {
@@ -257,7 +268,9 @@ class _ReportPageState extends State<ReportPage> {
   Future<void> _submitReport() async {
     if (_image == null || locationController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please take a photo and provide a location!")),
+        const SnackBar(
+          content: Text("Please take a photo and provide a location!"),
+        ),
       );
       return;
     }
@@ -273,11 +286,13 @@ class _ReportPageState extends State<ReportPage> {
 
       var request = http.MultipartRequest(
         'POST',
-        Uri.parse('http://your-backend-url:3000/report-waste'), // Replace with your backend URL
+        Uri.parse('$apiBaseUrl/report-waste'), // Replace with your backend URL
       );
       request.headers['Authorization'] = 'Bearer $token';
       request.fields['location'] = locationController.text;
-      request.files.add(await http.MultipartFile.fromPath('image', _image!.path));
+      request.files.add(
+        await http.MultipartFile.fromPath('image', _image!.path),
+      );
 
       var response = await request.send();
       var responseBody = await response.stream.bytesToString();
@@ -288,7 +303,8 @@ class _ReportPageState extends State<ReportPage> {
           const SnackBar(content: Text("Report submitted successfully!")),
         );
         Navigator.pop(context);
-      } else if (response.statusCode == 400 && jsonResponse['message'] == 'No waste detected in the image') {
+      } else if (response.statusCode == 400 &&
+          jsonResponse['message'] == 'No waste detected in the image') {
         setState(() {
           _errorMessage = 'No waste detected in the image';
         });
@@ -307,53 +323,52 @@ class _ReportPageState extends State<ReportPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text("Report Public Waste"),
-      ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        "Report Public Waste",
-                        style: GoogleFonts.poppins(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black87,
+      appBar: AppBar(title: const Text("Report Public Waste")),
+      body:
+          _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          "Report Public Waste",
+                          style: GoogleFonts.poppins(
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black87,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        "Help keep your community clean",
-                        style: GoogleFonts.poppins(
-                          fontSize: 16,
-                          color: Colors.black54,
+                        const SizedBox(height: 8),
+                        Text(
+                          "Help keep your community clean",
+                          style: GoogleFonts.poppins(
+                            fontSize: 16,
+                            color: Colors.black54,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 24),
-                      Text(
-                        "Take a Picture",
-                        style: GoogleFonts.poppins(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.black87,
+                        const SizedBox(height: 24),
+                        Text(
+                          "Take a Picture",
+                          style: GoogleFonts.poppins(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.black87,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 8),
-                      Center(
-                        child: Column(
-                          children: [
-                            _image == null
-                                ? const Text(
+                        const SizedBox(height: 8),
+                        Center(
+                          child: Column(
+                            children: [
+                              _image == null
+                                  ? const Text(
                                     "No Image Taken",
                                     style: TextStyle(color: Colors.black54),
                                   )
-                                : ClipRRect(
+                                  : ClipRRect(
                                     borderRadius: BorderRadius.circular(12),
                                     child: Image.file(
                                       _image!,
@@ -361,50 +376,50 @@ class _ReportPageState extends State<ReportPage> {
                                       fit: BoxFit.cover,
                                     ),
                                   ),
-                            const SizedBox(height: 16),
-                            SizedBox(
-                              width: double.infinity,
-                              child: ElevatedButton.icon(
-                                icon: const Icon(Icons.camera_alt),
-                                label: const Text("Open Camera"),
-                                onPressed: _takePicture,
+                              const SizedBox(height: 16),
+                              SizedBox(
+                                width: double.infinity,
+                                child: ElevatedButton.icon(
+                                  icon: const Icon(Icons.camera_alt),
+                                  label: const Text("Open Camera"),
+                                  onPressed: _takePicture,
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: locationController,
-                        readOnly: true,
-                        decoration: const InputDecoration(
-                          labelText: "Location",
-                          prefixIcon: Icon(Icons.location_on_outlined),
-                        ),
-                      ),
-                      if (_errorMessage != null) ...[
                         const SizedBox(height: 16),
-                        Text(
-                          _errorMessage!,
-                          style: GoogleFonts.poppins(
-                            color: Colors.red,
-                            fontSize: 14,
+                        TextFormField(
+                          controller: locationController,
+                          readOnly: true,
+                          decoration: const InputDecoration(
+                            labelText: "Location",
+                            prefixIcon: Icon(Icons.location_on_outlined),
+                          ),
+                        ),
+                        if (_errorMessage != null) ...[
+                          const SizedBox(height: 16),
+                          Text(
+                            _errorMessage!,
+                            style: GoogleFonts.poppins(
+                              color: Colors.red,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 24),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: _submitReport,
+                            child: const Text("Submit Report"),
                           ),
                         ),
                       ],
-                      const SizedBox(height: 24),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton(
-                          onPressed: _submitReport,
-                          child: const Text("Submit Report"),
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
                 ),
               ),
-            ),
     );
   }
 }
@@ -455,7 +470,9 @@ class _BinFillPageState extends State<BinFillPage> {
 
     if (permission == LocationPermission.deniedForever) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Location permissions are permanently denied')),
+        const SnackBar(
+          content: Text('Location permissions are permanently denied'),
+        ),
       );
       return;
     }
@@ -487,9 +504,9 @@ class _BinFillPageState extends State<BinFillPage> {
       return;
     }
     if (locationController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please provide location")),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Please provide location")));
       return;
     }
 
@@ -518,10 +535,14 @@ class _BinFillPageState extends State<BinFillPage> {
         );
         Navigator.pop(context);
       } else {
-        throw Exception(jsonDecode(response.body)['message'] ?? 'Failed to submit');
+        throw Exception(
+          jsonDecode(response.body)['message'] ?? 'Failed to submit',
+        );
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: $e')));
     } finally {
       setState(() => _isLoading = false);
     }
@@ -530,95 +551,94 @@ class _BinFillPageState extends State<BinFillPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text("Report Bin Fill"),
-      ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Header
-                      Text(
-                        "Report Bin Fill",
-                        style: GoogleFonts.poppins(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black87,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        "Help us collect waste efficiently",
-                        style: GoogleFonts.poppins(
-                          fontSize: 16,
-                          color: Colors.black54,
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                      // Location Field
-                      TextFormField(
-                        controller: locationController,
-                        readOnly: true,
-                        decoration: const InputDecoration(
-                          labelText: "User Location",
-                          prefixIcon: Icon(Icons.location_on_outlined),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      // Bin Fill Level
-                      Text(
-                        "Bin Fill Level",
-                        style: GoogleFonts.poppins(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.black87,
-                        ),
-                      ),
-                      Row(
-                        children: [
-                          Checkbox(
-                            value: is80Checked,
-                            onChanged: (val) => _updateCheckbox(true),
-                            activeColor: AppColors.primaryColor,
+      appBar: AppBar(title: const Text("Report Bin Fill")),
+      body:
+          _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Header
+                        Text(
+                          "Report Bin Fill",
+                          style: GoogleFonts.poppins(
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black87,
                           ),
-                          Text(
-                            "80% Bin Fill",
-                            style: GoogleFonts.poppins(color: Colors.black87),
-                          ),
-                        ],
-                      ),
-                      Row(
-                        children: [
-                          Checkbox(
-                            value: is100Checked,
-                            onChanged: (val) => _updateCheckbox(false),
-                            activeColor: AppColors.primaryColor,
-                          ),
-                          Text(
-                            "100% Bin Fill",
-                            style: GoogleFonts.poppins(color: Colors.black87),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 24),
-                      // Submit Button
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton(
-                          onPressed: _submitBinFill,
-                          child: const Text("Submit"),
                         ),
-                      ),
-                    ],
+                        const SizedBox(height: 8),
+                        Text(
+                          "Help us collect waste efficiently",
+                          style: GoogleFonts.poppins(
+                            fontSize: 16,
+                            color: Colors.black54,
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        // Location Field
+                        TextFormField(
+                          controller: locationController,
+                          readOnly: true,
+                          decoration: const InputDecoration(
+                            labelText: "User Location",
+                            prefixIcon: Icon(Icons.location_on_outlined),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        // Bin Fill Level
+                        Text(
+                          "Bin Fill Level",
+                          style: GoogleFonts.poppins(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.black87,
+                          ),
+                        ),
+                        Row(
+                          children: [
+                            Checkbox(
+                              value: is80Checked,
+                              onChanged: (val) => _updateCheckbox(true),
+                              activeColor: AppColors.primaryColor,
+                            ),
+                            Text(
+                              "80% Bin Fill",
+                              style: GoogleFonts.poppins(color: Colors.black87),
+                            ),
+                          ],
+                        ),
+                        Row(
+                          children: [
+                            Checkbox(
+                              value: is100Checked,
+                              onChanged: (val) => _updateCheckbox(false),
+                              activeColor: AppColors.primaryColor,
+                            ),
+                            Text(
+                              "100% Bin Fill",
+                              style: GoogleFonts.poppins(color: Colors.black87),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 24),
+                        // Submit Button
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: _submitBinFill,
+                            child: const Text("Submit"),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
     );
   }
 }
@@ -663,13 +683,19 @@ class _CollectionRequestsPageState extends State<CollectionRequestsPage> {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         setState(() {
-          garbageReports = List<Map<String, dynamic>>.from(data['garbageReports'] ?? []);
+          garbageReports = List<Map<String, dynamic>>.from(
+            data['garbageReports'] ?? [],
+          );
         });
       } else {
-        throw Exception(jsonDecode(response.body)['message'] ?? 'Failed to fetch requests');
+        throw Exception(
+          jsonDecode(response.body)['message'] ?? 'Failed to fetch requests',
+        );
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: $e')));
     } finally {
       setState(() => _isLoading = false);
     }
@@ -678,144 +704,185 @@ class _CollectionRequestsPageState extends State<CollectionRequestsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text("Collection Requests"),
-      ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: RefreshIndicator(
-                  onRefresh: _fetchRequests,
-                  color: AppColors.primaryColor,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Header
-                      Text(
-                        "Collection Requests",
-                        style: GoogleFonts.poppins(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black87,
+      appBar: AppBar(title: const Text("Collection Requests")),
+      body:
+          _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: RefreshIndicator(
+                    onRefresh: _fetchRequests,
+                    color: AppColors.primaryColor,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Header
+                        Text(
+                          "Collection Requests",
+                          style: GoogleFonts.poppins(
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black87,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        "View your submitted requests",
-                        style: GoogleFonts.poppins(
-                          fontSize: 16,
-                          color: Colors.black54,
+                        const SizedBox(height: 8),
+                        Text(
+                          "View your submitted requests",
+                          style: GoogleFonts.poppins(
+                            fontSize: 16,
+                            color: Colors.black54,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 16),
-                      // Garbage Reports
-                      Expanded(
-                        child: garbageReports.isEmpty
-                            ? const Center(
-                                child: Text(
-                                  "No garbage reports found.",
-                                  style: TextStyle(color: Colors.black54),
-                                ),
-                              )
-                            : ListView.builder(
-                                itemCount: garbageReports.length,
-                                itemBuilder: (context, index) {
-                                  final report = garbageReports[index];
-                                  return Card(
-                                    child: Padding(
-                                      padding: const EdgeInsets.all(16.0),
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Row(
-                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        const SizedBox(height: 16),
+                        // Garbage Reports
+                        Expanded(
+                          child:
+                              garbageReports.isEmpty
+                                  ? const Center(
+                                    child: Text(
+                                      "No garbage reports found.",
+                                      style: TextStyle(color: Colors.black54),
+                                    ),
+                                  )
+                                  : ListView.builder(
+                                    itemCount: garbageReports.length,
+                                    itemBuilder: (context, index) {
+                                      final report = garbageReports[index];
+                                      return Card(
+                                        child: Padding(
+                                          padding: const EdgeInsets.all(16.0),
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
                                             children: [
-                                              Text(
-                                                "Report ID: ${report['reportid']}",
-                                                style: GoogleFonts.poppins(
-                                                  fontWeight: FontWeight.w600,
-                                                  color: Colors.black87,
-                                                ),
-                                              ),
-                                              Container(
-                                                padding: const EdgeInsets.symmetric(
-                                                  horizontal: 8,
-                                                  vertical: 4,
-                                                ),
-                                                decoration: BoxDecoration(
-                                                  color: report['status'] == 'Pending'
-                                                      ? Colors.orange.shade700
-                                                      : report['status'] == 'Completed'
-                                                          ? Colors.green.shade700
-                                                          : Colors.red.shade700,
-                                                  borderRadius: BorderRadius.circular(12),
-                                                ),
-                                                child: Text(
-                                                  report['status'] ?? 'Unknown',
-                                                  style: GoogleFonts.poppins(
-                                                    fontSize: 12,
-                                                    color: Colors.white,
-                                                  ),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                          const SizedBox(height: 8),
-                                          Text(
-                                            "Location: ${report['location']}",
-                                            style: GoogleFonts.poppins(color: Colors.black54),
-                                          ),
-                                          Text(
-                                            "Time: ${report['datetime']}",
-                                            style: GoogleFonts.poppins(color: Colors.black54),
-                                          ),
-                                          Text(
-                                            "Waste Type: ${report['wastetype']}",
-                                            style: GoogleFonts.poppins(color: Colors.black54),
-                                          ),
-                                          if (report['comments'] != null)
-                                            Text(
-                                              "Comments: ${report['comments']}",
-                                              style: GoogleFonts.poppins(color: Colors.black54),
-                                            ),
-                                          if (report['imageurl'] != null) ...[
-                                            const SizedBox(height: 8),
-                                            ClipRRect(
-                                              borderRadius: BorderRadius.circular(12),
-                                              child: Image.network(
-                                                report['imageurl'],
-                                                height: 150,
-                                                width: double.infinity,
-                                                fit: BoxFit.cover,
-                                                errorBuilder: (context, error, stackTrace) =>
-                                                    Container(
-                                                  height: 150,
-                                                  width: double.infinity,
-                                                  color: Colors.grey.shade200,
-                                                  child: const Center(
-                                                    child: Text(
-                                                      "Image unavailable",
-                                                      style: TextStyle(color: Colors.black54),
+                                              Row(
+                                                mainAxisAlignment:
+                                                    MainAxisAlignment
+                                                        .spaceBetween,
+                                                children: [
+                                                  Text(
+                                                    "Report ID: ${report['reportid']}",
+                                                    style: GoogleFonts.poppins(
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                      color: Colors.black87,
                                                     ),
                                                   ),
+                                                  Container(
+                                                    padding:
+                                                        const EdgeInsets.symmetric(
+                                                          horizontal: 8,
+                                                          vertical: 4,
+                                                        ),
+                                                    decoration: BoxDecoration(
+                                                      color:
+                                                          report['status'] ==
+                                                                  'Pending'
+                                                              ? Colors
+                                                                  .orange
+                                                                  .shade700
+                                                              : report['status'] ==
+                                                                  'Completed'
+                                                              ? Colors
+                                                                  .green
+                                                                  .shade700
+                                                              : Colors
+                                                                  .red
+                                                                  .shade700,
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                            12,
+                                                          ),
+                                                    ),
+                                                    child: Text(
+                                                      report['status'] ??
+                                                          'Unknown',
+                                                      style:
+                                                          GoogleFonts.poppins(
+                                                            fontSize: 12,
+                                                            color: Colors.white,
+                                                          ),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                              const SizedBox(height: 8),
+                                              Text(
+                                                "Location: ${report['location']}",
+                                                style: GoogleFonts.poppins(
+                                                  color: Colors.black54,
                                                 ),
                                               ),
-                                            ),
-                                          ],
-                                        ],
-                                      ),
-                                    ),
-                                  );
-                                },
-                              ),
-                      ),
-                    ],
+                                              Text(
+                                                "Time: ${report['datetime']}",
+                                                style: GoogleFonts.poppins(
+                                                  color: Colors.black54,
+                                                ),
+                                              ),
+                                              Text(
+                                                "Waste Type: ${report['wastetype']}",
+                                                style: GoogleFonts.poppins(
+                                                  color: Colors.black54,
+                                                ),
+                                              ),
+                                              if (report['comments'] != null)
+                                                Text(
+                                                  "Comments: ${report['comments']}",
+                                                  style: GoogleFonts.poppins(
+                                                    color: Colors.black54,
+                                                  ),
+                                                ),
+                                              if (report['imageurl'] !=
+                                                  null) ...[
+                                                const SizedBox(height: 8),
+                                                ClipRRect(
+                                                  borderRadius:
+                                                      BorderRadius.circular(12),
+                                                  child: Image.network(
+                                                    report['imageurl'],
+                                                    height: 150,
+                                                    width: double.infinity,
+                                                    fit: BoxFit.cover,
+                                                    errorBuilder:
+                                                        (
+                                                          context,
+                                                          error,
+                                                          stackTrace,
+                                                        ) => Container(
+                                                          height: 150,
+                                                          width:
+                                                              double.infinity,
+                                                          color:
+                                                              Colors
+                                                                  .grey
+                                                                  .shade200,
+                                                          child: const Center(
+                                                            child: Text(
+                                                              "Image unavailable",
+                                                              style: TextStyle(
+                                                                color:
+                                                                    Colors
+                                                                        .black54,
+                                                              ),
+                                                            ),
+                                                          ),
+                                                        ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ],
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
     );
   }
 }
