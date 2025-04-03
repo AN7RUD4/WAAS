@@ -5,9 +5,12 @@ import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:waas/services/chatbot_service.dart';
 import '../colors/colors.dart';
 import 'package:waas/assets/constants.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:flutter_chat_ui/flutter_chat_ui.dart';
+import 'package:flutter_chat_types/flutter_chat_types.dart' as types;
 
 // Main user dashboard page
 class UserApp extends StatelessWidget {
@@ -182,10 +185,29 @@ class UserApp extends StatelessWidget {
           ),
         ),
       ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder:
+                  (context) => ChatbotWidget(
+                    agentId:
+                        'your-chatbase-agent-id', // Replace with your actual ID
+                    apiKey:
+                        'your-chatbase-api-key', // Replace with your actual key
+                  ),
+            ),
+          );
+        },
+        child: const Icon(Icons.chat),
+        backgroundColor: Colors.green.shade700,
+      ),
     );
   }
 }
 
+// Report Page for submitting public waste reports
 // Report Page for submitting public waste reports
 class ReportPage extends StatefulWidget {
   const ReportPage({super.key});
@@ -200,6 +222,7 @@ class _ReportPageState extends State<ReportPage> {
   bool _isLoading = false;
   final storage = const FlutterSecureStorage();
   String? _errorMessage;
+  bool? _hasWaste; // To store the waste detection result
 
   @override
   void initState() {
@@ -261,7 +284,54 @@ class _ReportPageState extends State<ReportPage> {
       setState(() {
         _image = File(pickedImage.path);
         _errorMessage = null; // Reset error message
+        _hasWaste = null; // Reset waste detection result
       });
+
+      // Call the waste detection endpoint after taking the picture
+      await _detectWaste();
+    }
+  }
+
+  Future<void> _detectWaste() async {
+    if (_image == null) return;
+
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final token = await _getToken();
+      if (token == null) throw Exception('No token found');
+
+      var request = http.MultipartRequest(
+        'POST',
+        Uri.parse(
+          '$apiBaseUrl/user/detect-waste',
+        ), // Call the detect-waste endpoint
+      );
+      request.headers['Authorization'] = 'Bearer $token';
+      request.files.add(
+        await http.MultipartFile.fromPath('image', _image!.path),
+      );
+
+      var response = await request.send();
+      var responseBody = await response.stream.bytesToString();
+      final jsonResponse = jsonDecode(responseBody);
+
+      if (response.statusCode == 200) {
+        setState(() {
+          _hasWaste = jsonResponse['hasWaste'] ?? false;
+        });
+      } else {
+        throw Exception(jsonResponse['error'] ?? 'Failed to detect waste');
+      }
+    } catch (e) {
+      setState(() {
+        _errorMessage = 'Error detecting waste: $e';
+      });
+    } finally {
+      setState(() => _isLoading = false);
     }
   }
 
@@ -270,6 +340,24 @@ class _ReportPageState extends State<ReportPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text("Please take a photo and provide a location!"),
+        ),
+      );
+      return;
+    }
+
+    if (_hasWaste == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Please wait for waste detection to complete"),
+        ),
+      );
+      return;
+    }
+
+    if (!_hasWaste!) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Cannot submit report: No waste detected in the image"),
         ),
       );
       return;
@@ -286,7 +374,7 @@ class _ReportPageState extends State<ReportPage> {
 
       var request = http.MultipartRequest(
         'POST',
-        Uri.parse('$apiBaseUrl/report-waste'), // Replace with your backend URL
+        Uri.parse('$apiBaseUrl/user/report-waste'), // Submit the report
       );
       request.headers['Authorization'] = 'Bearer $token';
       request.fields['location'] = locationController.text;
@@ -303,11 +391,6 @@ class _ReportPageState extends State<ReportPage> {
           const SnackBar(content: Text("Report submitted successfully!")),
         );
         Navigator.pop(context);
-      } else if (response.statusCode == 400 &&
-          jsonResponse['message'] == 'No waste detected in the image') {
-        setState(() {
-          _errorMessage = 'No waste detected in the image';
-        });
       } else {
         throw Exception(jsonResponse['message'] ?? 'Failed to submit report');
       }
@@ -376,6 +459,20 @@ class _ReportPageState extends State<ReportPage> {
                                       fit: BoxFit.cover,
                                     ),
                                   ),
+                              const SizedBox(height: 8),
+                              // Display waste detection result
+                              if (_image != null && _hasWaste != null)
+                                Text(
+                                  _hasWaste!
+                                      ? "Waste Detected"
+                                      : "Waste Not Detected",
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 14,
+                                    color:
+                                        _hasWaste! ? Colors.green : Colors.red,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
                               const SizedBox(height: 16),
                               SizedBox(
                                 width: double.infinity,
@@ -883,6 +980,144 @@ class _CollectionRequestsPageState extends State<CollectionRequestsPage> {
                   ),
                 ),
               ),
+    );
+  }
+}
+
+class ChatbotWidget extends StatefulWidget {
+  final String agentId;
+  final String apiKey;
+
+  const ChatbotWidget({super.key, required this.agentId, required this.apiKey});
+
+  @override
+  _ChatbotWidgetState createState() => _ChatbotWidgetState();
+}
+
+class _ChatbotWidgetState extends State<ChatbotWidget> {
+  final List<types.Message> _messages = [];
+  late final ChatbotService _chatbotService;
+  bool _isLoading = false;
+  final _inputController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _chatbotService = ChatbotService(
+      agentId: widget.agentId,
+      apiKey: widget.apiKey,
+    );
+    _addWelcomeMessage();
+  }
+
+  @override
+  void dispose() {
+    _inputController.dispose();
+    super.dispose();
+  }
+
+  void _addWelcomeMessage() {
+    final welcomeMessage = types.TextMessage(
+      author: const types.User(id: 'bot'),
+      createdAt: DateTime.now().millisecondsSinceEpoch,
+      id: 'welcome',
+      text:
+          'Hello! I\'m your waste management assistant. How can I help you today?',
+    );
+    setState(() {
+      _messages.insert(0, welcomeMessage);
+    });
+  }
+
+  void _handleSendPressed(types.PartialText message) async {
+    if (message.text.trim().isEmpty) return;
+
+    final userMessage = types.TextMessage(
+      author: const types.User(id: 'user'),
+      createdAt: DateTime.now().millisecondsSinceEpoch,
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      text: message.text,
+    );
+
+    setState(() {
+      _messages.insert(0, userMessage);
+      _isLoading = true;
+      _inputController.clear();
+    });
+
+    try {
+      final response = await _chatbotService.sendMessage(message.text);
+
+      final botMessage = types.TextMessage(
+        author: const types.User(id: 'bot'),
+        createdAt: DateTime.now().millisecondsSinceEpoch,
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        text: response,
+      );
+
+      setState(() {
+        _messages.insert(0, botMessage);
+      });
+    } catch (e) {
+      final errorMessage = types.TextMessage(
+        author: const types.User(id: 'bot'),
+        createdAt: DateTime.now().millisecondsSinceEpoch,
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        text: 'Sorry, I encountered an error. Please try again later.',
+      );
+      setState(() {
+        _messages.insert(0, errorMessage);
+      });
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Waste Management Assistant'),
+        backgroundColor: Colors.green.shade700,
+        foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.close),
+            onPressed: () => Navigator.pop(context),
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          Expanded(
+            child: Chat(
+              messages: _messages,
+              onSendPressed: _handleSendPressed,
+              showUserAvatars: true,
+              showUserNames: true,
+              theme: DefaultChatTheme(
+                primaryColor: Colors.green.shade700,
+                secondaryColor: Colors.green.shade100,
+                inputBackgroundColor: Colors.grey.shade100,
+                inputTextColor: Colors.black87,
+                receivedMessageBodyTextStyle: TextStyle(
+                  color: Colors.grey.shade800,
+                ),
+                sentMessageBodyTextStyle: const TextStyle(color: Colors.white),
+              ),
+              user: const types.User(id: 'user'),
+            ),
+          ),
+          if (_isLoading)
+            const LinearProgressIndicator(
+              minHeight: 2,
+              backgroundColor: Colors.transparent,
+              color: Colors.green,
+            ),
+        ],
+      ),
     );
   }
 }
