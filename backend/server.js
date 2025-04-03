@@ -8,9 +8,16 @@ const cors = require('cors');
 const app = express();
 const port = process.env.PORT || 5000;
 
+// Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cors());
+
+// Create uploads directory if it doesn't exist
+const fs = require('fs');
+if (!fs.existsSync('uploads')) {
+  fs.mkdirSync('uploads');
+}
 
 // Root route for testing
 app.get('/', (req, res) => {
@@ -30,7 +37,7 @@ const axios = require('axios');
 cron.schedule('0 * * * *', async () => {
   try {
     const response = await axios.post(
-      '$apiBaseUrl/worker/group-and-assign-reports',
+      process.env.API_BASE_URL || '$apiBaseUrl/worker/group-and-assign-reports', // Replace $apiBaseUrl with environment variable
       {},
       { headers: { Authorization: 'Bearer <admin-jwt-token>' } }
     );
