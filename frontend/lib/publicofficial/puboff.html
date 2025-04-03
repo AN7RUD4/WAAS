@@ -172,7 +172,7 @@
                 <label for="month">Month:</label>
                 <input type="month" id="month" required>
                 <label for="reportid">Report ID (Optional):</label>
-                <input type="text" id="reportid" placeholder="Enter Report ID">
+                <input type="number" id="reportid" placeholder="Enter Report ID">
                 <button type="submit">Generate Report</button>
             </form>
             <div id="reportResult"></div>
@@ -186,7 +186,7 @@
                     <label for="workerName">Worker Name:</label>
                     <input type="text" id="workerName" placeholder="Enter name" required>
                     <label for="workerId">Worker ID:</label>
-                    <input type="text" id="workerId" placeholder="Enter ID" required>
+                    <input type="number" id="workerId" placeholder="Enter ID" required>
                     <label for="workerEmail">Worker Email:</label>
                     <input type="email" id="workerEmail" placeholder="Enter email" required>
                     <label for="workerPhone">Worker Phone:</label>
@@ -206,7 +206,6 @@
                             <th>Name</th>
                             <th>Email</th>
                             <th>Status</th>
-                            <th>Action</th>
                         </tr>
                     </thead>
                     <tbody id="workerTableBody"></tbody>
@@ -229,7 +228,7 @@
             const reportForm = document.getElementById('reportForm');
             reportForm.addEventListener('submit', async (e) => {
                 e.preventDefault();
-                const month = document.getElementById('month').value; // Format: "YYYY-MM"
+                const month = document.getElementById('month').value;
                 const reportid = document.getElementById('reportid').value;
                 const resultDiv = document.getElementById('reportResult');
                 
@@ -237,55 +236,130 @@
                     // Calculate the start and end of the month
                     const [year, monthNum] = month.split('-').map(Number);
                     const startOfMonth = `${year}-${monthNum.toString().padStart(2, '0')}-01T00:00:00Z`;
-                    const lastDay = new Date(year, monthNum, 0).getDate(); // Get the last day of the month
+                    const lastDay = new Date(year, monthNum, 0).getDate();
                     const endOfMonth = `${year}-${monthNum.toString().padStart(2, '0')}-${lastDay}T23:59:59Z`;
 
-                    // Build the query
-                    let query = supabaseClient
+                    // First fetch all garbagereports for the month (or specific report if ID provided)
+                    let reportQuery = supabaseClient
                         .from('garbagereports')
                         .select(`
                             reportid,
                             userid,
                             wastetype,
-                            users!userid(name),
-                            publicofficialapprovals!reportid (
-                                workerid,
-                                status,
-                                comments,
-                                datetime,
-                                users!publicofficialapprovals_workerid_fkey(name)
-                            )
+                            comments,
+                            datetime,
+                            users!garbagereports_userid_fkey(name)
                         `)
-                        .gte('publicofficialapprovals.datetime', startOfMonth)
-                        .lte('publicofficialapprovals.datetime', endOfMonth);
+                        .gte('datetime', startOfMonth)
+                        .lte('datetime', endOfMonth);
 
-                    // If reportid is provided, add it to the query
                     if (reportid) {
-                        query = query.eq('reportid', reportid);
+                        reportQuery = reportQuery.eq('reportid', parseInt(reportid));
                     }
 
-                    const { data: reportData, error: reportError } = await query;
-
+                    const { data: reportData, error: reportError } = await reportQuery;
                     if (reportError) throw reportError;
 
-                    if (reportData.length === 0) {
+                    // If no reports found, show message
+                    if (!reportData || reportData.length === 0) {
                         resultDiv.innerHTML = `No reports found${reportid ? ` with ID ${reportid}` : ''} for the month of ${new Date(year, monthNum - 1).toLocaleString('default', { month: 'long', year: 'numeric' })}`;
                         return;
                     }
 
-                    // Prepare data for Excel
-                    const excelData = reportData.map(report => {
-                        const approval = report.publicofficialapprovals[0] || {};
-                        return {
-                            'Report ID': report.reportid,
-                            'Reported by': report.users.name || 'Unknown',
-                            'Waste Type': report.wastetype || 'N/A',
-                            'Attended By': approval.users?.name || 'Not Assigned',
-                            'Status': approval.status || 'N/A',
-                            'Comments': approval.comments || 'None',
-                            'Date': approval.datetime ? new Date(approval.datetime).toLocaleString() : 'N/A'
-                        };
+                    // Fetch all taskrequests
+                    const { data: allTasks, error: taskError } = await supabaseClient
+                        .from('taskrequests')
+                        .select(`
+                            taskid,
+                            reportids,
+                            assignedworkerid,
+                            status,
+                            users!taskrequests_assignedworkerid_fkey(name)
+                        `);
+
+                    if (taskError) throw taskError;
+
+                    // Process reports and tasks
+                    const combinedData = [];
+
+                    // First handle reports that have tasks assigned
+                    allTasks.forEach(task => {
+                        // Ensure reportids is an array (handle both string and array formats)
+                        const taskReportIds = Array.isArray(task.reportids) 
+                            ? task.reportids.map(id => parseInt(id))
+                            : [parseInt(task.reportids)];
+
+                        taskReportIds.forEach(reportId => {
+                            const matchingReport = reportData.find(r => parseInt(r.reportid) === reportId);
+                            if (matchingReport) {
+                                combinedData.push({
+                                    taskid: task.taskid,
+                                    reportid: matchingReport.reportid,
+                                    reportedBy: matchingReport.users?.name || 'Unknown',
+                                    wastetype: matchingReport.wastetype || 'Not specified',
+                                    comments: matchingReport.comments || 'None',
+                                    reportDate: matchingReport.datetime ? new Date(matchingReport.datetime).toLocaleString() : 'N/A',
+                                    assignedWorkerName: task.users?.name || 'Not assigned',
+                                    status: task.status || 'Unknown'
+                                });
+                            }
+                        });
                     });
+
+                    // Then handle reports that don't have any tasks assigned
+                    reportData.forEach(report => {
+                        const hasTask = allTasks.some(task => {
+                            const taskReportIds = Array.isArray(task.reportids) 
+                                ? task.reportids.map(id => parseInt(id))
+                                : [parseInt(task.reportids)];
+                            return taskReportIds.includes(parseInt(report.reportid));
+                        });
+
+                        if (!hasTask) {
+                            combinedData.push({
+                                reportid: report.reportid,
+                                reportedBy: report.users?.name || 'Unknown',
+                                wastetype: report.wastetype || 'Not specified',
+                                comments: report.comments || 'None',
+                                reportDate: report.datetime ? new Date(report.datetime).toLocaleString() : 'N/A',
+                                status: 'Not assigned',
+                                assignedWorkerName: 'Not assigned'
+                            });
+                        }
+                    });
+
+                    // Sort by report date
+                    combinedData.sort((a, b) => {
+                        const dateA = new Date(a.reportDate);
+                        const dateB = new Date(b.reportDate);
+                        return dateA - dateB;
+                    });
+
+                    // Display the combined data on the screen
+                    resultDiv.innerHTML = combinedData.map(entry => `
+                        <div>
+                            ${entry.taskid ? `<strong>Task ID:</strong> ${entry.taskid}<br>` : ''}
+                            <strong>Report ID:</strong> ${entry.reportid}<br>
+                            <strong>Reported by:</strong> ${entry.reportedBy}<br>
+                            <strong>Waste Type:</strong> ${entry.wastetype}<br>
+                            <strong>Attended By:</strong> ${entry.assignedWorkerName}<br>
+                            <strong>Status:</strong> ${entry.status}<br>
+                            <strong>Comments:</strong> ${entry.comments}<br>
+                            <strong>Report Date:</strong> ${entry.reportDate}<br>
+                        </div><hr>
+                    `).join('');
+
+                    // Prepare data for Excel
+                    const excelData = combinedData.map(entry => ({
+                        'Task ID': entry.taskid || 'N/A',
+                        'Report ID': entry.reportid,
+                        'Reported by': entry.reportedBy,
+                        'Waste Type': entry.wastetype,
+                        'Attended By': entry.assignedWorkerName,
+                        'Status': entry.status,
+                        'Comments': entry.comments,
+                        'Report Date': entry.reportDate
+                    }));
 
                     // Create a new workbook and worksheet
                     const worksheet = XLSX.utils.json_to_sheet(excelData);
@@ -297,8 +371,8 @@
                     const fileName = `Reports_${monthName}${reportid ? `_ID_${reportid}` : ''}.xlsx`;
                     XLSX.writeFile(workbook, fileName);
 
-                    // Display a message in the result div
-                    resultDiv.innerHTML = `Report generated and downloaded as ${fileName}`;
+                    // Append a message about the download to the result div
+                    resultDiv.innerHTML += `<p>Report generated and downloaded as ${fileName}</p>`;
                 } catch (error) {
                     resultDiv.innerHTML = `Error generating report: ${error.message}`;
                 }
@@ -308,12 +382,18 @@
             const workerForm = document.getElementById('workerForm');
             workerForm.addEventListener('submit', async (e) => {
                 e.preventDefault();
+                
+                // Generate a random 3-digit number for the password
+                const randomNum = Math.floor(100 + Math.random() * 900); // Generates number between 100-999
+                const generatedPassword = `Wor${randomNum}`;
+                
                 const worker = {
-                    userid: document.getElementById('workerId').value,
+                    userid: parseInt(document.getElementById('workerId').value),
                     name: document.getElementById('workerName').value,
                     email: document.getElementById('workerEmail').value,
                     phone: document.getElementById('workerPhone').value,
                     address: document.getElementById('workerAddress').value,
+                    password: generatedPassword, // Add the generated password
                     role: 'worker',
                     status: 'available'
                 };
@@ -324,6 +404,10 @@
                         .insert([worker]);
                     
                     if (error) throw error;
+                    
+                    // Show success message with the generated password
+                    alert(`Worker added successfully!\nGenerated password: ${generatedPassword}`);
+                    
                     workerForm.reset();
                     await fetchWorkers();
                 } catch (error) {
@@ -354,38 +438,32 @@
         }
 
         function updateWorkerTable(workers) {
-            const tbody = document.getElementById('workerTableBody');
-            tbody.innerHTML = '';
+        const tbody = document.getElementById('workerTableBody');
+        tbody.innerHTML = '';
+        
+        workers.forEach((worker) => {
+            const taskStatus = worker.taskrequests && worker.taskrequests.length > 0 
+                ? worker.taskrequests[0].status 
+                : 'Not Collecting';
             
-            workers.forEach((worker) => {
-                const taskStatus = worker.taskrequests && worker.taskrequests.length > 0 
-                    ? worker.taskrequests[0].status 
-                    : 'Not Collecting';
-                const isCollecting = taskStatus === 'Collecting';
-                
-                const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td>${worker.userid}</td>
-                    <td>${worker.name}</td>
-                    <td>${worker.email}</td>
-                    <td>${taskStatus}</td>
-                    <td>
-                        <button onclick="toggleStatus('${worker.userid}', '${taskStatus}')">
-                            ${isCollecting ? 'Stop' : 'Start'} Collecting
-                        </button>
-                    </td>
-                `;
-                tbody.appendChild(row);
-            });
-        }
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>${worker.userid}</td>
+                <td>${worker.name}</td>
+                <td>${worker.email}</td>
+                <td>${taskStatus}</td>
+            `;
+            tbody.appendChild(row);
+        });
+    }
 
         async function toggleStatus(workerId, currentStatus) {
             const newStatus = currentStatus === 'Collecting' ? 'Not Collecting' : 'Collecting';
             try {
                 const { data: existingTasks, error: fetchError } = await supabaseClient
                     .from('taskrequests')
-                    .select('reportid')
-                    .eq('assignedworkerid', workerId)
+                    .select('reportids')
+                    .eq('assignedworkerid', parseInt(workerId))
                     .eq('status', 'Collecting');
                 
                 if (fetchError) throw fetchError;
@@ -396,8 +474,8 @@
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ 
-                            groupid: existingTasks[0].reportid.split('_')[1], 
-                            workerid: workerId 
+                            groupid: existingTasks[0].reportids, 
+                            workerid: parseInt(workerId) 
                         })
                     });
 
@@ -412,7 +490,7 @@
                             status: newStatus,
                             endtime: newStatus === 'Not Collecting' ? new Date().toISOString() : null
                         })
-                        .eq('assignedworkerid', workerId)
+                        .eq('assignedworkerid', parseInt(workerId))
                         .eq('status', 'Collecting');
                     
                     if (error) throw error;
@@ -420,10 +498,10 @@
                     const { error } = await supabaseClient
                         .from('taskrequests')
                         .insert([{
-                            reportid: `task_${workerId}_${Date.now()}`,
-                            assignedworkerid: workerId,
+                            taskid: parseInt(Math.random() * 1000), // Generate a random taskid
+                            reportids: parseInt(Math.random() * 100), // Generate a random reportids
+                            assignedworkerid: parseInt(workerId),
                             status: newStatus,
-                            progress: 'Started',
                             starttime: new Date().toISOString()
                         }]);
                     
