@@ -30,7 +30,7 @@ const axios = require('axios');
 cron.schedule('0 * * * *', async () => {
   try {
     const response = await axios.post(
-      'https://waas-9pr6.onrender.com/api/worker/group-and-assign-reports',
+      '$apiBaseUrl/worker/group-and-assign-reports',
       {},
       { headers: { Authorization: 'Bearer <admin-jwt-token>' } }
     );
