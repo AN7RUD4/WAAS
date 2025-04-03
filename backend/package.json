@@ -13,6 +13,7 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.49.1",
     "@tensorflow-models/mobilenet": "^2.1.1",
+    "@tensorflow/tfjs": "^4.22.0",
     "@tensorflow/tfjs-node": "^4.22.0",
     "axios": "^1.8.4",
     "bcryptjs": "^2.4.3",

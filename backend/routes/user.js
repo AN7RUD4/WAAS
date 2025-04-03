@@ -4,7 +4,7 @@ const jwt = require('jsonwebtoken');
 const multer = require('multer');
 
 // Imports for AI
-const tf = require('@tensorflow/tfjs-node'); // Use Node.js version
+const tf = process.env.NODE_ENV === 'production' ? require('@tensorflow/tfjs-node') : require('@tensorflow/tfjs');
 const mobilenet = require('@tensorflow-models/mobilenet');
 const sharp = require('sharp');
 const fs = require('fs');
@@ -66,14 +66,27 @@ userRouter.post('/detect-waste', authenticateToken, upload.single('image'), asyn
     const imageBuffer = await sharp(req.file.path)
       .resize(224, 224)
       .toFormat('jpeg')
+      .raw() // Get raw pixel data for local dev; remove .raw() for production
       .toBuffer();
 
-    // Convert to tensor
-    const tensor = tf.node.decodeImage(imageBuffer, 3) // Use tf.node.decodeImage for Node.js
-      .toFloat()
-      .div(tf.scalar(127.5))
-      .sub(tf.scalar(1)) // Normalize to [-1, 1]
-      .expandDims(); // Add batch dimension
+    // Convert to tensor based on environment
+    let tensor;
+    if (process.env.NODE_ENV === 'production') {
+      // On Render, use tf.node.decodeImage
+      tensor = tf.node.decodeImage(imageBuffer, 3)
+        .toFloat()
+        .div(tf.scalar(127.5))
+        .sub(tf.scalar(1))
+        .expandDims();
+    } else {
+      // Locally, use tf.tensor3d with raw pixel data
+      const imageData = new Uint8Array(imageBuffer);
+      tensor = tf.tensor3d(imageData, [224, 224, 3])
+        .toFloat()
+        .div(tf.scalar(127.5))
+        .sub(tf.scalar(1))
+        .expandDims();
+    }
 
     // Predict
     const predictions = await wasteModel.classify(tensor);
