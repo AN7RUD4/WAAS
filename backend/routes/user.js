@@ -34,11 +34,20 @@ const authenticateToken = (req, res, next) => {
   });
 };
 
+// Configure multer with file filter to accept only images
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, 'uploads/'),
   filename: (req, file, cb) => cb(null, `${Date.now()}-${file.originalname}`),
 });
-const upload = multer({ storage: storage });
+const fileFilter = (req, file, cb) => {
+  const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/bmp'];
+  if (allowedTypes.includes(file.mimetype)) {
+    cb(null, true);
+  } else {
+    cb(new Error('Invalid file type. Only JPEG, PNG, GIF, and BMP are allowed.'), false);
+  }
+};
+const upload = multer({ storage: storage, fileFilter: fileFilter });
 
 // Load MobileNet model at startup
 let wasteModel;
@@ -62,12 +71,34 @@ userRouter.post('/detect-waste', authenticateToken, upload.single('image'), asyn
       return res.status(500).json({ error: 'AI model not loaded. Please try again later.' });
     }
 
+    // Log the uploaded file details for debugging
+    console.log('Uploaded file:', {
+      path: req.file.path,
+      mimetype: req.file.mimetype,
+      size: req.file.size
+    });
+
     // Preprocess the image to 224x224 (MobileNet requirement)
-    const imageBuffer = await sharp(req.file.path)
-      .resize(224, 224)
-      .toFormat('jpeg')
-      .raw() // Get raw pixel data for local dev; remove .raw() for production
-      .toBuffer();
+    let imageBuffer;
+    if (process.env.NODE_ENV === 'production') {
+      // For production, ensure the output is a valid JPEG buffer
+      imageBuffer = await sharp(req.file.path)
+        .resize(224, 224)
+        .jpeg() // Explicitly convert to JPEG
+        .toBuffer();
+
+      // Log the buffer length to ensure it's not empty
+      console.log('Image buffer length (production):', imageBuffer.length);
+    } else {
+      // For development, use .raw() to get pixel data for tf.tensor3d
+      imageBuffer = await sharp(req.file.path)
+        .resize(224, 224)
+        .toFormat('jpeg')
+        .raw()
+        .toBuffer();
+
+      console.log('Image buffer length (development):', imageBuffer.length);
+    }
 
     // Convert to tensor based on environment
     let tensor;
