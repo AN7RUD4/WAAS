@@ -3,7 +3,7 @@ const { Pool } = require('pg');
 const jwt = require('jsonwebtoken');
 const multer = require('multer');
 
-//imports for ai
+// Imports for AI
 const tf = require('@tensorflow/tfjs-node');
 const mobilenet = require('@tensorflow-models/mobilenet');
 const sharp = require('sharp');
@@ -43,55 +43,55 @@ const upload = multer({ storage: storage });
 // Load MobileNet model at startup
 let wasteModel;
 (async () => {
-    try {
-        wasteModel = await mobilenet.load({ version: 2, alpha: 1.0 });
-        console.log('MobileNet model loaded for waste detection');
-    } catch (error) {
-        console.error('Error loading MobileNet:', error);
-    }
+  try {
+    wasteModel = await mobilenet.load({ version: 2, alpha: 1.0 });
+    console.log('MobileNet model loaded for waste detection');
+  } catch (error) {
+    console.error('Error loading MobileNet:', error);
+  }
 })();
 
-router.post('/detect-waste', authenticateToken, upload.single('image'), async (req, res) => {
+userRouter.post('/detect-waste', authenticateToken, upload.single('image'), async (req, res) => {
   try {
-      if (!req.file) {
-          return res.status(400).json({ error: 'No image provided' });
-      }
+    if (!req.file) {
+      return res.status(400).json({ error: 'No image provided' });
+    }
 
-      // Preprocess the image to 224x224 (MobileNet requirement)
-      const imageBuffer = await sharp(req.file.path)
-          .resize(224, 224)
-          .toFormat('jpeg')
-          .toBuffer();
+    // Preprocess the image to 224x224 (MobileNet requirement)
+    const imageBuffer = await sharp(req.file.path)
+      .resize(224, 224)
+      .toFormat('jpeg')
+      .toBuffer();
 
-      // Convert to tensor
-      const tensor = tf.node.decodeImage(imageBuffer, 3) // 3 channels (RGB)
-          .toFloat()
-          .div(tf.scalar(127.5))
-          .sub(tf.scalar(1)) // Normalize to [-1, 1]
-          .expandDims(); // Add batch dimension
+    // Convert to tensor
+    const tensor = tf.node.decodeImage(imageBuffer, 3) // 3 channels (RGB)
+      .toFloat()
+      .div(tf.scalar(127.5))
+      .sub(tf.scalar(1)) // Normalize to [-1, 1]
+      .expandDims(); // Add batch dimension
 
-      // Predict
-      const predictions = await wasteModel.classify(tensor);
-      tf.dispose(tensor); // Free memory
+    // Predict
+    const predictions = await wasteModel.classify(tensor);
+    tf.dispose(tensor); // Free memory
 
-      // Define waste-related labels
-      const wasteLabels = ['trash', 'plastic', 'bottle', 'cardboard', 'paper', 'waste', 'garbage', 'rubbish'];
-      const hasWaste = predictions.some(pred => 
-          wasteLabels.some(label => pred.className.toLowerCase().includes(label))
-      );
+    // Define waste-related labels
+    const wasteLabels = ['trash', 'plastic', 'bottle', 'cardboard', 'paper', 'waste', 'garbage', 'rubbish'];
+    const hasWaste = predictions.some(pred =>
+      wasteLabels.some(label => pred.className.toLowerCase().includes(label))
+    );
 
-      // Clean up uploaded file
-      fs.unlinkSync(req.file.path);
+    // Clean up uploaded file
+    fs.unlinkSync(req.file.path);
 
-      // Respond with result
-      res.status(200).json({
-          hasWaste: hasWaste,
-          confidence: hasWaste ? predictions[0].probability : null,
-          topPredictions: predictions.slice(0, 3) // For debugging
-      });
+    // Respond with result
+    res.status(200).json({
+      hasWaste: hasWaste,
+      confidence: hasWaste ? predictions[0].probability : null,
+      topPredictions: predictions.slice(0, 3) // For debugging
+    });
   } catch (error) {
-      console.error('Error in /detect-waste:', error.message, error.stack);
-      res.status(500).json({ error: 'Failed to process image', details: error.message });
+    console.error('Error in /detect-waste:', error.message, error.stack);
+    res.status(500).json({ error: 'Failed to process image', details: error.message });
   }
 });
 
@@ -204,6 +204,7 @@ userRouter.get('/collection-requests', authenticateToken, async (req, res) => {
 userRouter.use((req, res) => res.status(404).json({ message: 'Route not found' }));
 
 module.exports = userRouter;
+
 
 // const express = require('express');
 // const { Pool } = require('pg');
