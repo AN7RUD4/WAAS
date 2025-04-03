@@ -4,7 +4,7 @@ const jwt = require('jsonwebtoken');
 const multer = require('multer');
 
 // Imports for AI
-const tf = require('@tensorflow/tfjs'); // Use pure JS version
+const tf = require('@tensorflow/tfjs-node'); // Use Node.js version
 const mobilenet = require('@tensorflow-models/mobilenet');
 const sharp = require('sharp');
 const fs = require('fs');
@@ -69,7 +69,7 @@ userRouter.post('/detect-waste', authenticateToken, upload.single('image'), asyn
       .toBuffer();
 
     // Convert to tensor
-    const tensor = tf.browser.fromPixels(imageBuffer, 3) // Use browser.fromPixels for pure JS
+    const tensor = tf.node.decodeImage(imageBuffer, 3) // Use tf.node.decodeImage for Node.js
       .toFloat()
       .div(tf.scalar(127.5))
       .sub(tf.scalar(1)) // Normalize to [-1, 1]

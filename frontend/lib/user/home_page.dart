@@ -209,6 +209,7 @@ class UserApp extends StatelessWidget {
 
 // Report Page for submitting public waste reports
 // Report Page for submitting public waste reports
+// Report Page for submitting public waste reports
 class ReportPage extends StatefulWidget {
   const ReportPage({super.key});
 
@@ -222,7 +223,7 @@ class _ReportPageState extends State<ReportPage> {
   bool _isLoading = false;
   final storage = const FlutterSecureStorage();
   String? _errorMessage;
-  bool? _hasWaste; // To store the waste detection result
+  bool? _hasWaste;
 
   @override
   void initState() {
@@ -274,22 +275,14 @@ class _ReportPageState extends State<ReportPage> {
     return await storage.read(key: 'jwt_token');
   }
 
-  Future<void> _takePicture() async {
-    final ImagePicker picker = ImagePicker();
-    final XFile? pickedImage = await picker.pickImage(
-      source: ImageSource.camera,
+  Future<void> _handleTokenExpiration() async {
+    // Clear the stored token
+    await storage.delete(key: 'jwt_token');
+    // Navigate to the login page
+    Navigator.pushReplacementNamed(context, '/login'); // Replace with your login route
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Session expired. Please log in again.')),
     );
-
-    if (pickedImage != null) {
-      setState(() {
-        _image = File(pickedImage.path);
-        _errorMessage = null; // Reset error message
-        _hasWaste = null; // Reset waste detection result
-      });
-
-      // Call the waste detection endpoint after taking the picture
-      await _detectWaste();
-    }
   }
 
   Future<void> _detectWaste() async {
@@ -302,13 +295,14 @@ class _ReportPageState extends State<ReportPage> {
 
     try {
       final token = await _getToken();
-      if (token == null) throw Exception('No token found');
+      if (token == null) {
+        await _handleTokenExpiration();
+        return;
+      }
 
       var request = http.MultipartRequest(
         'POST',
-        Uri.parse(
-          '$apiBaseUrl/user/detect-waste',
-        ), // Call the detect-waste endpoint
+        Uri.parse('$apiBaseUrl/user/detect-waste'),
       );
       request.headers['Authorization'] = 'Bearer $token';
       request.files.add(
@@ -323,6 +317,8 @@ class _ReportPageState extends State<ReportPage> {
         setState(() {
           _hasWaste = jsonResponse['hasWaste'] ?? false;
         });
+      } else if (response.statusCode == 403 && jsonResponse['message'] == 'Invalid token') {
+        await _handleTokenExpiration();
       } else {
         throw Exception(jsonResponse['error'] ?? 'Failed to detect waste');
       }
@@ -370,11 +366,14 @@ class _ReportPageState extends State<ReportPage> {
 
     try {
       final token = await _getToken();
-      if (token == null) throw Exception('No token found');
+      if (token == null) {
+        await _handleTokenExpiration();
+        return;
+      }
 
       var request = http.MultipartRequest(
         'POST',
-        Uri.parse('$apiBaseUrl/user/report-waste'), // Submit the report
+        Uri.parse('$apiBaseUrl/user/report-waste'),
       );
       request.headers['Authorization'] = 'Bearer $token';
       request.fields['location'] = locationController.text;
@@ -391,6 +390,8 @@ class _ReportPageState extends State<ReportPage> {
           const SnackBar(content: Text("Report submitted successfully!")),
         );
         Navigator.pop(context);
+      } else if (response.statusCode == 403 && jsonResponse['message'] == 'Invalid token') {
+        await _handleTokenExpiration();
       } else {
         throw Exception(jsonResponse['message'] ?? 'Failed to submit report');
       }
@@ -403,55 +404,71 @@ class _ReportPageState extends State<ReportPage> {
     }
   }
 
+  Future<void> _takePicture() async {
+    final ImagePicker picker = ImagePicker();
+    final XFile? pickedImage = await picker.pickImage(
+      source: ImageSource.camera,
+    );
+
+    if (pickedImage != null) {
+      setState(() {
+        _image = File(pickedImage.path);
+        _errorMessage = null;
+        _hasWaste = null;
+      });
+
+      await _detectWaste();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text("Report Public Waste")),
-      body:
-          _isLoading
-              ? const Center(child: CircularProgressIndicator())
-              : SafeArea(
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: SingleChildScrollView(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          "Report Public Waste",
-                          style: GoogleFonts.poppins(
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.black87,
-                          ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        "Report Public Waste",
+                        style: GoogleFonts.poppins(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87,
                         ),
-                        const SizedBox(height: 8),
-                        Text(
-                          "Help keep your community clean",
-                          style: GoogleFonts.poppins(
-                            fontSize: 16,
-                            color: Colors.black54,
-                          ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        "Help keep your community clean",
+                        style: GoogleFonts.poppins(
+                          fontSize: 16,
+                          color: Colors.black54,
                         ),
-                        const SizedBox(height: 24),
-                        Text(
-                          "Take a Picture",
-                          style: GoogleFonts.poppins(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.black87,
-                          ),
+                      ),
+                      const SizedBox(height: 24),
+                      Text(
+                        "Take a Picture",
+                        style: GoogleFonts.poppins(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.black87,
                         ),
-                        const SizedBox(height: 8),
-                        Center(
-                          child: Column(
-                            children: [
-                              _image == null
-                                  ? const Text(
+                      ),
+                      const SizedBox(height: 8),
+                      Center(
+                        child: Column(
+                          children: [
+                            _image == null
+                                ? const Text(
                                     "No Image Taken",
                                     style: TextStyle(color: Colors.black54),
                                   )
-                                  : ClipRRect(
+                                : ClipRRect(
                                     borderRadius: BorderRadius.circular(12),
                                     child: Image.file(
                                       _image!,
@@ -459,64 +476,60 @@ class _ReportPageState extends State<ReportPage> {
                                       fit: BoxFit.cover,
                                     ),
                                   ),
-                              const SizedBox(height: 8),
-                              // Display waste detection result
-                              if (_image != null && _hasWaste != null)
-                                Text(
-                                  _hasWaste!
-                                      ? "Waste Detected"
-                                      : "Waste Not Detected",
-                                  style: GoogleFonts.poppins(
-                                    fontSize: 14,
-                                    color:
-                                        _hasWaste! ? Colors.green : Colors.red,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              const SizedBox(height: 16),
-                              SizedBox(
-                                width: double.infinity,
-                                child: ElevatedButton.icon(
-                                  icon: const Icon(Icons.camera_alt),
-                                  label: const Text("Open Camera"),
-                                  onPressed: _takePicture,
+                            const SizedBox(height: 8),
+                            if (_image != null && _hasWaste != null)
+                              Text(
+                                _hasWaste! ? "Waste Detected" : "Waste Not Detected",
+                                style: GoogleFonts.poppins(
+                                  fontSize: 14,
+                                  color: _hasWaste! ? Colors.green : Colors.red,
+                                  fontWeight: FontWeight.w600,
                                 ),
                               ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        TextFormField(
-                          controller: locationController,
-                          readOnly: true,
-                          decoration: const InputDecoration(
-                            labelText: "Location",
-                            prefixIcon: Icon(Icons.location_on_outlined),
-                          ),
-                        ),
-                        if (_errorMessage != null) ...[
-                          const SizedBox(height: 16),
-                          Text(
-                            _errorMessage!,
-                            style: GoogleFonts.poppins(
-                              color: Colors.red,
-                              fontSize: 14,
+                            const SizedBox(height: 16),
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton.icon(
+                                icon: const Icon(Icons.camera_alt),
+                                label: const Text("Open Camera"),
+                                onPressed: _takePicture,
+                              ),
                             ),
-                          ),
-                        ],
-                        const SizedBox(height: 24),
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            onPressed: _submitReport,
-                            child: const Text("Submit Report"),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: locationController,
+                        readOnly: true,
+                        decoration: const InputDecoration(
+                          labelText: "Location",
+                          prefixIcon: Icon(Icons.location_on_outlined),
+                        ),
+                      ),
+                      if (_errorMessage != null) ...[
+                        const SizedBox(height: 16),
+                        Text(
+                          _errorMessage!,
+                          style: GoogleFonts.poppins(
+                            color: Colors.red,
+                            fontSize: 14,
                           ),
                         ),
                       ],
-                    ),
+                      const SizedBox(height: 24),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: _submitReport,
+                          child: const Text("Submit Report"),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
+            ),
     );
   }
 }
