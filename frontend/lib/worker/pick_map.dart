@@ -18,17 +18,25 @@ class MapScreen extends StatefulWidget {
 
 class _MapScreenState extends State<MapScreen> {
   final MapController _mapController = MapController();
-  final List<LatLng> _locations = []; // Collection points from route
-  List<LatLng> _route = []; // Route points (from JSONB or OSRM)
-  List<LatLng> _completeRoute = []; // Complete route including worker's location
+  final List<LatLng> _locations = [];
+  final List<int> _reportIds = [];
+  final List<String> _wasteTypes = [];
+  List<LatLng> _route = [];
+  List<LatLng> _completeRoute = [];
   double _currentZoom = 14.0;
-  LatLng _currentCenter = const LatLng(10.235865, 76.405676); // Default center
-  LatLng? _workerLocation; // Worker's real-time location
+  LatLng _currentCenter = const LatLng(10.235865, 76.405676);
+  LatLng? _workerLocation;
   bool _isLoading = false;
   String _errorMessage = '';
   final storage = const FlutterSecureStorage();
 
-  // Info box data
+  // Collection state
+  bool _collectionStarted = false;
+  Set<int> _collectedReports = {};
+  LatLng? _currentCollectionPoint;
+  String? _currentWasteType;
+
+  // Route info
   double _distanceToNearest = 0.0;
   double _totalDistance = 0.0;
   String _directions = "Calculating directions...";
@@ -138,8 +146,8 @@ class _MapScreenState extends State<MapScreen> {
           setState(() => _errorMessage = 'No route data found in task');
         }
 
-        // Optionally use locations from reports if route is incomplete
-        if (_locations.isEmpty && data['locations'] != null && data['locations'].isNotEmpty) {
+        // Parse locations and report IDs
+        if (data['locations'] != null && data['locations'] is List) {
           _parseLocations(data['locations']);
         }
 
@@ -186,6 +194,8 @@ class _MapScreenState extends State<MapScreen> {
   void _parseRouteFromJson(Map<String, dynamic> routeData) {
     _locations.clear();
     _route.clear();
+    _reportIds.clear();
+    _wasteTypes.clear();
 
     // Add start point
     if (routeData['start'] != null && routeData['start']['lat'] != null && routeData['start']['lng'] != null) {
@@ -201,6 +211,8 @@ class _MapScreenState extends State<MapScreen> {
           final latLng = LatLng(waypoint['lat'], waypoint['lng']);
           _locations.add(latLng);
           _route.add(latLng);
+          if (waypoint['reportid'] != null) _reportIds.add(waypoint['reportid']);
+          if (waypoint['wastetype'] != null) _wasteTypes.add(waypoint['wastetype']);
         }
       }
     }
@@ -214,9 +226,6 @@ class _MapScreenState extends State<MapScreen> {
 
     if (_locations.isEmpty) {
       setState(() => _errorMessage = 'No valid waypoints found in route');
-    } else {
-      print('Parsed _locations: $_locations');
-      print('Parsed _route: $_route');
     }
   }
 
@@ -229,6 +238,8 @@ class _MapScreenState extends State<MapScreen> {
             double.parse(item['lng'].toString()),
           );
           _locations.add(latLng);
+          if (item['reportid'] != null) _reportIds.add(item['reportid']);
+          if (item['wastetype'] != null) _wasteTypes.add(item['wastetype']);
         } catch (e) {
           print('Error parsing location: $e');
         }
@@ -241,7 +252,6 @@ class _MapScreenState extends State<MapScreen> {
 
   Future<List<LatLng>> _fetchRouteFromOSRM() async {
     if (_workerLocation == null || _locations.isEmpty) {
-      print('Cannot fetch OSRM route: Worker location or locations list is empty');
       return [];
     }
 
@@ -251,10 +261,7 @@ class _MapScreenState extends State<MapScreen> {
     final String osrmUrl = '$osrmBaseUrl$coordinates?overview=full&geometries=geojson&steps=true';
 
     try {
-      print('Fetching route from OSRM: $osrmUrl');
       final response = await http.get(Uri.parse(osrmUrl));
-      print('OSRM Response status: ${response.statusCode}');
-      print('OSRM Response body: ${response.body}');
 
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = jsonDecode(response.body);
@@ -273,7 +280,6 @@ class _MapScreenState extends State<MapScreen> {
               }
             }
           }
-          print('Turn-by-turn instructions: $_turnByTurnInstructions');
           _currentInstructionIndex = 0;
           _directions = _turnByTurnInstructions.isNotEmpty
               ? _turnByTurnInstructions[0]
@@ -292,9 +298,6 @@ class _MapScreenState extends State<MapScreen> {
         _errorMessage = 'Error fetching route from OSRM: $e';
         _directions = 'Proceed to the collection point (straight-line path)';
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error fetching route from OSRM: $e')),
-      );
       return _locations;
     }
   }
@@ -305,7 +308,6 @@ class _MapScreenState extends State<MapScreen> {
       return;
     }
     _completeRoute = [_workerLocation!, ..._route];
-    print('Updated _completeRoute: $_completeRoute');
   }
 
   double _haversineDistance(LatLng start, LatLng end) {
@@ -355,6 +357,134 @@ class _MapScreenState extends State<MapScreen> {
       _directions = _turnByTurnInstructions[_currentInstructionIndex];
       setState(() {});
     }
+  }
+
+  void _startCollection() async {
+    try {
+      final token = await storage.read(key: 'jwt_token');
+      if (token == null) throw Exception('No authentication token found');
+
+      final response = await http.post(
+        Uri.parse('$apiBaseUrl/worker/start-task'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'taskId': widget.taskid,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        setState(() {
+          _collectionStarted = true;
+          _errorMessage = '';
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Collection started! Tap on locations to mark as collected')),
+        );
+      } else {
+        throw Exception('Failed to start task: ${response.statusCode}');
+      }
+    } catch (e) {
+      setState(() => _errorMessage = 'Error starting collection: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error starting collection: $e')),
+      );
+    }
+  }
+
+  Future<void> _markAsCollected(LatLng location, int reportId, String wasteType) async {
+    setState(() {
+      _currentCollectionPoint = location;
+      _currentWasteType = wasteType;
+    });
+
+    bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Mark as collected?'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Waste Type: $wasteType'),
+            const SizedBox(height: 8),
+            Text('Location: ${location.latitude.toStringAsFixed(6)}, ${location.longitude.toStringAsFixed(6)}'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green.shade700,
+            ),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Collected', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        final token = await storage.read(key: 'jwt_token');
+        if (token == null) throw Exception('No authentication token found');
+
+        final response = await http.post(
+          Uri.parse('$apiBaseUrl/worker/mark-collected'),
+          headers: {
+            'Authorization': 'Bearer $token',
+            'Content-Type': 'application/json',
+          },
+          body: jsonEncode({
+            'taskId': widget.taskid,
+            'reportId': reportId,
+          }),
+        );
+
+        if (response.statusCode == 200) {
+          setState(() {
+            _collectedReports.add(reportId);
+            _currentCollectionPoint = null;
+            _currentWasteType = null;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Successfully marked as collected')),
+          );
+
+          // Check if all reports are collected
+          if (_collectedReports.length == _reportIds.length) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('All locations collected! Task completed')),
+            );
+          }
+        } else {
+          throw Exception('Failed to mark as collected: ${response.statusCode}');
+        }
+      } catch (e) {
+        setState(() => _errorMessage = 'Error marking collected: $e');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error marking collected: $e')),
+        );
+      }
+    } else {
+      setState(() {
+        _currentCollectionPoint = null;
+        _currentWasteType = null;
+      });
+    }
+  }
+
+  int _getReportIdForIndex(int index) {
+    return index < _reportIds.length ? _reportIds[index] : -1;
+  }
+
+  String _getWasteTypeForIndex(int index) {
+    return index < _wasteTypes.length ? _wasteTypes[index] : 'Unknown';
   }
 
   @override
@@ -413,22 +543,41 @@ class _MapScreenState extends State<MapScreen> {
                       height: 40,
                       child: const Icon(Icons.person_pin_circle, color: Colors.blue, size: 40),
                     ),
-                  ..._locations.map((loc) => Marker(
-                        point: loc,
-                        width: 40,
-                        height: 40,
-                        child: GestureDetector(
-                          onTap: () {
+                  ..._locations.asMap().entries.map((entry) {
+                    final index = entry.key;
+                    final loc = entry.value;
+                    final reportId = _getReportIdForIndex(index);
+                    final wasteType = _getWasteTypeForIndex(index);
+
+                    return Marker(
+                      point: loc,
+                      width: 40,
+                      height: 40,
+                      child: GestureDetector(
+                        onTap: () {
+                          if (_collectionStarted && !_collectedReports.contains(reportId)) {
+                            _markAsCollected(loc, reportId, wasteType);
+                          } else {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
-                                content: Text('Location: ${loc.latitude}, ${loc.longitude}'),
+                                content: Text('Location: ${loc.latitude.toStringAsFixed(6)}, ${loc.longitude.toStringAsFixed(6)}\nWaste Type: $wasteType'),
                                 duration: const Duration(seconds: 2),
                               ),
                             );
-                          },
-                          child: const Icon(Icons.location_pin, color: Colors.redAccent, size: 40),
+                          }
+                        },
+                        child: Icon(
+                          _collectedReports.contains(reportId)
+                              ? Icons.check_circle
+                              : Icons.location_pin,
+                          color: _collectedReports.contains(reportId)
+                              ? Colors.green
+                              : (_collectionStarted ? Colors.orangeAccent : Colors.redAccent),
+                          size: 40,
                         ),
-                      )),
+                      ),
+                    );
+                  }),
                 ],
               ),
             ],
@@ -472,6 +621,41 @@ class _MapScreenState extends State<MapScreen> {
               ),
             ),
           ),
+          if (_currentCollectionPoint != null && _currentWasteType != null)
+            Positioned(
+              bottom: 16,
+              left: 16,
+              right: 16,
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.green.shade700,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Column(
+                  children: [
+                    Text(
+                      'Current Collection Point',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Waste Type: $_currentWasteType',
+                      style: TextStyle(color: Colors.white),
+                    ),
+                    Text(
+                      'Location: ${_currentCollectionPoint!.latitude.toStringAsFixed(6)}, '
+                      '${_currentCollectionPoint!.longitude.toStringAsFixed(6)}',
+                      style: TextStyle(color: Colors.white),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           Positioned(
             bottom: 80,
             right: 16,
@@ -502,16 +686,29 @@ class _MapScreenState extends State<MapScreen> {
           if (_isLoading) const Center(child: CircularProgressIndicator(color: Colors.green)),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          if (_workerLocation != null) {
-            _currentCenter = _workerLocation!;
-            _currentZoom = 14;
-            _mapController.move(_currentCenter, _currentZoom);
-          }
-        },
-        backgroundColor: Colors.green.shade700,
-        child: const Icon(Icons.my_location, color: Colors.white),
+      floatingActionButton: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (!_collectionStarted)
+            FloatingActionButton.extended(
+              onPressed: _startCollection,
+              backgroundColor: Colors.green.shade700,
+              label: const Text('Start Collection', style: TextStyle(color: Colors.white)),
+              icon: const Icon(Icons.play_arrow, color: Colors.white),
+            ),
+          const SizedBox(height: 16),
+          FloatingActionButton(
+            onPressed: () {
+              if (_workerLocation != null) {
+                _currentCenter = _workerLocation!;
+                _currentZoom = 14;
+                _mapController.move(_currentCenter, _currentZoom);
+              }
+            },
+            backgroundColor: Colors.green.shade700,
+            child: const Icon(Icons.my_location, color: Colors.white),
+          ),
+        ],
       ),
     );
   }
