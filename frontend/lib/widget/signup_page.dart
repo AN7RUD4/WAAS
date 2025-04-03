@@ -16,7 +16,8 @@ class _SignUpPageState extends State<SignUpPage> {
   final _formKey = GlobalKey<FormState>();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-  final TextEditingController _confirmPasswordController = TextEditingController();
+  final TextEditingController _confirmPasswordController =
+      TextEditingController();
   final TextEditingController _nameController = TextEditingController();
   bool _isLoading = false;
 
@@ -45,15 +46,15 @@ class _SignUpPageState extends State<SignUpPage> {
         );
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (context) => const LoginPage()),
+          MaterialPageRoute(builder: (context) => LoginPage()),
         );
       } else {
         throw Exception(responseData['message'] ?? 'Signup failed');
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Signup failed: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Signup failed: $e')));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -66,7 +67,10 @@ class _SignUpPageState extends State<SignUpPage> {
         children: [
           SafeArea(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 30.0),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 20.0,
+                vertical: 30.0,
+              ),
               child: Form(
                 key: _formKey,
                 child: Column(
@@ -95,8 +99,8 @@ class _SignUpPageState extends State<SignUpPage> {
                         labelText: 'Full Name',
                         prefixIcon: Icon(Icons.person),
                       ),
-                      validator: (value) =>
-                          value!.isEmpty ? 'Name is required' : null,
+                      validator:
+                          (value) => value!.isEmpty ? 'Name is required' : null,
                     ),
                     const SizedBox(height: 20),
                     TextFormField(
@@ -122,8 +126,9 @@ class _SignUpPageState extends State<SignUpPage> {
                         labelText: 'Password',
                         prefixIcon: Icon(Icons.lock),
                       ),
-                      validator: (value) =>
-                          value!.isEmpty ? 'Password is required' : null,
+                      validator:
+                          (value) =>
+                              value!.isEmpty ? 'Password is required' : null,
                     ),
                     const SizedBox(height: 20),
                     TextFormField(
@@ -146,16 +151,17 @@ class _SignUpPageState extends State<SignUpPage> {
                       width: double.infinity,
                       child: ElevatedButton(
                         onPressed: _isLoading ? null : _signUp,
-                        child: _isLoading
-                            ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  color: Colors.white,
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Text('Sign Up'),
+                        child:
+                            _isLoading
+                                ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    color: Colors.white,
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                                : const Text('Sign Up'),
                       ),
                     ),
                     const SizedBox(height: 20),
@@ -165,7 +171,7 @@ class _SignUpPageState extends State<SignUpPage> {
                           Navigator.pushReplacement(
                             context,
                             MaterialPageRoute(
-                              builder: (context) => const LoginPage(),
+                              builder: (context) => LoginPage(),
                             ),
                           );
                         },

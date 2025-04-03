@@ -14,23 +14,25 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
-  final TextEditingController emailController = TextEditingController();
+  final TextEditingController usernameController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
   bool _isLoading = false;
   final storage = const FlutterSecureStorage();
 
   @override
   void dispose() {
-    emailController.dispose();
+    usernameController.dispose();
     passwordController.dispose();
     super.dispose();
   }
 
   Future<void> login() async {
-    if (emailController.text.trim().isEmpty ||
+    if (usernameController.text.trim().isEmpty ||
         passwordController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter both email and password')),
+        const SnackBar(
+          content: Text('Please enter both username and password'),
+        ),
       );
       return;
     }
@@ -39,7 +41,7 @@ class _LoginPageState extends State<LoginPage> {
 
     try {
       final jsonData = {
-        'email': emailController.text.trim(),
+        'email': usernameController.text.trim(),
         'password': passwordController.text.trim(),
       };
       final response = await http.post(
@@ -120,87 +122,149 @@ class _LoginPageState extends State<LoginPage> {
 
   @override
   Widget build(BuildContext context) {
+    double screenWidth = MediaQuery.of(context).size.width;
+    double screenHeight = MediaQuery.of(context).size.height;
+
     return Scaffold(
+      backgroundColor: Colors.white,
       body: Stack(
         children: [
-          SafeArea(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 20.0,
-                vertical: 30.0,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    "Welcome Back",
-                    style: GoogleFonts.poppins(
-                      fontSize: 28,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black87,
+          SingleChildScrollView(
+            child: Column(
+              children: [
+                // Green Triangle (Top Left)
+                Align(
+                  alignment: Alignment.topLeft,
+                  child: Container(
+                    width: screenWidth * 0.4,
+                    height: screenWidth * 0.4,
+                    child: CustomPaint(
+                      painter: TrianglePainter(color: Colors.green),
+                      size: Size(screenWidth * 0.4, screenWidth * 0.4),
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    "Sign in to continue",
-                    style: GoogleFonts.poppins(
-                      fontSize: 16,
-                      color: Colors.black54,
-                    ),
+                ),
+
+                SizedBox(height: screenHeight * 0.1),
+
+                // App Name
+                Text(
+                  "wAAS",
+                  style: GoogleFonts.poppins(
+                    fontSize: screenWidth * 0.12,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.green,
                   ),
-                  const SizedBox(height: 30),
-                  TextField(
-                    controller: emailController,
-                    decoration: const InputDecoration(
-                      labelText: 'Email',
-                      prefixIcon: Icon(Icons.email),
-                    ),
-                    keyboardType: TextInputType.emailAddress,
+                ),
+
+                SizedBox(height: screenHeight * 0.05),
+
+                // Login Form
+                Container(
+                  width: screenWidth * 0.85,
+                  padding: EdgeInsets.all(screenWidth * 0.05),
+                  decoration: BoxDecoration(
+                    color: Colors.green.shade50,
+                    borderRadius: BorderRadius.circular(20),
                   ),
-                  const SizedBox(height: 20),
-                  TextField(
-                    controller: passwordController,
-                    obscureText: true,
-                    decoration: const InputDecoration(
-                      labelText: 'Password',
-                      prefixIcon: Icon(Icons.lock),
-                    ),
-                  ),
-                  const SizedBox(height: 30),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: _isLoading ? null : login,
-                      child:
-                          _isLoading
-                              ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  color: Colors.white,
-                                  strokeWidth: 2,
-                                ),
-                              )
-                              : const Text('Login'),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  Center(
-                    child: TextButton(
-                      onPressed: () {
-                        Navigator.of(context).pushReplacementNamed('/signup');
-                      },
-                      child: Text(
-                        "Don't have an account? Sign Up",
-                        style: GoogleFonts.poppins(
-                          color: Colors.blue,
-                          fontSize: 16,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Username Field
+                      TextField(
+                        controller: usernameController,
+                        decoration: InputDecoration(
+                          labelText: "Username",
+                          labelStyle: TextStyle(
+                            color: Colors.grey,
+                            fontSize: 16,
+                          ),
+                          suffixIcon: Icon(
+                            Icons.person_outline,
+                            color: Colors.black,
+                          ),
+                          enabledBorder: UnderlineInputBorder(
+                            borderSide: BorderSide(color: Colors.grey),
+                          ),
+                          focusedBorder: UnderlineInputBorder(
+                            borderSide: BorderSide(color: Colors.green),
+                          ),
                         ),
                       ),
-                    ),
+
+                      SizedBox(height: screenHeight * 0.02),
+
+                      // Password Field
+                      TextField(
+                        controller: passwordController,
+                        obscureText: true,
+                        decoration: InputDecoration(
+                          labelText: "password",
+                          labelStyle: TextStyle(
+                            color: Colors.grey,
+                            fontSize: 16,
+                          ),
+                          suffixIcon: Icon(
+                            Icons.lock_outline,
+                            color: Colors.black,
+                          ),
+                          enabledBorder: UnderlineInputBorder(
+                            borderSide: BorderSide(color: Colors.grey),
+                          ),
+                          focusedBorder: UnderlineInputBorder(
+                            borderSide: BorderSide(color: Colors.green),
+                          ),
+                        ),
+                      ),
+
+                      SizedBox(height: screenHeight * 0.05),
+
+                      // Login Button
+                      SizedBox(
+                        width: double.infinity,
+                        height: screenHeight * 0.06,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.green,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(30),
+                            ),
+                          ),
+                          onPressed: _isLoading ? null : login,
+                          child: Text(
+                            "LOGIN",
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ),
+
+                      SizedBox(height: screenHeight * 0.02),
+
+                      // Sign Up Link
+                      Center(
+                        child: TextButton(
+                          onPressed: () {
+                            Navigator.of(
+                              context,
+                            ).pushReplacementNamed('/signup');
+                          },
+                          child: Text(
+                            "Don't have an account? Sign Up",
+                            style: GoogleFonts.poppins(
+                              fontSize: 16,
+                              color: Colors.green,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
           if (_isLoading)
@@ -212,4 +276,30 @@ class _LoginPageState extends State<LoginPage> {
       ),
     );
   }
+}
+
+// Custom painter to create a green triangle in the top left
+class TrianglePainter extends CustomPainter {
+  final Color color;
+
+  TrianglePainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint =
+        Paint()
+          ..color = color
+          ..style = PaintingStyle.fill;
+
+    final path = Path();
+    path.moveTo(0, 0);
+    path.lineTo(size.width, 0);
+    path.lineTo(0, size.height);
+    path.close();
+
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
