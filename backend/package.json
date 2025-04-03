@@ -3,9 +3,9 @@
   "version": "1.0.0",
   "main": "server.js",
   "scripts": {
-    "dev": "node server.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
+  "start": "mkdir -p uploads && node --no-deprecation server.js",
+  "dev": "set NODE_ENV=development && npm start"
+},
   "keywords": [],
   "author": "",
   "license": "ISC",
