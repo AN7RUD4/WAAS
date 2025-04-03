@@ -191,7 +191,8 @@ class _ReportPageState extends State<ReportPage> {
   File? _image;
   final TextEditingController locationController = TextEditingController();
   bool _isLoading = false;
-  final storage = FlutterSecureStorage();
+  final storage = const FlutterSecureStorage();
+  String? _errorMessage;
 
   @override
   void initState() {
@@ -248,6 +249,7 @@ class _ReportPageState extends State<ReportPage> {
     if (pickedImage != null) {
       setState(() {
         _image = File(pickedImage.path);
+        _errorMessage = null; // Reset error message
       });
     }
   }
@@ -260,14 +262,18 @@ class _ReportPageState extends State<ReportPage> {
       return;
     }
 
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
     try {
       final token = await _getToken();
       if (token == null) throw Exception('No token found');
 
       var request = http.MultipartRequest(
         'POST',
-        Uri.parse('$apiBaseUrl/user/report-waste'),
+        Uri.parse('http://your-backend-url:3000/report-waste'), // Replace with your backend URL
       );
       request.headers['Authorization'] = 'Bearer $token';
       request.fields['location'] = locationController.text;
@@ -275,18 +281,24 @@ class _ReportPageState extends State<ReportPage> {
 
       var response = await request.send();
       var responseBody = await response.stream.bytesToString();
+      final jsonResponse = jsonDecode(responseBody);
 
       if (response.statusCode == 201) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("Report submitted successfully!")),
         );
         Navigator.pop(context);
+      } else if (response.statusCode == 400 && jsonResponse['message'] == 'No waste detected in the image') {
+        setState(() {
+          _errorMessage = 'No waste detected in the image';
+        });
       } else {
-        final error = jsonDecode(responseBody)['message'] ?? 'Failed to submit report';
-        throw Exception(error);
+        throw Exception(jsonResponse['message'] ?? 'Failed to submit report');
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      setState(() {
+        _errorMessage = 'Error: $e';
+      });
     } finally {
       setState(() => _isLoading = false);
     }
@@ -307,7 +319,6 @@ class _ReportPageState extends State<ReportPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Header
                       Text(
                         "Report Public Waste",
                         style: GoogleFonts.poppins(
@@ -325,7 +336,6 @@ class _ReportPageState extends State<ReportPage> {
                         ),
                       ),
                       const SizedBox(height: 24),
-                      // Image Section
                       Text(
                         "Take a Picture",
                         style: GoogleFonts.poppins(
@@ -364,7 +374,6 @@ class _ReportPageState extends State<ReportPage> {
                         ),
                       ),
                       const SizedBox(height: 16),
-                      // Location Field
                       TextFormField(
                         controller: locationController,
                         readOnly: true,
@@ -373,8 +382,17 @@ class _ReportPageState extends State<ReportPage> {
                           prefixIcon: Icon(Icons.location_on_outlined),
                         ),
                       ),
+                      if (_errorMessage != null) ...[
+                        const SizedBox(height: 16),
+                        Text(
+                          _errorMessage!,
+                          style: GoogleFonts.poppins(
+                            color: Colors.red,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 24),
-                      // Submit Button
                       SizedBox(
                         width: double.infinity,
                         child: ElevatedButton(

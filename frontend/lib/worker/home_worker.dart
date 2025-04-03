@@ -4,7 +4,7 @@ import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:waas/assets/constants.dart';
 import 'package:waas/worker/pick_map.dart';
-import 'package:google_fonts/google_fonts.dart'; 
+import 'package:google_fonts/google_fonts.dart';
 
 class WorkerApp extends StatelessWidget {
   const WorkerApp({super.key});
@@ -21,16 +21,13 @@ class WorkerApp extends StatelessWidget {
         ),
         textTheme: GoogleFonts.poppinsTextTheme(
           Theme.of(context).textTheme.apply(
-                bodyColor: Colors.white,
-                displayColor: Colors.white,
-              ),
+            bodyColor: Colors.white,
+            displayColor: Colors.white,
+          ),
         ),
         scaffoldBackgroundColor: Colors.grey[900],
       ),
-      home: WorkerHomePage(
-        workerName: "Worker",
-        workerId: "201",
-      ),
+      home: WorkerHomePage(workerName: "Worker", workerId: "201"),
       routes: {'/pickup-map': (context) => const MapScreen(taskid: 0)},
     );
   }
@@ -100,10 +97,7 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
-                    colors: [
-                      Colors.green.shade700,
-                      Colors.green.shade500,
-                    ],
+                    colors: [Colors.green.shade700, Colors.green.shade500],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
@@ -171,7 +165,8 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (context) => const PastWorkDetailsPage(),
+                                builder:
+                                    (context) => const PastWorkDetailsPage(),
                               ),
                             );
                           },
@@ -183,8 +178,11 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
                       child: FutureBuilder<List<Map<String, dynamic>>>(
                         future: _assignedWorksFuture,
                         builder: (context, snapshot) {
-                          if (snapshot.connectionState == ConnectionState.waiting) {
-                            return const Center(child: CircularProgressIndicator());
+                          if (snapshot.connectionState ==
+                              ConnectionState.waiting) {
+                            return const Center(
+                              child: CircularProgressIndicator(),
+                            );
                           } else if (snapshot.hasError) {
                             return Center(
                               child: Text(
@@ -192,7 +190,8 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
                                 style: const TextStyle(color: Colors.white70),
                               ),
                             );
-                          } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                          } else if (!snapshot.hasData ||
+                              snapshot.data!.isEmpty) {
                             return const Center(
                               child: Text(
                                 "No tasks currently assigned",
@@ -216,9 +215,10 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
                                     Navigator.push(
                                       context,
                                       MaterialPageRoute(
-                                        builder: (context) => MapScreen(
-                                          taskid: int.parse(work['taskId']),
-                                        ),
+                                        builder:
+                                            (context) => MapScreen(
+                                              taskid: int.parse(work['taskId']),
+                                            ),
                                       ),
                                     );
                                   },
@@ -292,19 +292,13 @@ class WorkListItem extends StatelessWidget {
                   const SizedBox(height: 4),
                   Text(
                     "Distance: $distance",
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.white70,
-                    ),
+                    style: TextStyle(fontSize: 14, color: Colors.white70),
                   ),
                 ],
               ),
               Text(
                 startTime ?? 'Not Started',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.white70,
-                ),
+                style: TextStyle(fontSize: 14, color: Colors.white70),
               ),
             ],
           ),
@@ -403,10 +397,7 @@ class _PastWorkDetailsPageState extends State<PastWorkDetailsPage> {
                     return const Center(
                       child: Text(
                         "No completed tasks",
-                        style: TextStyle(
-                          color: Colors.white70,
-                          fontSize: 16,
-                        ),
+                        style: TextStyle(color: Colors.white70, fontSize: 16),
                       ),
                     );
                   } else {
@@ -417,16 +408,18 @@ class _PastWorkDetailsPageState extends State<PastWorkDetailsPage> {
                         return WorkListItem(
                           taskId: work['taskId'],
                           title: work['title'],
-                          distance: 'N/A', // Distance not available for completed tasks
+                          distance:
+                              'N/A', // Distance not available for completed tasks
                           startTime: work['startTime'],
                           endTime: work['endTime'],
                           onTap: () {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (context) => MapScreen(
-                                  taskid: int.parse(work['taskId']),
-                                ),
+                                builder:
+                                    (context) => MapScreen(
+                                      taskid: int.parse(work['taskId']),
+                                    ),
                               ),
                             );
                           },
