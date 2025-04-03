@@ -14,7 +14,6 @@
     "@supabase/supabase-js": "^2.49.1",
     "@tensorflow-models/mobilenet": "^2.1.1",
     "@tensorflow/tfjs": "^4.22.0",
-    "@tensorflow/tfjs-node": "^4.22.0",
     "axios": "^1.8.4",
     "bcryptjs": "^2.4.3",
     "body-parser": "^1.20.3",
@@ -26,11 +25,11 @@
     "haversine-distance": "^1.2.3",
     "jsonwebtoken": "^9.0.2",
     "kmeans-js": "^0.1.2",
-    "multer": "^1.4.5-lts.1",
+    "multer": "^1.4.5-lts.2",
     "munkres": "^2.0.4",
     "node-cron": "^3.0.3",
     "path": "^0.12.7",
-    "pg": "^8.14.0",
+    "pg": "^8.14.1",
     "sharp": "^0.33.5",
     "twilio": "^5.5.1"
   }
