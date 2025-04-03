@@ -4,7 +4,7 @@ const jwt = require('jsonwebtoken');
 const multer = require('multer');
 
 // Imports for AI
-const tf = require('@tensorflow/tfjs'); // Use pure JS version
+const tf = process.env.NODE_ENV === 'production' ? require('@tensorflow/tfjs-node') : require('@tensorflow/tfjs');
 const mobilenet = require('@tensorflow-models/mobilenet');
 const sharp = require('sharp');
 const fs = require('fs');
@@ -34,11 +34,21 @@ const authenticateToken = (req, res, next) => {
   });
 };
 
+// Configure multer with file filter to accept only images
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, 'uploads/'),
   filename: (req, file, cb) => cb(null, `${Date.now()}-${file.originalname}`),
 });
-const upload = multer({ storage: storage });
+const fileFilter = (req, file, cb) => {
+  const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/bmp'];
+  console.log('File MIME type:', file.mimetype); // Log the MIME type
+  if (allowedTypes.includes(file.mimetype)) {
+    cb(null, true);
+  } else {
+    cb(new Error('Invalid file type. Only JPEG, PNG, GIF, and BMP are allowed.'), false);
+  }
+};
+const upload = multer({ storage: storage, fileFilter: fileFilter });
 
 // Load MobileNet model at startup
 let wasteModel;
@@ -62,18 +72,53 @@ userRouter.post('/detect-waste', authenticateToken, upload.single('image'), asyn
       return res.status(500).json({ error: 'AI model not loaded. Please try again later.' });
     }
 
-    // Preprocess the image to 224x224 (MobileNet requirement)
-    const imageBuffer = await sharp(req.file.path)
-      .resize(224, 224)
-      .toFormat('jpeg')
-      .toBuffer();
+    // Log the uploaded file details for debugging
+    console.log('Uploaded file:', {
+      path: req.file.path,
+      mimetype: req.file.mimetype,
+      size: req.file.size
+    });
 
-    // Convert to tensor
-    const tensor = tf.browser.fromPixels(imageBuffer, 3) // Use browser.fromPixels for pure JS
-      .toFloat()
-      .div(tf.scalar(127.5))
-      .sub(tf.scalar(1)) // Normalize to [-1, 1]
-      .expandDims(); // Add batch dimension
+    // Preprocess the image to 224x224 (MobileNet requirement)
+    let imageBuffer;
+    if (process.env.NODE_ENV === 'production') {
+      // For production, ensure the output is a valid JPEG buffer
+      imageBuffer = await sharp(req.file.path)
+        .resize(224, 224)
+        .jpeg() // Explicitly convert to JPEG
+        .toBuffer();
+
+      // Log the buffer length to ensure it's not empty
+      console.log('Image buffer length (production):', imageBuffer.length);
+    } else {
+      // For development, use .raw() to get pixel data for tf.tensor3d
+      imageBuffer = await sharp(req.file.path)
+        .resize(224, 224)
+        .toFormat('jpeg')
+        .raw()
+        .toBuffer();
+
+      console.log('Image buffer length (development):', imageBuffer.length);
+    }
+
+    // Convert to tensor based on environment
+    let tensor;
+    if (process.env.NODE_ENV === 'production') {
+      // On Render, use tf.node.decodeImage
+      tensor = tf.node.decodeImage(imageBuffer, 3)
+        .toFloat()
+        .div(tf.scalar(127.5))
+        .sub(tf.scalar(1))
+        .expandDims();
+    } else {
+      // Locally, use tf.tensor3d with raw pixel data
+      const imageData = new Uint8Array(imageBuffer);
+      tensor = tf.tensor3d(imageData, [224, 224, 3])
+        .toFloat()
+        .div(tf.scalar(127.5))
+        .sub(tf.scalar(1))
+        .expandDims();
+    }
 
     // Predict
     const predictions = await wasteModel.classify(tensor);

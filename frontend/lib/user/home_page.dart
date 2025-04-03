@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:http_parser/http_parser.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import 'package:geolocator/geolocator.dart';
@@ -209,6 +210,7 @@ class UserApp extends StatelessWidget {
 
 // Report Page for submitting public waste reports
 // Report Page for submitting public waste reports
+// Report Page for submitting public waste reports
 class ReportPage extends StatefulWidget {
   const ReportPage({super.key});
 
@@ -222,7 +224,7 @@ class _ReportPageState extends State<ReportPage> {
   bool _isLoading = false;
   final storage = const FlutterSecureStorage();
   String? _errorMessage;
-  bool? _hasWaste; // To store the waste detection result
+  bool? _hasWaste;
 
   @override
   void initState() {
@@ -274,22 +276,17 @@ class _ReportPageState extends State<ReportPage> {
     return await storage.read(key: 'jwt_token');
   }
 
-  Future<void> _takePicture() async {
-    final ImagePicker picker = ImagePicker();
-    final XFile? pickedImage = await picker.pickImage(
-      source: ImageSource.camera,
+  Future<void> _handleTokenExpiration() async {
+    // Clear the stored token
+    await storage.delete(key: 'jwt_token');
+    // Navigate to the login page
+    Navigator.pushReplacementNamed(
+      context,
+      '/login',
+    ); // Replace with your login route
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Session expired. Please log in again.')),
     );
-
-    if (pickedImage != null) {
-      setState(() {
-        _image = File(pickedImage.path);
-        _errorMessage = null; // Reset error message
-        _hasWaste = null; // Reset waste detection result
-      });
-
-      // Call the waste detection endpoint after taking the picture
-      await _detectWaste();
-    }
   }
 
   Future<void> _detectWaste() async {
@@ -302,17 +299,24 @@ class _ReportPageState extends State<ReportPage> {
 
     try {
       final token = await _getToken();
-      if (token == null) throw Exception('No token found');
+      if (token == null) {
+        await _handleTokenExpiration();
+        return;
+      }
 
       var request = http.MultipartRequest(
         'POST',
-        Uri.parse(
-          '$apiBaseUrl/user/detect-waste',
-        ), // Call the detect-waste endpoint
+        Uri.parse('$apiBaseUrl/user/detect-waste'),
       );
       request.headers['Authorization'] = 'Bearer $token';
       request.files.add(
-        await http.MultipartFile.fromPath('image', _image!.path),
+        await http.MultipartFile.fromPath(
+          'image',
+          _image!.path,
+          contentType: _getImageContentType(
+            _image!.path,
+          ), // Custom function to determine MIME type
+        ),
       );
 
       var response = await request.send();
@@ -323,6 +327,9 @@ class _ReportPageState extends State<ReportPage> {
         setState(() {
           _hasWaste = jsonResponse['hasWaste'] ?? false;
         });
+      } else if (response.statusCode == 403 &&
+          jsonResponse['message'] == 'Invalid token') {
+        await _handleTokenExpiration();
       } else {
         throw Exception(jsonResponse['error'] ?? 'Failed to detect waste');
       }
@@ -332,6 +339,23 @@ class _ReportPageState extends State<ReportPage> {
       });
     } finally {
       setState(() => _isLoading = false);
+    }
+  }
+
+  MediaType? _getImageContentType(String path) {
+    final extension = path.split('.').last.toLowerCase();
+    switch (extension) {
+      case 'jpg':
+      case 'jpeg':
+        return MediaType('image', 'jpeg');
+      case 'png':
+        return MediaType('image', 'png');
+      case 'gif':
+        return MediaType('image', 'gif');
+      case 'bmp':
+        return MediaType('image', 'bmp');
+      default:
+        return null; // Let the server handle unsupported types
     }
   }
 
@@ -370,11 +394,14 @@ class _ReportPageState extends State<ReportPage> {
 
     try {
       final token = await _getToken();
-      if (token == null) throw Exception('No token found');
+      if (token == null) {
+        await _handleTokenExpiration();
+        return;
+      }
 
       var request = http.MultipartRequest(
         'POST',
-        Uri.parse('$apiBaseUrl/user/report-waste'), // Submit the report
+        Uri.parse('$apiBaseUrl/user/report-waste'),
       );
       request.headers['Authorization'] = 'Bearer $token';
       request.fields['location'] = locationController.text;
@@ -391,6 +418,9 @@ class _ReportPageState extends State<ReportPage> {
           const SnackBar(content: Text("Report submitted successfully!")),
         );
         Navigator.pop(context);
+      } else if (response.statusCode == 403 &&
+          jsonResponse['message'] == 'Invalid token') {
+        await _handleTokenExpiration();
       } else {
         throw Exception(jsonResponse['message'] ?? 'Failed to submit report');
       }
@@ -400,6 +430,23 @@ class _ReportPageState extends State<ReportPage> {
       });
     } finally {
       setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _takePicture() async {
+    final ImagePicker picker = ImagePicker();
+    final XFile? pickedImage = await picker.pickImage(
+      source: ImageSource.camera,
+    );
+
+    if (pickedImage != null) {
+      setState(() {
+        _image = File(pickedImage.path);
+        _errorMessage = null;
+        _hasWaste = null;
+      });
+
+      await _detectWaste();
     }
   }
 
@@ -460,7 +507,6 @@ class _ReportPageState extends State<ReportPage> {
                                     ),
                                   ),
                               const SizedBox(height: 8),
-                              // Display waste detection result
                               if (_image != null && _hasWaste != null)
                                 Text(
                                   _hasWaste!
