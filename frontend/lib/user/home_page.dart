@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:http_parser/http_parser.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import 'package:geolocator/geolocator.dart';
@@ -279,7 +280,10 @@ class _ReportPageState extends State<ReportPage> {
     // Clear the stored token
     await storage.delete(key: 'jwt_token');
     // Navigate to the login page
-    Navigator.pushReplacementNamed(context, '/login'); // Replace with your login route
+    Navigator.pushReplacementNamed(
+      context,
+      '/login',
+    ); // Replace with your login route
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Session expired. Please log in again.')),
     );
@@ -306,7 +310,13 @@ class _ReportPageState extends State<ReportPage> {
       );
       request.headers['Authorization'] = 'Bearer $token';
       request.files.add(
-        await http.MultipartFile.fromPath('image', _image!.path),
+        await http.MultipartFile.fromPath(
+          'image',
+          _image!.path,
+          contentType: _getImageContentType(
+            _image!.path,
+          ), // Custom function to determine MIME type
+        ),
       );
 
       var response = await request.send();
@@ -317,7 +327,8 @@ class _ReportPageState extends State<ReportPage> {
         setState(() {
           _hasWaste = jsonResponse['hasWaste'] ?? false;
         });
-      } else if (response.statusCode == 403 && jsonResponse['message'] == 'Invalid token') {
+      } else if (response.statusCode == 403 &&
+          jsonResponse['message'] == 'Invalid token') {
         await _handleTokenExpiration();
       } else {
         throw Exception(jsonResponse['error'] ?? 'Failed to detect waste');
@@ -328,6 +339,23 @@ class _ReportPageState extends State<ReportPage> {
       });
     } finally {
       setState(() => _isLoading = false);
+    }
+  }
+
+  MediaType? _getImageContentType(String path) {
+    final extension = path.split('.').last.toLowerCase();
+    switch (extension) {
+      case 'jpg':
+      case 'jpeg':
+        return MediaType('image', 'jpeg');
+      case 'png':
+        return MediaType('image', 'png');
+      case 'gif':
+        return MediaType('image', 'gif');
+      case 'bmp':
+        return MediaType('image', 'bmp');
+      default:
+        return null; // Let the server handle unsupported types
     }
   }
 
@@ -390,7 +418,8 @@ class _ReportPageState extends State<ReportPage> {
           const SnackBar(content: Text("Report submitted successfully!")),
         );
         Navigator.pop(context);
-      } else if (response.statusCode == 403 && jsonResponse['message'] == 'Invalid token') {
+      } else if (response.statusCode == 403 &&
+          jsonResponse['message'] == 'Invalid token') {
         await _handleTokenExpiration();
       } else {
         throw Exception(jsonResponse['message'] ?? 'Failed to submit report');
@@ -425,50 +454,51 @@ class _ReportPageState extends State<ReportPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text("Report Public Waste")),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        "Report Public Waste",
-                        style: GoogleFonts.poppins(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black87,
+      body:
+          _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          "Report Public Waste",
+                          style: GoogleFonts.poppins(
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black87,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        "Help keep your community clean",
-                        style: GoogleFonts.poppins(
-                          fontSize: 16,
-                          color: Colors.black54,
+                        const SizedBox(height: 8),
+                        Text(
+                          "Help keep your community clean",
+                          style: GoogleFonts.poppins(
+                            fontSize: 16,
+                            color: Colors.black54,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 24),
-                      Text(
-                        "Take a Picture",
-                        style: GoogleFonts.poppins(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.black87,
+                        const SizedBox(height: 24),
+                        Text(
+                          "Take a Picture",
+                          style: GoogleFonts.poppins(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.black87,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 8),
-                      Center(
-                        child: Column(
-                          children: [
-                            _image == null
-                                ? const Text(
+                        const SizedBox(height: 8),
+                        Center(
+                          child: Column(
+                            children: [
+                              _image == null
+                                  ? const Text(
                                     "No Image Taken",
                                     style: TextStyle(color: Colors.black54),
                                   )
-                                : ClipRRect(
+                                  : ClipRRect(
                                     borderRadius: BorderRadius.circular(12),
                                     child: Image.file(
                                       _image!,
@@ -476,60 +506,63 @@ class _ReportPageState extends State<ReportPage> {
                                       fit: BoxFit.cover,
                                     ),
                                   ),
-                            const SizedBox(height: 8),
-                            if (_image != null && _hasWaste != null)
-                              Text(
-                                _hasWaste! ? "Waste Detected" : "Waste Not Detected",
-                                style: GoogleFonts.poppins(
-                                  fontSize: 14,
-                                  color: _hasWaste! ? Colors.green : Colors.red,
-                                  fontWeight: FontWeight.w600,
+                              const SizedBox(height: 8),
+                              if (_image != null && _hasWaste != null)
+                                Text(
+                                  _hasWaste!
+                                      ? "Waste Detected"
+                                      : "Waste Not Detected",
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 14,
+                                    color:
+                                        _hasWaste! ? Colors.green : Colors.red,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              const SizedBox(height: 16),
+                              SizedBox(
+                                width: double.infinity,
+                                child: ElevatedButton.icon(
+                                  icon: const Icon(Icons.camera_alt),
+                                  label: const Text("Open Camera"),
+                                  onPressed: _takePicture,
                                 ),
                               ),
-                            const SizedBox(height: 16),
-                            SizedBox(
-                              width: double.infinity,
-                              child: ElevatedButton.icon(
-                                icon: const Icon(Icons.camera_alt),
-                                label: const Text("Open Camera"),
-                                onPressed: _takePicture,
-                              ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: locationController,
-                        readOnly: true,
-                        decoration: const InputDecoration(
-                          labelText: "Location",
-                          prefixIcon: Icon(Icons.location_on_outlined),
-                        ),
-                      ),
-                      if (_errorMessage != null) ...[
                         const SizedBox(height: 16),
-                        Text(
-                          _errorMessage!,
-                          style: GoogleFonts.poppins(
-                            color: Colors.red,
-                            fontSize: 14,
+                        TextFormField(
+                          controller: locationController,
+                          readOnly: true,
+                          decoration: const InputDecoration(
+                            labelText: "Location",
+                            prefixIcon: Icon(Icons.location_on_outlined),
+                          ),
+                        ),
+                        if (_errorMessage != null) ...[
+                          const SizedBox(height: 16),
+                          Text(
+                            _errorMessage!,
+                            style: GoogleFonts.poppins(
+                              color: Colors.red,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 24),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: _submitReport,
+                            child: const Text("Submit Report"),
                           ),
                         ),
                       ],
-                      const SizedBox(height: 24),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton(
-                          onPressed: _submitReport,
-                          child: const Text("Submit Report"),
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
                 ),
               ),
-            ),
     );
   }
 }
