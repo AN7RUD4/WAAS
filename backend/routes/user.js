@@ -16,18 +16,33 @@ const pool = new Pool({
 
 // Image processing function
 const processImage = async (filePath) => {
-  const { data, info } = await sharp(filePath)
-    .resize(224, 224)
-    .removeAlpha()
-    .raw()
-    .toBuffer({ resolveWithObject: true });
+  try {
+    // 1. Read and preprocess with sharp
+    const { data, info } = await sharp(filePath)
+      .resize(224, 224)
+      .removeAlpha()
+      .ensureAlpha()  // Explicitly ensure 3 channels
+      .raw()
+      .toBuffer({ resolveWithObject: true });
 
-  const pixels = new Float32Array(data.length);
-  for (let i = 0; i < data.length; i++) {
-    pixels[i] = data[i] / 255.0;
+    // 2. Verify pixel data
+    if (data.length !== 224 * 224 * 3) {
+      throw new Error(`Invalid buffer length: ${data.length}, expected ${224 * 224 * 3}`);
+    }
+
+    // 3. Convert to normalized Float32 array
+    const pixels = new Float32Array(224 * 224 * 3);
+    for (let i = 0; i < data.length; i++) {
+      pixels[i] = data[i] / 255.0;
+      // Debug: Check first few pixels
+      if (i < 10) console.log(`Pixel ${i}: ${data[i]} → ${pixels[i]}`);
+    }
+
+    return tf.tensor4d(pixels, [1, 224, 224, 3]);
+  } catch (error) {
+    console.error('Image processing failed:', error);
+    throw error;
   }
-
-  return tf.tensor4d(pixels, [1, info.height, info.width, 3]);
 };
 
 // Authentication middleware
