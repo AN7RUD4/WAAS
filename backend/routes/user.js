@@ -80,17 +80,33 @@ userRouter.post('/detect-waste', authenticateToken, upload.single('image'), asyn
       size: req.file.size,
     });
 
+    // Read the raw file to verify it exists and is readable
+    let rawImageBuffer;
+    try {
+      rawImageBuffer = fs.readFileSync(req.file.path);
+      console.log('Raw file buffer length:', rawImageBuffer.length);
+    } catch (readError) {
+      console.error('Failed to read uploaded file:', readError);
+      return res.status(500).json({ error: 'Failed to read uploaded file', details: readError.message });
+    }
+
     // Preprocess the image to 224x224 (MobileNet requirement)
     let imageBuffer;
     try {
-      imageBuffer = await sharp(req.file.path)
+      imageBuffer = await sharp(rawImageBuffer)
         .resize(224, 224, { fit: 'fill' }) // Ensure exact 224x224 size
         .jpeg({ quality: 80 }) // Convert to JPEG with reasonable quality
         .toBuffer();
-      console.log('Image buffer length:', imageBuffer.length);
+      console.log('Processed image buffer length:', imageBuffer.length);
     } catch (sharpError) {
       console.error('Image preprocessing failed:', sharpError);
       return res.status(500).json({ error: 'Failed to preprocess image', details: sharpError.message });
+    }
+
+    // Validate the image buffer
+    if (!imageBuffer || imageBuffer.length < 1000) {
+      console.error('Image buffer is too small or invalid:', imageBuffer.length);
+      return res.status(500).json({ error: 'Processed image buffer is invalid or too small' });
     }
 
     // Convert to tensor
@@ -101,6 +117,10 @@ userRouter.post('/detect-waste', authenticateToken, upload.single('image'), asyn
         .div(tf.scalar(255)) // Normalize to [0, 1] range
         .expandDims();
       console.log('Tensor shape:', tensor.shape);
+
+      // Log a sample of the tensor to verify its content
+      const tensorSample = tensor.slice([0, 0, 0, 0], [1, 5, 5, 3]).dataSync();
+      console.log('Tensor sample (first 5x5 pixels):', Array.from(tensorSample).slice(0, 25));
     } catch (tensorError) {
       console.error('Tensor creation failed:', tensorError);
       return res.status(500).json({ error: 'Failed to create tensor', details: tensorError.message });
