@@ -67,6 +67,7 @@ const storage = multer.diskStorage({
 });
 
 const fileFilter = (req, file, cb) => {
+<<<<<<< Updated upstream
   const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/bmp'];
   if (allowedTypes.includes(file.mimetype)) cb(null, true);
   else cb(new Error('Invalid file type'), false);
@@ -84,6 +85,16 @@ let wasteModel;
     console.error('Error loading MobileNet:', error);
   }
 })();
+=======
+  const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/bmp', 'application/octet-stream'];
+  console.log('File MIME type:', file.mimetype);
+  if (allowedTypes.includes(file.mimetype)) {
+    cb(null, true);
+  } else {
+    cb(new Error('Invalid file type. Only JPEG, PNG, GIF, BMP, and generic binary streams are allowed.'), false);
+  }
+};
+>>>>>>> Stashed changes
 
 // Waste detection endpoint
 userRouter.post('/detect-waste', authenticateToken, upload.single('image'), async (req, res) => {
@@ -99,15 +110,67 @@ userRouter.post('/detect-waste', authenticateToken, upload.single('image'), asyn
     filePath = req.file.path;
     console.log('Processing image:', filePath);
 
+<<<<<<< Updated upstream
     // Process image
     const isProduction = process.env.NODE_ENV === 'production';
     const tensor = await processImage(filePath, isProduction);
 
     // Get predictions
+=======
+    // Convert the uploaded file to JPEG
+    const convertedPath = `uploads/converted-${Date.now()}.jpg`;
+    await sharp(req.file.path)
+      .toFormat('jpeg')
+      .toFile(convertedPath);
+
+    // Preprocess the converted image to 224x224
+    let imageBuffer;
+    if (process.env.NODE_ENV === 'production') {
+      imageBuffer = await sharp(convertedPath)
+        .resize(224, 224)
+        .jpeg()
+        .toBuffer();
+
+      console.log('Image buffer length (production):', imageBuffer.length);
+    } else {
+      imageBuffer = await sharp(convertedPath)
+        .resize(224, 224)
+        .toFormat('jpeg')
+        .raw()
+        .toBuffer();
+
+      console.log('Image buffer length (development):', imageBuffer.length);
+    }
+
+    // Clean up the converted file
+    fs.unlink(convertedPath, (err) => {
+      if (err) console.error('Failed to delete converted file:', err);
+    });
+
+    // Convert to tensor based on environment
+    let tensor;
+    if (process.env.NODE_ENV === 'production') {
+      tensor = tf.node.decodeImage(imageBuffer, 3)
+        .toFloat()
+        .div(tf.scalar(127.5))
+        .sub(tf.scalar(1))
+        .expandDims();
+    } else {
+      const imageData = new Uint8Array(imageBuffer);
+      tensor = tf.tensor3d(imageData, [224, 224, 3])
+        .toFloat()
+        .div(tf.scalar(127.5))
+        .sub(tf.scalar(1))
+        .expandDims();
+    }
+
+    // Predict
+>>>>>>> Stashed changes
     const predictions = await wasteModel.classify(tensor);
     tf.dispose(tensor);
     console.log('All predictions:', predictions);
 
+<<<<<<< Updated upstream
     // Waste detection logic
     const WASTE_LABELS = new Set([
   'trash', 'plastic', 'bottle', 'cardboard', 'paper', 'waste', 'garbage',
@@ -118,6 +181,19 @@ userRouter.post('/detect-waste', authenticateToken, upload.single('image'), asyn
       'plastic container', 'soda bottle', 'beverage can', 'food waste',
       'recycling bin', 'waste bin', 'rubbish bin'
 ].map(label => label.toLowerCase()));
+=======
+    // Define waste-related labels
+    // Define waste-related labels
+const wasteLabels = [
+  'trash', 'plastic', 'bottle', 'cardboard', 'paper', 'waste', 'garbage', 'rubbish',
+  'container', 'wrapper', 'can', 'glass', 'metal', 'organic', 'recyclable', 'debris',
+  'water bottle', 'soda can', 'plastic bag', 'bin', 'litter', 'scrap', 'refuse',
+  'dump', 'heap', 'pile', 'junk', 'recycle', 'compost', 'biodegradable'
+];
+    const hasWaste = predictions.some(pred =>
+      wasteLabels.some(label => pred.className.toLowerCase().includes(label))
+    );
+>>>>>>> Stashed changes
 
 const MIN_CONFIDENCE = 0.5; // Define a clear threshold
 

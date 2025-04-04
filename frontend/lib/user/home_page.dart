@@ -313,6 +313,8 @@ class _ReportPageState extends State<ReportPage> {
       var responseBody = await response.stream.bytesToString();
       final jsonResponse = jsonDecode(responseBody);
 
+      print(jsonResponse); // Debug print to check the response
+
       if (response.statusCode == 200) {
         setState(() {
           _hasWaste = jsonResponse['hasWaste'] ?? false;
@@ -353,7 +355,11 @@ class _ReportPageState extends State<ReportPage> {
     if (_image == null || locationController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
+<<<<<<< Updated upstream
           content: Text("Please select an image and provide a location!"),
+=======
+          content: Text("Please select a photo and provide a location!"),
+>>>>>>> Stashed changes
         ),
       );
       return;
@@ -455,36 +461,52 @@ class _ReportPageState extends State<ReportPage> {
     }
   }
 
+  Future<void> _pickImageFromGallery() async {
+    final ImagePicker picker = ImagePicker();
+    final XFile? pickedImage = await picker.pickImage(
+      source: ImageSource.gallery,
+    );
+
+    if (pickedImage != null) {
+      setState(() {
+        _image = File(pickedImage.path);
+        _errorMessage = null;
+        _hasWaste = null;
+      });
+
+      await _detectWaste();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text("Report Public Waste")),
-      body:
-          _isLoading
-              ? const Center(child: CircularProgressIndicator())
-              : SafeArea(
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: SingleChildScrollView(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          "Report Public Waste",
-                          style: GoogleFonts.poppins(
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.black87,
-                          ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        "Report Public Waste",
+                        style: GoogleFonts.poppins(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87,
                         ),
-                        const SizedBox(height: 8),
-                        Text(
-                          "Help keep your community clean",
-                          style: GoogleFonts.poppins(
-                            fontSize: 16,
-                            color: Colors.black54,
-                          ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        "Help keep your community clean",
+                        style: GoogleFonts.poppins(
+                          fontSize: 16,
+                          color: Colors.black54,
                         ),
+<<<<<<< Updated upstream
                         const SizedBox(height: 24),
                         Text(
                           "Upload an Image",
@@ -500,10 +522,28 @@ class _ReportPageState extends State<ReportPage> {
                             children: [
                               _image == null
                                   ? const Text(
+=======
+                      ),
+                      const SizedBox(height: 24),
+                      Text(
+                        "Select a Picture",
+                        style: GoogleFonts.poppins(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.black87,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Center(
+                        child: Column(
+                          children: [
+                            _image == null
+                                ? const Text(
+>>>>>>> Stashed changes
                                     "No Image Selected",
                                     style: TextStyle(color: Colors.black54),
                                   )
-                                  : ClipRRect(
+                                : ClipRRect(
                                     borderRadius: BorderRadius.circular(12),
                                     child: Image.file(
                                       _image!,
@@ -511,6 +551,7 @@ class _ReportPageState extends State<ReportPage> {
                                       fit: BoxFit.cover,
                                     ),
                                   ),
+<<<<<<< Updated upstream
                               const SizedBox(height: 8),
                               if (_image != null && _hasWaste != null)
                                 Text(
@@ -550,42 +591,76 @@ class _ReportPageState extends State<ReportPage> {
                                     ),
                                   ),
                                 ],
+=======
+                            const SizedBox(height: 8),
+                            if (_image != null && _hasWaste != null)
+                              Text(
+                                _hasWaste!
+                                    ? "Waste Detected"
+                                    : "Waste Not Detected",
+                                style: GoogleFonts.poppins(
+                                  fontSize: 14,
+                                  color: _hasWaste! ? Colors.green : Colors.red,
+                                  fontWeight: FontWeight.w600,
+                                ),
+>>>>>>> Stashed changes
                               ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        TextFormField(
-                          controller: locationController,
-                          readOnly: true,
-                          decoration: const InputDecoration(
-                            labelText: "Location",
-                            prefixIcon: Icon(Icons.location_on_outlined),
-                          ),
-                        ),
-                        if (_errorMessage != null) ...[
-                          const SizedBox(height: 16),
-                          Text(
-                            _errorMessage!,
-                            style: GoogleFonts.poppins(
-                              color: Colors.red,
-                              fontSize: 14,
+                            const SizedBox(height: 16),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                              children: [
+                                Expanded(
+                                  child: ElevatedButton.icon(
+                                    icon: const Icon(Icons.camera_alt),
+                                    label: const Text("Open Camera"),
+                                    onPressed: _takePicture,
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: ElevatedButton.icon(
+                                    icon: const Icon(Icons.photo_library),
+                                    label: const Text("Pick from Gallery"),
+                                    onPressed: _pickImageFromGallery,
+                                  ),
+                                ),
+                              ],
                             ),
-                          ),
-                        ],
-                        const SizedBox(height: 24),
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            onPressed: _submitReport,
-                            child: const Text("Submit Report"),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: locationController,
+                        readOnly: true,
+                        decoration: const InputDecoration(
+                          labelText: "Location",
+                          prefixIcon: Icon(Icons.location_on_outlined),
+                        ),
+                      ),
+                      if (_errorMessage != null) ...[
+                        const SizedBox(height: 16),
+                        Text(
+                          _errorMessage!,
+                          style: GoogleFonts.poppins(
+                            color: Colors.red,
+                            fontSize: 14,
                           ),
                         ),
                       ],
-                    ),
+                      const SizedBox(height: 24),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: _submitReport,
+                          child: const Text("Submit Report"),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
+            ),
     );
   }
 }
