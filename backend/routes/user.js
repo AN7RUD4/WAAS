@@ -110,7 +110,7 @@ userRouter.post('/detect-waste', authenticateToken, upload.single('image'), asyn
 
     // Waste detection logic
     const WASTE_LABELS = new Set([
-  ''trash', 'plastic', 'bottle', 'cardboard', 'paper', 'waste', 'garbage',
+  'trash', 'plastic', 'bottle', 'cardboard', 'paper', 'waste', 'garbage',
       'rubbish', 'container', 'wrapper', 'can', 'glass', 'metal', 'organic',
       'recyclable', 'debris', 'water bottle', 'soda can', 'plastic bag', 'bin',
       'litter', 'scrap', 'refuse', 'dump', 'heap', 'pile', 'junk', 'recycle',
