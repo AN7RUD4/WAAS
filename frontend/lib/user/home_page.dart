@@ -209,8 +209,6 @@ class UserApp extends StatelessWidget {
 }
 
 // Report Page for submitting public waste reports
-// Report Page for submitting public waste reports
-// Report Page for submitting public waste reports
 class ReportPage extends StatefulWidget {
   const ReportPage({super.key});
 
@@ -277,13 +275,8 @@ class _ReportPageState extends State<ReportPage> {
   }
 
   Future<void> _handleTokenExpiration() async {
-    // Clear the stored token
     await storage.delete(key: 'jwt_token');
-    // Navigate to the login page
-    Navigator.pushReplacementNamed(
-      context,
-      '/login',
-    ); // Replace with your login route
+    Navigator.pushReplacementNamed(context, '/login');
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Session expired. Please log in again.')),
     );
@@ -295,6 +288,7 @@ class _ReportPageState extends State<ReportPage> {
     setState(() {
       _isLoading = true;
       _errorMessage = null;
+      _hasWaste = null; // Reset detection state
     });
 
     try {
@@ -313,9 +307,7 @@ class _ReportPageState extends State<ReportPage> {
         await http.MultipartFile.fromPath(
           'image',
           _image!.path,
-          contentType: _getImageContentType(
-            _image!.path,
-          ), // Custom function to determine MIME type
+          contentType: _getImageContentType(_image!.path),
         ),
       );
 
@@ -355,7 +347,7 @@ class _ReportPageState extends State<ReportPage> {
       case 'bmp':
         return MediaType('image', 'bmp');
       default:
-        return null; // Let the server handle unsupported types
+        return null;
     }
   }
 
@@ -363,7 +355,7 @@ class _ReportPageState extends State<ReportPage> {
     if (_image == null || locationController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text("Please take a photo and provide a location!"),
+          content: Text("Please select an image and provide a location!"),
         ),
       );
       return;
@@ -445,7 +437,22 @@ class _ReportPageState extends State<ReportPage> {
         _errorMessage = null;
         _hasWaste = null;
       });
+      await _detectWaste();
+    }
+  }
 
+  Future<void> _pickImageFromGallery() async {
+    final ImagePicker picker = ImagePicker();
+    final XFile? pickedImage = await picker.pickImage(
+      source: ImageSource.gallery,
+    );
+
+    if (pickedImage != null) {
+      setState(() {
+        _image = File(pickedImage.path);
+        _errorMessage = null;
+        _hasWaste = null;
+      });
       await _detectWaste();
     }
   }
@@ -482,7 +489,7 @@ class _ReportPageState extends State<ReportPage> {
                         ),
                         const SizedBox(height: 24),
                         Text(
-                          "Take a Picture",
+                          "Upload an Image",
                           style: GoogleFonts.poppins(
                             fontSize: 18,
                             fontWeight: FontWeight.w600,
@@ -495,7 +502,7 @@ class _ReportPageState extends State<ReportPage> {
                             children: [
                               _image == null
                                   ? const Text(
-                                    "No Image Taken",
+                                    "No Image Selected",
                                     style: TextStyle(color: Colors.black54),
                                   )
                                   : ClipRRect(
@@ -518,15 +525,33 @@ class _ReportPageState extends State<ReportPage> {
                                         _hasWaste! ? Colors.green : Colors.red,
                                     fontWeight: FontWeight.w600,
                                   ),
+                                )
+                              else if (_image != null && _hasWaste == null)
+                                const Text(
+                                  "Detecting waste...",
+                                  style: TextStyle(color: Colors.black54),
                                 ),
                               const SizedBox(height: 16),
-                              SizedBox(
-                                width: double.infinity,
-                                child: ElevatedButton.icon(
-                                  icon: const Icon(Icons.camera_alt),
-                                  label: const Text("Open Camera"),
-                                  onPressed: _takePicture,
-                                ),
+                              Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceEvenly,
+                                children: [
+                                  Expanded(
+                                    child: ElevatedButton.icon(
+                                      icon: const Icon(Icons.camera_alt),
+                                      label: const Text("Camera"),
+                                      onPressed: _takePicture,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 16),
+                                  Expanded(
+                                    child: ElevatedButton.icon(
+                                      icon: const Icon(Icons.photo_library),
+                                      label: const Text("Gallery"),
+                                      onPressed: _pickImageFromGallery,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ],
                           ),

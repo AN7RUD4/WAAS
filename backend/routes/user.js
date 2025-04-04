@@ -65,87 +65,101 @@ let wasteModel;
 userRouter.post('/detect-waste', authenticateToken, upload.single('image'), async (req, res) => {
   try {
     if (!req.file) {
+      console.log('No image provided in request');
       return res.status(400).json({ error: 'No image provided' });
     }
 
     if (!wasteModel) {
+      console.log('AI model not loaded');
       return res.status(500).json({ error: 'AI model not loaded. Please try again later.' });
     }
 
-    // Log the uploaded file details for debugging
     console.log('Uploaded file:', {
       path: req.file.path,
       mimetype: req.file.mimetype,
-      size: req.file.size
+      size: req.file.size,
     });
 
     // Preprocess the image to 224x224 (MobileNet requirement)
     let imageBuffer;
-    if (process.env.NODE_ENV === 'production') {
-      // For production, ensure the output is a valid JPEG buffer
+    try {
       imageBuffer = await sharp(req.file.path)
-        .resize(224, 224)
-        .jpeg() // Explicitly convert to JPEG
+        .resize(224, 224, { fit: 'fill' }) // Ensure exact 224x224 size
+        .jpeg({ quality: 80 }) // Convert to JPEG with reasonable quality
         .toBuffer();
-
-      // Log the buffer length to ensure it's not empty
-      console.log('Image buffer length (production):', imageBuffer.length);
-    } else {
-      // For development, use .raw() to get pixel data for tf.tensor3d
-      imageBuffer = await sharp(req.file.path)
-        .resize(224, 224)
-        .toFormat('jpeg')
-        .raw()
-        .toBuffer();
-
-      console.log('Image buffer length (development):', imageBuffer.length);
+      console.log('Image buffer length:', imageBuffer.length);
+    } catch (sharpError) {
+      console.error('Image preprocessing failed:', sharpError);
+      return res.status(500).json({ error: 'Failed to preprocess image', details: sharpError.message });
     }
 
-    // Convert to tensor based on environment
+    // Convert to tensor
     let tensor;
-    if (process.env.NODE_ENV === 'production') {
-      // On Render, use tf.node.decodeImage
-      tensor = tf.node.decodeImage(imageBuffer, 3)
+    try {
+      tensor = tf.node.decodeImage(imageBuffer, 3) // Use tfjs-node to decode JPEG buffer
         .toFloat()
-        .div(tf.scalar(127.5))
-        .sub(tf.scalar(1))
+        .div(tf.scalar(255)) // Normalize to [0, 1] range (MobileNet expects this)
         .expandDims();
-    } else {
-      // Locally, use tf.tensor3d with raw pixel data
-      const imageData = new Uint8Array(imageBuffer);
-      tensor = tf.tensor3d(imageData, [224, 224, 3])
-        .toFloat()
-        .div(tf.scalar(127.5))
-        .sub(tf.scalar(1))
-        .expandDims();
+      console.log('Tensor shape:', tensor.shape);
+    } catch (tensorError) {
+      console.error('Tensor creation failed:', tensorError);
+      return res.status(500).json({ error: 'Failed to create tensor', details: tensorError.message });
     }
 
-    // Predict
-    const predictions = await wasteModel.classify(tensor);
+    // Predict using MobileNet
+    let predictions;
+    try {
+      predictions = await wasteModel.classify(tensor);
+      console.log('Raw predictions:', predictions);
+    } catch (predictError) {
+      console.error('Prediction failed:', predictError);
+      tf.dispose(tensor);
+      return res.status(500).json({ error: 'Prediction failed', details: predictError.message });
+    }
+
     tf.dispose(tensor); // Free memory
 
-    // Define waste-related labels
+    // Expanded waste-related labels
     const wasteLabels = [
       'trash', 'plastic', 'bottle', 'cardboard', 'paper', 'waste', 'garbage', 'rubbish',
-      'container', 'wrapper', 'can', 'glass', 'metal', 'organic', 'recyclable', 'debris'
+      'container', 'wrapper', 'can', 'glass', 'metal', 'organic', 'recyclable', 'debris',
+      'litter', 'dump', 'scrap', 'refuse', 'bin', 'bag', 'compost', 'pollution', 'junk'
     ];
-    const hasWaste = predictions.some(pred =>
-      wasteLabels.some(label => pred.className.toLowerCase().includes(label))
-    );
+
+    // Check if any prediction matches a waste label
+    const hasWaste = predictions.some(pred => {
+      const classNameLower = pred.className.toLowerCase();
+      const isWaste = wasteLabels.some(label => classNameLower.includes(label));
+      if (isWaste) {
+        console.log(`Waste detected: ${pred.className} (probability: ${pred.probability})`);
+      }
+      return isWaste;
+    });
+
+    // Log detection result
+    if (!hasWaste) {
+      console.log('No waste detected. Top predictions:', predictions.slice(0, 3));
+    }
 
     // Clean up uploaded file
     fs.unlink(req.file.path, (err) => {
       if (err) console.error('Failed to delete uploaded file:', err);
     });
 
-    // Respond with result
+    // Respond with detailed result
     res.status(200).json({
       hasWaste: hasWaste,
       confidence: hasWaste ? predictions[0].probability : null,
-      topPredictions: predictions.slice(0, 3) // For debugging
+      topPredictions: predictions.slice(0, 3), // Top 3 predictions for debugging
     });
   } catch (error) {
     console.error('Error in /detect-waste:', error.message, error.stack);
+    // Clean up file in case of error
+    if (req.file && fs.existsSync(req.file.path)) {
+      fs.unlink(req.file.path, (err) => {
+        if (err) console.error('Failed to delete uploaded file on error:', err);
+      });
+    }
     res.status(500).json({ error: 'Failed to process image', details: error.message });
   }
 });
