@@ -47,7 +47,6 @@ dependencies:
   flutter_chat_types: ^3.6.2
   flutter_chat_ui: ^1.6.15
   url_launcher: ^6.3.1
-
 dev_dependencies:
   flutter_test:
     sdk: flutter
