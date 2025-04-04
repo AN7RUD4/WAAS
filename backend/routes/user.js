@@ -80,36 +80,23 @@ userRouter.post('/detect-waste', authenticateToken, upload.single('image'), asyn
       size: req.file.size,
     });
 
-    // Read the raw file to verify it exists and is readable
-    let rawImageBuffer;
-    try {
-      rawImageBuffer = fs.readFileSync(req.file.path);
-      console.log('Raw file buffer length:', rawImageBuffer.length);
-    } catch (readError) {
-      console.error('Failed to read uploaded file:', readError);
-      return res.status(500).json({ error: 'Failed to read uploaded file', details: readError.message });
-    }
-
-    // Preprocess the image to 224x224 (MobileNet requirement)
-    // Preprocess the converted image to 224x224
+    // Read and process the image directly
     let imageBuffer;
-    if (process.env.NODE_ENV === 'production') {
-      imageBuffer = await sharp(convertedPath)
-        .resize(224, 224)
-        .normalize() // Enhance contrast
-        .jpeg()
-        .toBuffer();
+    try {
+      // Read the uploaded file
+      const rawImageBuffer = fs.readFileSync(req.file.path);
 
-      console.log('Processed image buffer length:', imageBuffer.length);
-    } else {
-      imageBuffer = await sharp(convertedPath)
-        .resize(224, 224)
-        .normalize() // Enhance contrast
+      // Process with sharp
+      imageBuffer = await sharp(rawImageBuffer)
+        .resize(224, 224)  // MobileNet requires 224x224
+        .normalize()       // Enhance contrast
         .toFormat('jpeg')
-        .raw()
         .toBuffer();
 
       console.log('Processed image buffer length:', imageBuffer.length);
+    } catch (readError) {
+      console.error('Failed to process image:', readError);
+      return res.status(500).json({ error: 'Failed to process image', details: readError.message });
     }
 
     // Validate the image buffer
@@ -125,11 +112,8 @@ userRouter.post('/detect-waste', authenticateToken, upload.single('image'), asyn
         .toFloat()
         .div(tf.scalar(255)) // Normalize to [0, 1] range
         .expandDims();
-      console.log('Tensor shape:', tensor.shape);
 
-      // Log a sample of the tensor to verify its content
-      const tensorSample = tensor.slice([0, 0, 0, 0], [1, 5, 5, 3]).dataSync();
-      console.log('Tensor sample (first 5x5 pixels):', Array.from(tensorSample).slice(0, 25));
+      console.log('Tensor shape:', tensor.shape);
     } catch (tensorError) {
       console.error('Tensor creation failed:', tensorError);
       return res.status(500).json({ error: 'Failed to create tensor', details: tensorError.message });
@@ -148,7 +132,7 @@ userRouter.post('/detect-waste', authenticateToken, upload.single('image'), asyn
 
     tf.dispose(tensor); // Free memory
 
-    // Expanded waste-related labels
+    // Waste-related labels
     const wasteLabels = [
       'trash', 'plastic', 'bottle', 'cardboard', 'paper', 'waste', 'garbage', 'rubbish',
       'container', 'wrapper', 'can', 'glass', 'metal', 'organic', 'recyclable', 'debris',
@@ -157,8 +141,8 @@ userRouter.post('/detect-waste', authenticateToken, upload.single('image'), asyn
       'waste material', 'recyclables', 'garbage bag', 'rubble', 'detritus'
     ];
 
-    // Check for waste with a confidence threshold
-    const confidenceThreshold = 0.3; // Adjust as needed
+    // Check for waste with confidence threshold
+    const confidenceThreshold = 0.3;
     let hasWaste = false;
     let highestWasteConfidence = 0;
     let detectedWasteLabel = null;
@@ -175,24 +159,17 @@ userRouter.post('/detect-waste', authenticateToken, upload.single('image'), asyn
       }
     }
 
-    // Log detection result
-    if (hasWaste) {
-      console.log(`Waste detected: ${detectedWasteLabel} (confidence: ${highestWasteConfidence})`);
-    } else {
-      console.log('No waste detected. Top predictions:', predictions.slice(0, 5));
-    }
-
     // Clean up uploaded file
     fs.unlink(req.file.path, (err) => {
       if (err) console.error('Failed to delete uploaded file:', err);
     });
 
-    // Respond with detailed result
+    // Respond with result
     res.status(200).json({
       hasWaste: hasWaste,
       confidence: hasWaste ? highestWasteConfidence : null,
       detectedLabel: hasWaste ? detectedWasteLabel : null,
-      topPredictions: predictions.slice(0, 5), // Top 5 predictions for debugging
+      topPredictions: predictions.slice(0, 5),
     });
   } catch (error) {
     console.error('Error in /detect-waste:', error.message, error.stack);
@@ -204,7 +181,6 @@ userRouter.post('/detect-waste', authenticateToken, upload.single('image'), asyn
     res.status(500).json({ error: 'Failed to process image', details: error.message });
   }
 });
-
 // Bin Fill endpoint
 userRouter.post('/bin-fill', authenticateToken, async (req, res) => {
   try {
