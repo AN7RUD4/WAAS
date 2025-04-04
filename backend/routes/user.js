@@ -15,60 +15,22 @@ const pool = new Pool({
 });
 
 // Image processing function
-const processImage = async (filePath, isProduction) => {
-  try {
-    // 1. Read and preprocess with sharp
-    let imageBuffer = await sharp(filePath)
-      .resize(224, 224) // Resize to MobileNet's expected input size
-      .normalize() // Enhance contrast
-      .toColourspace('srgb') // Ensure RGB color space
-      .removeAlpha() // Ensure 3 channels (RGB)
-      .jpeg() // Convert to JPEG for consistency
-      .toBuffer();
+const processImage = async (filePath) => {
+  // Consistent processing for both environments
+  const imageBuffer = await sharp(filePath)
+    .resize(224, 224)
+    .ensureAlpha() // Handle transparency consistently
+    .raw()
+    .toBuffer({ resolveWithObject: true });
 
-    console.log('Processed image buffer length:', imageBuffer.length);
-
-    // 2. Create tensor based on environment
-    let tensor;
-    if (isProduction) {
-      // In production (Render), use tf.node.decodeImage
-      tensor = tf.node.decodeImage(imageBuffer, 3)
-        .toFloat()
-        .div(tf.scalar(127.5)) // Normalize to [0, 2]
-        .sub(tf.scalar(1)); // Normalize to [-1, 1]
-    } else {
-      // In development, use sharp to get raw pixel data
-      const { data, info } = await sharp(imageBuffer)
-        .raw()
-        .toBuffer({ resolveWithObject: true });
-
-      // Verify buffer length
-      if (data.length !== 224 * 224 * 3) {
-        throw new Error(`Invalid buffer length: ${data.length}, expected ${224 * 224 * 3}`);
-      }
-
-      // Convert to Float32Array and normalize to [-1, 1]
-      const pixels = new Float32Array(224 * 224 * 3);
-      for (let i = 0; i < data.length; i++) {
-        pixels[i] = (data[i] / 127.5) - 1; // Normalize to [-1, 1]
-        if (i < 10) console.log(`Pixel ${i}: ${data[i]} → ${pixels[i]}`);
-      }
-
-      tensor = tf.tensor4d(pixels, [1, 224, 224, 3]);
-    }
-
-    // 3. Verify tensor
-    console.log('Tensor created with shape:', tensor.shape);
-    const tensorData = await tensor.slice([0, 0, 0, 0], [1, 5, 5, 3]).data();
-    console.log('Sample tensor values:', Array.from(tensorData).slice(0, 10));
-
-    return tensor;
-  } catch (error) {
-    console.error('Image processing failed:', error);
-    throw error;
+  // Convert to normalized tensor
+  const pixels = new Float32Array(imageBuffer.data.length);
+  for (let i = 0; i < imageBuffer.data.length; i++) {
+    pixels[i] = imageBuffer.data[i] / 127.5 - 1.0; // Consistent [-1, 1] normalization
   }
-};
 
+  return tf.tensor4d(pixels, [1, 224, 224, 3]);
+};
 // Authentication middleware
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
@@ -108,7 +70,6 @@ let wasteModel;
 })();
 
 // Waste detection endpoint
-// Waste detection endpoint
 userRouter.post('/detect-waste', authenticateToken, upload.single('image'), async (req, res) => {
   let filePath;
   try {
@@ -132,15 +93,22 @@ userRouter.post('/detect-waste', authenticateToken, upload.single('image'), asyn
     console.log('All predictions:', predictions);
 
     // Waste detection logic
-    const wasteLabels = [
-      'trash', 'plastic', 'bottle', 'cardboard', 'paper', 'waste', 'garbage',
+    const WASTE_LABELS = new Set([
+  ''trash', 'plastic', 'bottle', 'cardboard', 'paper', 'waste', 'garbage',
       'rubbish', 'container', 'wrapper', 'can', 'glass', 'metal', 'organic',
       'recyclable', 'debris', 'water bottle', 'soda can', 'plastic bag', 'bin',
       'litter', 'scrap', 'refuse', 'dump', 'heap', 'pile', 'junk', 'recycle',
       'compost', 'biodegradable', 'pet bottle', 'trash bin', 'garbage bag',
       'plastic container', 'soda bottle', 'beverage can', 'food waste',
       'recycling bin', 'waste bin', 'rubbish bin'
-    ];
+].map(label => label.toLowerCase()));
+
+const MIN_CONFIDENCE = 0.5; // Define a clear threshold
+
+function isWaste(prediction) {
+  const label = prediction.className.toLowerCase();
+  return WASTE_LABELS.has(label) && prediction.probability >= MIN_CONFIDENCE;
+}
 
     const wasteResult = predictions.reduce((result, pred) => {
       const isWaste = wasteLabels.some(label =>
