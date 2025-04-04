@@ -80,40 +80,34 @@ userRouter.post('/detect-waste', authenticateToken, upload.single('image'), asyn
       size: req.file.size,
     });
 
-    // Read and process the image directly
+    // Process image directly from the uploaded file
     let imageBuffer;
     try {
-      // Read the uploaded file
-      const rawImageBuffer = fs.readFileSync(req.file.path);
-
-      // Process with sharp
-      imageBuffer = await sharp(rawImageBuffer)
-        .resize(224, 224)  // MobileNet requires 224x224
-        .normalize()       // Enhance contrast
+      imageBuffer = await sharp(req.file.path)
+        .resize(224, 224)
+        .normalize() // Enhance contrast
         .toFormat('jpeg')
         .toBuffer();
 
       console.log('Processed image buffer length:', imageBuffer.length);
-    } catch (readError) {
-      console.error('Failed to process image:', readError);
-      return res.status(500).json({ error: 'Failed to process image', details: readError.message });
-    }
-
-    // Validate the image buffer
-    if (!imageBuffer || imageBuffer.length < 1000) {
-      console.error('Image buffer is too small or invalid:', imageBuffer.length);
-      return res.status(500).json({ error: 'Processed image buffer is invalid or too small' });
+    } catch (processError) {
+      console.error('Image processing failed:', processError);
+      return res.status(500).json({ error: 'Image processing failed', details: processError.message });
     }
 
     // Convert to tensor
     let tensor;
     try {
-      tensor = tf.node.decodeImage(imageBuffer, 3) // Use tfjs-node to decode JPEG buffer
+      tensor = tf.node.decodeImage(imageBuffer, 3)
         .toFloat()
-        .div(tf.scalar(255)) // Normalize to [0, 1] range
+        .div(tf.scalar(255))
         .expandDims();
 
       console.log('Tensor shape:', tensor.shape);
+
+      // Verify tensor content
+      const tensorData = await tensor.data();
+      console.log('First 10 tensor values:', Array.from(tensorData).slice(0, 10));
     } catch (tensorError) {
       console.error('Tensor creation failed:', tensorError);
       return res.status(500).json({ error: 'Failed to create tensor', details: tensorError.message });
@@ -132,7 +126,7 @@ userRouter.post('/detect-waste', authenticateToken, upload.single('image'), asyn
 
     tf.dispose(tensor); // Free memory
 
-    // Waste-related labels
+    // Expanded waste-related labels
     const wasteLabels = [
       'trash', 'plastic', 'bottle', 'cardboard', 'paper', 'waste', 'garbage', 'rubbish',
       'container', 'wrapper', 'can', 'glass', 'metal', 'organic', 'recyclable', 'debris',
@@ -181,7 +175,8 @@ userRouter.post('/detect-waste', authenticateToken, upload.single('image'), asyn
     res.status(500).json({ error: 'Failed to process image', details: error.message });
   }
 });
-// Bin Fill endpoint
+
+//bin Fill endpoint
 userRouter.post('/bin-fill', authenticateToken, async (req, res) => {
   try {
     console.log('Received bin-fill request:', req.body);
