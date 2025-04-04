@@ -13,7 +13,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_chat_ui/flutter_chat_ui.dart';
 import 'package:flutter_chat_types/flutter_chat_types.dart' as types;
 
-// Main user dashboard page
+// Main user dashboard page.
 class UserApp extends StatelessWidget {
   const UserApp({super.key});
 
