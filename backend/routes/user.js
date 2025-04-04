@@ -98,7 +98,7 @@ userRouter.post('/detect-waste', authenticateToken, upload.single('image'), asyn
     try {
       tensor = tf.node.decodeImage(imageBuffer, 3) // Use tfjs-node to decode JPEG buffer
         .toFloat()
-        .div(tf.scalar(255)) // Normalize to [0, 1] range (MobileNet expects this)
+        .div(tf.scalar(255)) // Normalize to [0, 1] range
         .expandDims();
       console.log('Tensor shape:', tensor.shape);
     } catch (tensorError) {
@@ -123,22 +123,34 @@ userRouter.post('/detect-waste', authenticateToken, upload.single('image'), asyn
     const wasteLabels = [
       'trash', 'plastic', 'bottle', 'cardboard', 'paper', 'waste', 'garbage', 'rubbish',
       'container', 'wrapper', 'can', 'glass', 'metal', 'organic', 'recyclable', 'debris',
-      'litter', 'dump', 'scrap', 'refuse', 'bin', 'bag', 'compost', 'pollution', 'junk'
+      'litter', 'dump', 'scrap', 'refuse', 'bin', 'bag', 'compost', 'pollution', 'junk',
+      'box', 'cardboard box', 'plastic bag', 'trash bag', 'heap', 'pile', 'mess', 'clutter',
+      'waste material', 'recyclables', 'garbage bag', 'rubble', 'detritus'
     ];
 
-    // Check if any prediction matches a waste label
-    const hasWaste = predictions.some(pred => {
+    // Check for waste with a confidence threshold
+    const confidenceThreshold = 0.3; // Adjust as needed
+    let hasWaste = false;
+    let highestWasteConfidence = 0;
+    let detectedWasteLabel = null;
+
+    for (const pred of predictions) {
       const classNameLower = pred.className.toLowerCase();
       const isWaste = wasteLabels.some(label => classNameLower.includes(label));
-      if (isWaste) {
-        console.log(`Waste detected: ${pred.className} (probability: ${pred.probability})`);
+      if (isWaste && pred.probability >= confidenceThreshold) {
+        hasWaste = true;
+        if (pred.probability > highestWasteConfidence) {
+          highestWasteConfidence = pred.probability;
+          detectedWasteLabel = pred.className;
+        }
       }
-      return isWaste;
-    });
+    }
 
     // Log detection result
-    if (!hasWaste) {
-      console.log('No waste detected. Top predictions:', predictions.slice(0, 3));
+    if (hasWaste) {
+      console.log(`Waste detected: ${detectedWasteLabel} (confidence: ${highestWasteConfidence})`);
+    } else {
+      console.log('No waste detected. Top predictions:', predictions.slice(0, 5));
     }
 
     // Clean up uploaded file
@@ -149,12 +161,12 @@ userRouter.post('/detect-waste', authenticateToken, upload.single('image'), asyn
     // Respond with detailed result
     res.status(200).json({
       hasWaste: hasWaste,
-      confidence: hasWaste ? predictions[0].probability : null,
-      topPredictions: predictions.slice(0, 3), // Top 3 predictions for debugging
+      confidence: hasWaste ? highestWasteConfidence : null,
+      detectedLabel: hasWaste ? detectedWasteLabel : null,
+      topPredictions: predictions.slice(0, 5), // Top 5 predictions for debugging
     });
   } catch (error) {
     console.error('Error in /detect-waste:', error.message, error.stack);
-    // Clean up file in case of error
     if (req.file && fs.existsSync(req.file.path)) {
       fs.unlink(req.file.path, (err) => {
         if (err) console.error('Failed to delete uploaded file on error:', err);
