@@ -91,16 +91,25 @@ userRouter.post('/detect-waste', authenticateToken, upload.single('image'), asyn
     }
 
     // Preprocess the image to 224x224 (MobileNet requirement)
+    // Preprocess the converted image to 224x224
     let imageBuffer;
-    try {
-      imageBuffer = await sharp(rawImageBuffer)
-        .resize(224, 224, { fit: 'fill' }) // Ensure exact 224x224 size
-        .jpeg({ quality: 80 }) // Convert to JPEG with reasonable quality
+    if (process.env.NODE_ENV === 'production') {
+      imageBuffer = await sharp(convertedPath)
+        .resize(224, 224)
+        .normalize() // Enhance contrast
+        .jpeg()
         .toBuffer();
+
       console.log('Processed image buffer length:', imageBuffer.length);
-    } catch (sharpError) {
-      console.error('Image preprocessing failed:', sharpError);
-      return res.status(500).json({ error: 'Failed to preprocess image', details: sharpError.message });
+    } else {
+      imageBuffer = await sharp(convertedPath)
+        .resize(224, 224)
+        .normalize() // Enhance contrast
+        .toFormat('jpeg')
+        .raw()
+        .toBuffer();
+
+      console.log('Processed image buffer length:', imageBuffer.length);
     }
 
     // Validate the image buffer
