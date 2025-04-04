@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Waste Management - Official Portal</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <!-- Add SheetJS library for Excel generation -->
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <style>
         * {
@@ -19,6 +18,73 @@
             background-color: #f0f7f4;
             color: #2d5522;
             line-height: 1.6;
+        }
+
+        .login-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #f0f7f4;
+        }
+
+        .login-box {
+            background-color: white;
+            padding: 40px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 400px;
+        }
+
+        .login-box h1 {
+            text-align: center;
+            color: #2d5522;
+            margin-bottom: 30px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #a8d39c;
+            border-radius: 5px;
+            font-size: 1em;
+        }
+
+        .login-btn {
+            width: 100%;
+            padding: 12px;
+            background-color: #6bb356;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 1em;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        .login-btn:hover {
+            background-color: #559944;
+        }
+
+        .error-message {
+            color: #e74c3c;
+            margin-top: 10px;
+            text-align: center;
+        }
+
+        .main-content {
+            display: none;
         }
 
         .container {
@@ -158,60 +224,82 @@
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>Waste Management Official Portal</h1>
-        
-        <nav>
-            <button onclick="showSection('report')">Reports</button>
-            <button onclick="showSection('workers')">Workers</button>
-        </nav>
-
-        <section id="report" class="section">
-            <h2>Generate Report</h2>
-            <form id="reportForm">
-                <label for="month">Month:</label>
-                <input type="month" id="month" required>
-                <label for="reportid">Report ID (Optional):</label>
-                <input type="number" id="reportid" placeholder="Enter Report ID">
-                <button type="submit">Generate Report</button>
+    <!-- Login Section -->
+    <div class="login-container" id="loginContainer">
+        <div class="login-box">
+            <h1>Admin Login</h1>
+            <form id="loginForm">
+                <div class="form-group">
+                    <label for="email">Email</label>
+                    <input type="email" id="email" required>
+                </div>
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" required>
+                </div>
+                <button type="submit" class="login-btn">Login</button>
+                <div id="loginError" class="error-message"></div>
             </form>
-            <div id="reportResult"></div>
-        </section>
+        </div>
+    </div>
 
-        <section id="workers" class="section">
-            <h2>Worker Management</h2>
-            <div class="worker-form">
-                <h3>Add New Worker</h3>
-                <form id="workerForm">
-                    <label for="workerName">Worker Name:</label>
-                    <input type="text" id="workerName" placeholder="Enter name" required>
-                    <label for="workerId">Worker ID:</label>
-                    <input type="number" id="workerId" placeholder="Enter ID" required>
-                    <label for="workerEmail">Worker Email:</label>
-                    <input type="email" id="workerEmail" placeholder="Enter email" required>
-                    <label for="workerPhone">Worker Phone:</label>
-                    <input type="tel" id="workerPhone" placeholder="Enter phone" required>
-                    <label for="workerAddress">Worker Address:</label>
-                    <input type="text" id="workerAddress" placeholder="Enter address" required>
-                    <button type="submit">Add Worker</button>
+    <!-- Main Application Content (hidden until login) -->
+    <div class="main-content" id="mainContent">
+        <div class="container">
+            <h1>Waste Management Official Portal</h1>
+            
+            <nav>
+                <button onclick="showSection('report')">Reports</button>
+                <button onclick="showSection('workers')">Workers</button>
+            </nav>
+
+            <section id="report" class="section">
+                <h2>Generate Report</h2>
+                <form id="reportForm">
+                    <label for="month">Month:</label>
+                    <input type="month" id="month" required>
+                    <label for="reportid">Report ID (Optional):</label>
+                    <input type="number" id="reportid" placeholder="Enter Report ID">
+                    <button type="submit">Generate Report</button>
                 </form>
-            </div>
+                <div id="reportResult"></div>
+            </section>
 
-            <div class="worker-list">
-                <h3>Worker List</h3>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>ID</th>
-                            <th>Name</th>
-                            <th>Email</th>
-                            <th>Status</th>
-                        </tr>
-                    </thead>
-                    <tbody id="workerTableBody"></tbody>
-                </table>
-            </div>
-        </section>
+            <section id="workers" class="section">
+                <h2>Worker Management</h2>
+                <div class="worker-form">
+                    <h3>Add New Worker</h3>
+                    <form id="workerForm">
+                        <label for="workerName">Worker Name:</label>
+                        <input type="text" id="workerName" placeholder="Enter name" required>
+                        <label for="workerId">Worker ID:</label>
+                        <input type="number" id="workerId" placeholder="Enter ID" required>
+                        <label for="workerEmail">Worker Email:</label>
+                        <input type="email" id="workerEmail" placeholder="Enter email" required>
+                        <label for="workerPhone">Worker Phone:</label>
+                        <input type="tel" id="workerPhone" placeholder="Enter phone" required>
+                        <label for="workerAddress">Worker Address:</label>
+                        <input type="text" id="workerAddress" placeholder="Enter address" required>
+                        <button type="submit">Add Worker</button>
+                    </form>
+                </div>
+
+                <div class="worker-list">
+                    <h3>Worker List</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Name</th>
+                                <th>Email</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="workerTableBody"></tbody>
+                    </table>
+                </div>
+            </section>
+        </div>
     </div>
 
     <script>
@@ -220,9 +308,69 @@
         const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
         const RENDER_URL = 'https://waas-9pr6.onrender.com';
 
-        document.addEventListener('DOMContentLoaded', async () => {
+        document.addEventListener('DOMContentLoaded', () => {
+            // Check for existing login session
+            const loggedInUser = localStorage.getItem('loggedInUser');
+            if (loggedInUser) {
+                showMainContent();
+                initializeApp();
+            }
+
+            // Login Form Submission
+            const loginForm = document.getElementById('loginForm');
+            loginForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const email = document.getElementById('email').value;
+                const password = document.getElementById('password').value;
+                const errorElement = document.getElementById('loginError');
+
+                try {
+                    // Fetch the user by email and role
+                    const { data: user, error } = await supabaseClient
+                        .from('users')
+                        .select('userid, email, role, password') // Include the hashed password
+                        .eq('email', email)
+                        .eq('role', 'official')
+                        .single(); // Expect exactly one matching user
+
+                    if (error) throw error;
+
+                    if (user) {
+                        // Call a custom PostgreSQL function to verify the password
+                        const { data: isMatch, error: verifyError } = await supabaseClient
+                            .rpc('verify_password', {
+                                input_password: password,
+                                stored_hash: user.password
+                            });
+
+                        if (verifyError) throw verifyError;
+
+                        if (isMatch) {
+                            // Successful login
+                            localStorage.setItem('loggedInUser', JSON.stringify(user));
+                            showMainContent();
+                            initializeApp();
+                        } else {
+                            errorElement.textContent = 'Invalid credentials or not an admin';
+                        }
+                    } else {
+                        errorElement.textContent = 'Invalid credentials or not an admin';
+                    }
+                } catch (error) {
+                    errorElement.textContent = 'Login failed. Please try again.';
+                    console.error('Login error:', error);
+                }
+            });
+        });
+
+        function showMainContent() {
+            document.getElementById('loginContainer').style.display = 'none';
+            document.getElementById('mainContent').style.display = 'block';
+        }
+
+        function initializeApp() {
             showSection('report');
-            await fetchWorkers();
+            fetchWorkers();
 
             // Generate Report Form Submission
             const reportForm = document.getElementById('reportForm');
@@ -384,7 +532,7 @@
                 e.preventDefault();
                 
                 // Generate a random 3-digit number for the password
-                const randomNum = Math.floor(100 + Math.random() * 900); // Generates number between 100-999
+                const randomNum = Math.floor(100 + Math.random() * 900);
                 const generatedPassword = `Wor${randomNum}`;
                 
                 const worker = {
@@ -393,20 +541,31 @@
                     email: document.getElementById('workerEmail').value,
                     phone: document.getElementById('workerPhone').value,
                     address: document.getElementById('workerAddress').value,
-                    password: generatedPassword, // Add the generated password
                     role: 'worker',
                     status: 'available'
                 };
 
                 try {
+                    // First hash the password using a database function
+                    const { data: hashData, error: hashError } = await supabaseClient
+                        .rpc('hash_password', { 
+                            plain_password: generatedPassword 
+                        });
+                    
+                    if (hashError) throw hashError;
+
+                    // Then insert the worker with the hashed password
                     const { error } = await supabaseClient
                         .from('users')
-                        .insert([worker]);
+                        .insert([{ 
+                            ...worker, 
+                            password: hashData 
+                        }]);
                     
                     if (error) throw error;
                     
                     // Show success message with the generated password
-                    alert(`Worker added successfully!\nGenerated password: ${generatedPassword}`);
+                    alert(`Worker added successfully!\nGenerated password: ${generatedPassword}\nThis password cannot be retrieved later, so please provide it to the worker now.`);
                     
                     workerForm.reset();
                     await fetchWorkers();
@@ -414,7 +573,7 @@
                     alert(`Error adding worker: ${error.message}`);
                 }
             });
-        });
+        };
 
         function showSection(sectionId) {
             document.querySelectorAll('.section').forEach(section => {
@@ -438,24 +597,24 @@
         }
 
         function updateWorkerTable(workers) {
-        const tbody = document.getElementById('workerTableBody');
-        tbody.innerHTML = '';
-        
-        workers.forEach((worker) => {
-            const taskStatus = worker.taskrequests && worker.taskrequests.length > 0 
-                ? worker.taskrequests[0].status 
-                : 'Not Collecting';
+            const tbody = document.getElementById('workerTableBody');
+            tbody.innerHTML = '';
             
-            const row = document.createElement('tr');
-            row.innerHTML = `
-                <td>${worker.userid}</td>
-                <td>${worker.name}</td>
-                <td>${worker.email}</td>
-                <td>${taskStatus}</td>
-            `;
-            tbody.appendChild(row);
-        });
-    }
+            workers.forEach((worker) => {
+                const taskStatus = worker.taskrequests && worker.taskrequests.length > 0 
+                    ? worker.taskrequests[0].status 
+                    : 'Not Collecting';
+                
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${worker.userid}</td>
+                    <td>${worker.name}</td>
+                    <td>${worker.email}</td>
+                    <td>${taskStatus}</td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
 
         async function toggleStatus(workerId, currentStatus) {
             const newStatus = currentStatus === 'Collecting' ? 'Not Collecting' : 'Collecting';
@@ -498,8 +657,8 @@
                     const { error } = await supabaseClient
                         .from('taskrequests')
                         .insert([{
-                            taskid: parseInt(Math.random() * 1000), // Generate a random taskid
-                            reportids: parseInt(Math.random() * 100), // Generate a random reportids
+                            taskid: parseInt(Math.random() * 1000),
+                            reportids: parseInt(Math.random() * 100),
                             assignedworkerid: parseInt(workerId),
                             status: newStatus,
                             starttime: new Date().toISOString()
