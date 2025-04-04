@@ -355,11 +355,7 @@ class _ReportPageState extends State<ReportPage> {
     if (_image == null || locationController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-<<<<<<< Updated upstream
-          content: Text("Please select an image and provide a location!"),
-=======
           content: Text("Please select a photo and provide a location!"),
->>>>>>> Stashed changes
         ),
       );
       return;
@@ -457,22 +453,6 @@ class _ReportPageState extends State<ReportPage> {
         _errorMessage = null;
         _hasWaste = null;
       });
-      await _detectWaste();
-    }
-  }
-
-  Future<void> _pickImageFromGallery() async {
-    final ImagePicker picker = ImagePicker();
-    final XFile? pickedImage = await picker.pickImage(
-      source: ImageSource.gallery,
-    );
-
-    if (pickedImage != null) {
-      setState(() {
-        _image = File(pickedImage.path);
-        _errorMessage = null;
-        _hasWaste = null;
-      });
 
       await _detectWaste();
     }
@@ -506,23 +486,6 @@ class _ReportPageState extends State<ReportPage> {
                           fontSize: 16,
                           color: Colors.black54,
                         ),
-<<<<<<< Updated upstream
-                        const SizedBox(height: 24),
-                        Text(
-                          "Upload an Image",
-                          style: GoogleFonts.poppins(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.black87,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Center(
-                          child: Column(
-                            children: [
-                              _image == null
-                                  ? const Text(
-=======
                       ),
                       const SizedBox(height: 24),
                       Text(
@@ -539,7 +502,6 @@ class _ReportPageState extends State<ReportPage> {
                           children: [
                             _image == null
                                 ? const Text(
->>>>>>> Stashed changes
                                     "No Image Selected",
                                     style: TextStyle(color: Colors.black54),
                                   )
@@ -551,47 +513,6 @@ class _ReportPageState extends State<ReportPage> {
                                       fit: BoxFit.cover,
                                     ),
                                   ),
-<<<<<<< Updated upstream
-                              const SizedBox(height: 8),
-                              if (_image != null && _hasWaste != null)
-                                Text(
-                                  _hasWaste!
-                                      ? "Waste Detected"
-                                      : "Waste Not Detected",
-                                  style: GoogleFonts.poppins(
-                                    fontSize: 14,
-                                    color:
-                                        _hasWaste! ? Colors.green : Colors.red,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                )
-                              else if (_image != null && _hasWaste == null)
-                                const Text(
-                                  "Detecting waste...",
-                                  style: TextStyle(color: Colors.black54),
-                                ),
-                              const SizedBox(height: 16),
-                              Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceEvenly,
-                                children: [
-                                  Expanded(
-                                    child: ElevatedButton.icon(
-                                      icon: const Icon(Icons.camera_alt),
-                                      label: const Text("Camera"),
-                                      onPressed: _takePicture,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 16),
-                                  Expanded(
-                                    child: ElevatedButton.icon(
-                                      icon: const Icon(Icons.photo_library),
-                                      label: const Text("Gallery"),
-                                      onPressed: _pickImageFromGallery,
-                                    ),
-                                  ),
-                                ],
-=======
                             const SizedBox(height: 8),
                             if (_image != null && _hasWaste != null)
                               Text(
@@ -603,7 +524,6 @@ class _ReportPageState extends State<ReportPage> {
                                   color: _hasWaste! ? Colors.green : Colors.red,
                                   fontWeight: FontWeight.w600,
                                 ),
->>>>>>> Stashed changes
                               ),
                             const SizedBox(height: 16),
                             Row(

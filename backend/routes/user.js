@@ -67,25 +67,6 @@ const storage = multer.diskStorage({
 });
 
 const fileFilter = (req, file, cb) => {
-<<<<<<< Updated upstream
-  const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/bmp'];
-  if (allowedTypes.includes(file.mimetype)) cb(null, true);
-  else cb(new Error('Invalid file type'), false);
-};
-
-const upload = multer({ storage, fileFilter });
-
-// Load MobileNet model
-let wasteModel;
-(async () => {
-  try {
-    wasteModel = await mobilenet.load({ version: 2, alpha: 1.0 });
-    console.log('MobileNet model loaded');
-  } catch (error) {
-    console.error('Error loading MobileNet:', error);
-  }
-})();
-=======
   const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/bmp', 'application/octet-stream'];
   console.log('File MIME type:', file.mimetype);
   if (allowedTypes.includes(file.mimetype)) {
@@ -94,7 +75,6 @@ let wasteModel;
     cb(new Error('Invalid file type. Only JPEG, PNG, GIF, BMP, and generic binary streams are allowed.'), false);
   }
 };
->>>>>>> Stashed changes
 
 // Waste detection endpoint
 userRouter.post('/detect-waste', authenticateToken, upload.single('image'), async (req, res) => {
@@ -110,13 +90,6 @@ userRouter.post('/detect-waste', authenticateToken, upload.single('image'), asyn
     filePath = req.file.path;
     console.log('Processing image:', filePath);
 
-<<<<<<< Updated upstream
-    // Process image
-    const isProduction = process.env.NODE_ENV === 'production';
-    const tensor = await processImage(filePath, isProduction);
-
-    // Get predictions
-=======
     // Convert the uploaded file to JPEG
     const convertedPath = `uploads/converted-${Date.now()}.jpg`;
     await sharp(req.file.path)
@@ -165,23 +138,10 @@ userRouter.post('/detect-waste', authenticateToken, upload.single('image'), asyn
     }
 
     // Predict
->>>>>>> Stashed changes
     const predictions = await wasteModel.classify(tensor);
     tf.dispose(tensor);
     console.log('All predictions:', predictions);
 
-<<<<<<< Updated upstream
-    // Waste detection logic
-    const WASTE_LABELS = new Set([
-  'trash', 'plastic', 'bottle', 'cardboard', 'paper', 'waste', 'garbage',
-      'rubbish', 'container', 'wrapper', 'can', 'glass', 'metal', 'organic',
-      'recyclable', 'debris', 'water bottle', 'soda can', 'plastic bag', 'bin',
-      'litter', 'scrap', 'refuse', 'dump', 'heap', 'pile', 'junk', 'recycle',
-      'compost', 'biodegradable', 'pet bottle', 'trash bin', 'garbage bag',
-      'plastic container', 'soda bottle', 'beverage can', 'food waste',
-      'recycling bin', 'waste bin', 'rubbish bin'
-].map(label => label.toLowerCase()));
-=======
     // Define waste-related labels
     // Define waste-related labels
 const wasteLabels = [
@@ -193,7 +153,6 @@ const wasteLabels = [
     const hasWaste = predictions.some(pred =>
       wasteLabels.some(label => pred.className.toLowerCase().includes(label))
     );
->>>>>>> Stashed changes
 
 const MIN_CONFIDENCE = 0.5; // Define a clear threshold
 
