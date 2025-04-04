@@ -2,8 +2,6 @@ const express = require('express');
 const { Pool } = require('pg');
 const jwt = require('jsonwebtoken');
 const multer = require('multer');
-
-// Imports for AI
 const tf = process.env.NODE_ENV === 'production' ? require('@tensorflow/tfjs-node') : require('@tensorflow/tfjs');
 const mobilenet = require('@tensorflow-models/mobilenet');
 const sharp = require('sharp');
@@ -16,46 +14,55 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false },
 });
 
+// Image processing function
+const processImage = async (filePath) => {
+  const { data, info } = await sharp(filePath)
+    .resize(224, 224)
+    .removeAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+
+  const pixels = new Float32Array(data.length);
+  for (let i = 0; i < data.length; i++) {
+    pixels[i] = data[i] / 255.0;
+  }
+
+  return tf.tensor4d(pixels, [1, info.height, info.width, 3]);
+};
+
+// Authentication middleware
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
-  if (!token) {
-    console.log('Authentication failed: No token provided');
-    return res.status(401).json({ message: 'Authentication required' });
-  }
+  if (!token) return res.status(401).json({ message: 'Authentication required' });
+
   jwt.verify(token, process.env.JWT_SECRET || 'passwordKey', (err, user) => {
-    if (err) {
-      console.log('Authentication failed: Invalid token', err);
-      return res.status(403).json({ message: 'Invalid token' });
-    }
+    if (err) return res.status(403).json({ message: 'Invalid token' });
     req.user = user;
-    console.log('Authenticated user:', user);
     next();
   });
 };
 
-// Configure multer with file filter to accept only images
+// Multer configuration
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, 'uploads/'),
   filename: (req, file, cb) => cb(null, `${Date.now()}-${file.originalname}`),
 });
+
 const fileFilter = (req, file, cb) => {
   const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/bmp'];
-  console.log('File MIME type:', file.mimetype); // Log the MIME type
-  if (allowedTypes.includes(file.mimetype)) {
-    cb(null, true);
-  } else {
-    cb(new Error('Invalid file type. Only JPEG, PNG, GIF, and BMP are allowed.'), false);
-  }
+  if (allowedTypes.includes(file.mimetype)) cb(null, true);
+  else cb(new Error('Invalid file type'), false);
 };
-const upload = multer({ storage: storage, fileFilter: fileFilter });
 
-// Load MobileNet model at startup
+const upload = multer({ storage, fileFilter });
+
+// Load MobileNet model
 let wasteModel;
 (async () => {
   try {
     wasteModel = await mobilenet.load({ version: 2, alpha: 1.0 });
-    console.log('MobileNet model loaded for waste detection');
+    console.log('MobileNet model loaded');
   } catch (error) {
     console.error('Error loading MobileNet:', error);
   }
@@ -64,115 +71,57 @@ let wasteModel;
 // Waste detection endpoint
 userRouter.post('/detect-waste', authenticateToken, upload.single('image'), async (req, res) => {
   try {
-    if (!req.file) {
-      console.log('No image provided in request');
-      return res.status(400).json({ error: 'No image provided' });
-    }
+    if (!req.file) return res.status(400).json({ error: 'No image provided' });
+    if (!wasteModel) return res.status(500).json({ error: 'AI model not loaded' });
 
-    if (!wasteModel) {
-      console.log('AI model not loaded');
-      return res.status(500).json({ error: 'AI model not loaded. Please try again later.' });
-    }
+    console.log('Processing image:', req.file.path);
 
-    console.log('Uploaded file:', {
-      path: req.file.path,
-      mimetype: req.file.mimetype,
-      size: req.file.size,
-    });
+    // Process image using the new function
+    const tensor = await processImage(req.file.path);
+    console.log('Tensor created with shape:', tensor.shape);
 
-    // Process image directly from the uploaded file
-    let imageBuffer;
-    try {
-      imageBuffer = await sharp(req.file.path)
-        .resize(224, 224)
-        .normalize() // Enhance contrast
-        .toFormat('jpeg')
-        .toBuffer();
+    // Verify tensor content
+    const tensorData = await tensor.slice([0, 0, 0, 0], [1, 5, 5, 3]).data();
+    console.log('Sample tensor values:', Array.from(tensorData).slice(0, 10));
 
-      console.log('Processed image buffer length:', imageBuffer.length);
-    } catch (processError) {
-      console.error('Image processing failed:', processError);
-      return res.status(500).json({ error: 'Image processing failed', details: processError.message });
-    }
+    // Get predictions
+    const predictions = await wasteModel.classify(tensor);
+    tf.dispose(tensor);
+    console.log('Predictions:', predictions);
 
-    // Convert to tensor
-    let tensor;
-    try {
-      tensor = tf.node.decodeImage(imageBuffer, 3)
-        .toFloat()
-        .div(tf.scalar(255))
-        .expandDims();
-
-      console.log('Tensor shape:', tensor.shape);
-
-      // Verify tensor content
-      const tensorData = await tensor.data();
-      console.log('First 10 tensor values:', Array.from(tensorData).slice(0, 10));
-    } catch (tensorError) {
-      console.error('Tensor creation failed:', tensorError);
-      return res.status(500).json({ error: 'Failed to create tensor', details: tensorError.message });
-    }
-
-    // Predict using MobileNet
-    let predictions;
-    try {
-      predictions = await wasteModel.classify(tensor);
-      console.log('Raw predictions:', predictions);
-    } catch (predictError) {
-      console.error('Prediction failed:', predictError);
-      tf.dispose(tensor);
-      return res.status(500).json({ error: 'Prediction failed', details: predictError.message });
-    }
-
-    tf.dispose(tensor); // Free memory
-
-    // Expanded waste-related labels
+    // Waste detection logic
     const wasteLabels = [
-      'trash', 'plastic', 'bottle', 'cardboard', 'paper', 'waste', 'garbage', 'rubbish',
-      'container', 'wrapper', 'can', 'glass', 'metal', 'organic', 'recyclable', 'debris',
-      'litter', 'dump', 'scrap', 'refuse', 'bin', 'bag', 'compost', 'pollution', 'junk',
-      'box', 'cardboard box', 'plastic bag', 'trash bag', 'heap', 'pile', 'mess', 'clutter',
-      'waste material', 'recyclables', 'garbage bag', 'rubble', 'detritus'
+      'trash', 'plastic', 'bottle', 'cardboard', 'paper', 'waste', 'garbage',
+      'rubbish', 'container', 'wrapper', 'can', 'glass', 'metal', 'organic'
     ];
 
-    // Check for waste with confidence threshold
-    const confidenceThreshold = 0.3;
-    let hasWaste = false;
-    let highestWasteConfidence = 0;
-    let detectedWasteLabel = null;
+    const wasteResult = predictions.reduce((result, pred) => {
+      const isWaste = wasteLabels.some(label =>
+        pred.className.toLowerCase().includes(label)
+      );
 
-    for (const pred of predictions) {
-      const classNameLower = pred.className.toLowerCase();
-      const isWaste = wasteLabels.some(label => classNameLower.includes(label));
-      if (isWaste && pred.probability >= confidenceThreshold) {
-        hasWaste = true;
-        if (pred.probability > highestWasteConfidence) {
-          highestWasteConfidence = pred.probability;
-          detectedWasteLabel = pred.className;
-        }
+      if (isWaste && pred.probability > (result.confidence || 0)) {
+        return {
+          hasWaste: true,
+          confidence: pred.probability,
+          label: pred.className
+        };
       }
-    }
+      return result;
+    }, { hasWaste: false });
 
-    // Clean up uploaded file
-    fs.unlink(req.file.path, (err) => {
-      if (err) console.error('Failed to delete uploaded file:', err);
+    // Cleanup
+    fs.unlink(req.file.path, () => { });
+
+    res.json({
+      ...wasteResult,
+      predictions: predictions.slice(0, 5)
     });
 
-    // Respond with result
-    res.status(200).json({
-      hasWaste: hasWaste,
-      confidence: hasWaste ? highestWasteConfidence : null,
-      detectedLabel: hasWaste ? detectedWasteLabel : null,
-      topPredictions: predictions.slice(0, 5),
-    });
   } catch (error) {
-    console.error('Error in /detect-waste:', error.message, error.stack);
-    if (req.file && fs.existsSync(req.file.path)) {
-      fs.unlink(req.file.path, (err) => {
-        if (err) console.error('Failed to delete uploaded file on error:', err);
-      });
-    }
-    res.status(500).json({ error: 'Failed to process image', details: error.message });
+    console.error('Detection error:', error);
+    if (req.file) fs.unlink(req.file.path, () => { });
+    res.status(500).json({ error: 'Detection failed', details: error.message });
   }
 });
 
