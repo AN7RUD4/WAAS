@@ -4,7 +4,7 @@ const { Pool } = require('pg');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const KMeans = require('kmeans-js');
-const munkres = require('munkres').default; 
+const munkres = require('munkres').default;
 const twilio = require('twilio');
 
 const router = express.Router();
@@ -719,12 +719,13 @@ router.get('/completed-tasks', authenticateToken, checkWorkerOrAdminRole, async 
 
 // Mark report as collected
 // Start task endpoint
+// Start task endpoint
 router.post('/start-task', authenticateToken, checkWorkerOrAdminRole, async (req, res) => {
     try {
         const { taskId } = req.body;
         const workerId = req.user.userid;
 
-        // Verify the task is assigned to this worker
+        // Verify the task is assigned to this worker and in 'assigned' state
         const taskCheck = await pool.query(
             `SELECT 1 FROM taskrequests 
              WHERE taskid = $1 AND assignedworkerid = $2 AND status = 'assigned'`,
@@ -732,12 +733,12 @@ router.post('/start-task', authenticateToken, checkWorkerOrAdminRole, async (req
         );
 
         if (taskCheck.rows.length === 0) {
-            return res.status(403).json({ 
-                error: 'Task not assigned to this worker or already started' 
+            return res.status(403).json({
+                error: 'Task not assigned to this worker or not in assigned state'
             });
         }
 
-        // Update task status to in-progress
+        // Update task status to 'in-progress' and set starttime
         await pool.query(
             `UPDATE taskrequests 
              SET status = 'in-progress', 
@@ -746,14 +747,15 @@ router.post('/start-task', authenticateToken, checkWorkerOrAdminRole, async (req
             [taskId]
         );
 
-        res.status(200).json({ 
-            message: 'Task started successfully' 
+        res.status(200).json({
+            message: 'Task started successfully',
+            status: 'in-progress'
         });
     } catch (error) {
-        console.error('Error starting task:', error.message, error.stack);
-        res.status(500).json({ 
-            error: 'Internal Server Error', 
-            details: error.message 
+        console.error('Error starting task:', error);
+        res.status(500).json({
+            error: 'Internal Server Error',
+            details: error.message
         });
     }
 });
@@ -764,29 +766,25 @@ router.post('/mark-collected', authenticateToken, checkWorkerOrAdminRole, async 
         const { taskId, reportId } = req.body;
         const workerId = req.user.userid;
 
-        // 1. Verify the task is assigned to this worker
+        // 1. Verify the task is assigned to this worker and in progress
         const taskCheck = await pool.query(
-            `SELECT 1 FROM taskrequests 
+            `SELECT reportids FROM taskrequests 
              WHERE taskid = $1 AND assignedworkerid = $2 AND status = 'in-progress'`,
             [taskId, workerId]
         );
 
         if (taskCheck.rows.length === 0) {
-            return res.status(403).json({ 
-                error: 'Task not assigned to this worker or not in progress' 
+            return res.status(403).json({
+                error: 'Task not assigned to this worker or not in progress'
             });
         }
 
-        // 2. Verify the report is part of this task
-        const reportCheck = await pool.query(
-            `SELECT 1 FROM taskrequests 
-             WHERE taskid = $1 AND $2 = ANY(reportids)`,
-            [taskId, reportId]
-        );
+        const reportIds = taskCheck.rows[0].reportids;
 
-        if (reportCheck.rows.length === 0) {
-            return res.status(404).json({ 
-                error: 'Report not found in this task' 
+        // 2. Verify the report is part of this task
+        if (!reportIds.includes(reportId)) {
+            return res.status(404).json({
+                error: 'Report not found in this task'
             });
         }
 
@@ -800,56 +798,41 @@ router.post('/mark-collected', authenticateToken, checkWorkerOrAdminRole, async 
             [workerId, reportId]
         );
 
-        // 4. Update task progress
-        const progressResult = await pool.query(
-            `SELECT 
-                COUNT(*) FILTER (WHERE status = 'collected')::float / 
-                COUNT(*) as progress
-             FROM garbagereports 
-             WHERE reportid = ANY(
-                 SELECT reportids FROM taskrequests WHERE taskid = $1
-             )`,
-            [taskId]
+        // 4. Check if all reports are collected
+        const uncollectedCount = await pool.query(
+            `SELECT COUNT(*) FROM garbagereports 
+             WHERE reportid = ANY($1) AND status != 'collected'`,
+            [reportIds]
         );
 
-        const progress = progressResult.rows[0]?.progress || 0;
+        const remaining = uncollectedCount.rows[0].count;
 
-        await pool.query(
-            `UPDATE taskrequests 
-             SET progress = $1
-             WHERE taskid = $2`,
-            [progress, taskId]
-        );
-
-        // 5. Check if all reports are collected
-        const allReports = await pool.query(
-            `SELECT reportid FROM garbagereports 
-             WHERE reportid = ANY(
-                 SELECT reportids FROM taskrequests WHERE taskid = $1
-             ) AND status != 'collected'`,
-            [taskId]
-        );
-
-        // 6. If all collected, mark task as completed
-        if (allReports.rows.length === 0) {
+        // 5. If all collected, mark task as completed
+        if (remaining == 0) {
             await pool.query(
                 `UPDATE taskrequests 
                  SET status = 'completed', 
-                     endtime = NOW(),
-                     progress = 1.0
+                     endtime = NOW()
                  WHERE taskid = $1`,
                 [taskId]
             );
+
+            return res.status(200).json({
+                message: 'All reports collected! Task completed',
+                taskStatus: 'completed'
+            });
         }
 
-        res.status(200).json({ 
-            message: 'Report marked as collected successfully' 
+        res.status(200).json({
+            message: 'Report marked as collected successfully',
+            remainingReports: remaining,
+            taskStatus: 'in-progress'
         });
     } catch (error) {
-        console.error('Error marking report as collected:', error.message, error.stack);
-        res.status(500).json({ 
-            error: 'Internal Server Error', 
-            details: error.message 
+        console.error('Error marking report as collected:', error);
+        res.status(500).json({
+            error: 'Internal Server Error',
+            details: error.message
         });
     }
 });
