@@ -193,7 +193,7 @@ class UserApp extends StatelessWidget {
             MaterialPageRoute(
               builder:
                   (context) => ChatbotWidget(
-                    agentId: 'your-chatbase-agent-id', // Replace with actual ID
+                    agentId: 'rjty2MMFjS1r_f7Vn_nCf', // Replace with actual ID
                     apiKey: 'your-chatbase-api-key', // Replace with actual key
                   ),
             ),
