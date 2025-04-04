@@ -16,20 +16,36 @@ const pool = new Pool({
 
 // Image processing function
 const processImage = async (filePath) => {
-  // Consistent processing for both environments
-  const imageBuffer = await sharp(filePath)
-    .resize(224, 224)
-    .ensureAlpha() // Handle transparency consistently
-    .raw()
-    .toBuffer({ resolveWithObject: true });
+  try {
+    // 1. Process with sharp consistently
+    const { data, info } = await sharp(filePath)
+      .resize(224, 224)
+      .removeAlpha()
+      .ensureAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
 
-  // Convert to normalized tensor
-  const pixels = new Float32Array(imageBuffer.data.length);
-  for (let i = 0; i < imageBuffer.data.length; i++) {
-    pixels[i] = imageBuffer.data[i] / 127.5 - 1.0; // Consistent [-1, 1] normalization
+    // 2. Validate buffer
+    const expectedLength = 224 * 224 * 3;
+    if (data.length !== expectedLength) {
+      throw new Error(`Invalid buffer length: ${data.length}, expected ${expectedLength}`);
+    }
+
+    // 3. Create normalized tensor
+    const pixels = new Float32Array(expectedLength);
+    for (let i = 0; i < data.length; i++) {
+      pixels[i] = (data[i] / 127.5) - 1.0; // Consistent [-1, 1] normalization
+    }
+
+    // 4. Create and verify tensor
+    const tensor = tf.tensor4d(pixels, [1, 224, 224, 3]);
+    console.log('Tensor shape:', tensor.shape);
+    
+    return tensor;
+  } catch (error) {
+    console.error('Image processing failed:', error);
+    throw new Error(`Image processing failed: ${error.message}`);
   }
-
-  return tf.tensor4d(pixels, [1, 224, 224, 3]);
 };
 // Authentication middleware
 const authenticateToken = (req, res, next) => {
