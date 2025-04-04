@@ -15,30 +15,54 @@ const pool = new Pool({
 });
 
 // Image processing function
-const processImage = async (filePath) => {
+const processImage = async (filePath, isProduction) => {
   try {
     // 1. Read and preprocess with sharp
-    const { data, info } = await sharp(filePath)
-      .resize(224, 224)
-      .removeAlpha()
-      .ensureAlpha()  // Explicitly ensure 3 channels
-      .raw()
-      .toBuffer({ resolveWithObject: true });
+    let imageBuffer = await sharp(filePath)
+      .resize(224, 224) // Resize to MobileNet's expected input size
+      .normalize() // Enhance contrast
+      .toColourspace('srgb') // Ensure RGB color space
+      .removeAlpha() // Ensure 3 channels (RGB)
+      .jpeg() // Convert to JPEG for consistency
+      .toBuffer();
 
-    // 2. Verify pixel data
-    if (data.length !== 224 * 224 * 3) {
-      throw new Error(`Invalid buffer length: ${data.length}, expected ${224 * 224 * 3}`);
+    console.log('Processed image buffer length:', imageBuffer.length);
+
+    // 2. Create tensor based on environment
+    let tensor;
+    if (isProduction) {
+      // In production (Render), use tf.node.decodeImage
+      tensor = tf.node.decodeImage(imageBuffer, 3)
+        .toFloat()
+        .div(tf.scalar(127.5)) // Normalize to [0, 2]
+        .sub(tf.scalar(1)); // Normalize to [-1, 1]
+    } else {
+      // In development, use sharp to get raw pixel data
+      const { data, info } = await sharp(imageBuffer)
+        .raw()
+        .toBuffer({ resolveWithObject: true });
+
+      // Verify buffer length
+      if (data.length !== 224 * 224 * 3) {
+        throw new Error(`Invalid buffer length: ${data.length}, expected ${224 * 224 * 3}`);
+      }
+
+      // Convert to Float32Array and normalize to [-1, 1]
+      const pixels = new Float32Array(224 * 224 * 3);
+      for (let i = 0; i < data.length; i++) {
+        pixels[i] = (data[i] / 127.5) - 1; // Normalize to [-1, 1]
+        if (i < 10) console.log(`Pixel ${i}: ${data[i]} → ${pixels[i]}`);
+      }
+
+      tensor = tf.tensor4d(pixels, [1, 224, 224, 3]);
     }
 
-    // 3. Convert to normalized Float32 array
-    const pixels = new Float32Array(224 * 224 * 3);
-    for (let i = 0; i < data.length; i++) {
-      pixels[i] = data[i] / 255.0;
-      // Debug: Check first few pixels
-      if (i < 10) console.log(`Pixel ${i}: ${data[i]} → ${pixels[i]}`);
-    }
+    // 3. Verify tensor
+    console.log('Tensor created with shape:', tensor.shape);
+    const tensorData = await tensor.slice([0, 0, 0, 0], [1, 5, 5, 3]).data();
+    console.log('Sample tensor values:', Array.from(tensorData).slice(0, 10));
 
-    return tf.tensor4d(pixels, [1, 224, 224, 3]);
+    return tensor;
   } catch (error) {
     console.error('Image processing failed:', error);
     throw error;
@@ -84,30 +108,38 @@ let wasteModel;
 })();
 
 // Waste detection endpoint
+// Waste detection endpoint
 userRouter.post('/detect-waste', authenticateToken, upload.single('image'), async (req, res) => {
+  let filePath;
   try {
-    if (!req.file) return res.status(400).json({ error: 'No image provided' });
-    if (!wasteModel) return res.status(500).json({ error: 'AI model not loaded' });
+    if (!req.file) {
+      return res.status(400).json({ error: 'No image provided' });
+    }
+    if (!wasteModel) {
+      return res.status(500).json({ error: 'AI model not loaded' });
+    }
 
-    console.log('Processing image:', req.file.path);
+    filePath = req.file.path;
+    console.log('Processing image:', filePath);
 
-    // Process image using the new function
-    const tensor = await processImage(req.file.path);
-    console.log('Tensor created with shape:', tensor.shape);
-
-    // Verify tensor content
-    const tensorData = await tensor.slice([0, 0, 0, 0], [1, 5, 5, 3]).data();
-    console.log('Sample tensor values:', Array.from(tensorData).slice(0, 10));
+    // Process image
+    const isProduction = process.env.NODE_ENV === 'production';
+    const tensor = await processImage(filePath, isProduction);
 
     // Get predictions
     const predictions = await wasteModel.classify(tensor);
     tf.dispose(tensor);
-    console.log('Predictions:', predictions);
+    console.log('All predictions:', predictions);
 
     // Waste detection logic
     const wasteLabels = [
       'trash', 'plastic', 'bottle', 'cardboard', 'paper', 'waste', 'garbage',
-      'rubbish', 'container', 'wrapper', 'can', 'glass', 'metal', 'organic'
+      'rubbish', 'container', 'wrapper', 'can', 'glass', 'metal', 'organic',
+      'recyclable', 'debris', 'water bottle', 'soda can', 'plastic bag', 'bin',
+      'litter', 'scrap', 'refuse', 'dump', 'heap', 'pile', 'junk', 'recycle',
+      'compost', 'biodegradable', 'pet bottle', 'trash bin', 'garbage bag',
+      'plastic container', 'soda bottle', 'beverage can', 'food waste',
+      'recycling bin', 'waste bin', 'rubbish bin'
     ];
 
     const wasteResult = predictions.reduce((result, pred) => {
@@ -125,21 +157,29 @@ userRouter.post('/detect-waste', authenticateToken, upload.single('image'), asyn
       return result;
     }, { hasWaste: false });
 
-    // Cleanup
-    fs.unlink(req.file.path, () => { });
+    // Log the result
+    if (wasteResult.hasWaste) {
+      console.log('Waste detected:', wasteResult);
+    } else {
+      console.log('No waste detected. Top predictions:', predictions.slice(0, 5));
+    }
 
     res.json({
       ...wasteResult,
       predictions: predictions.slice(0, 5)
     });
-
   } catch (error) {
     console.error('Detection error:', error);
-    if (req.file) fs.unlink(req.file.path, () => { });
     res.status(500).json({ error: 'Detection failed', details: error.message });
+  } finally {
+    // Cleanup uploaded file
+    if (filePath) {
+      fs.unlink(filePath, (err) => {
+        if (err) console.error('Failed to delete uploaded file:', err);
+      });
+    }
   }
 });
-
 //bin Fill endpoint
 userRouter.post('/bin-fill', authenticateToken, async (req, res) => {
   try {
