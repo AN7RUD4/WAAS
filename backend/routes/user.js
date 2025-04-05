@@ -28,14 +28,6 @@ const authenticateToken = (req, res, next) => {
 };
 
 // Configure storage for uploaded files
-const express = require('express');
-const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
-const sharp = require('sharp');
-const fetch = require('node-fetch'); // Add this import
-
-// Configure storage for uploaded files
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
     const uploadDir = 'uploads/';
