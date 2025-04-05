@@ -257,7 +257,11 @@ function assignWorkersToClusters(clusters, workers) {
 
 // Solve TSP for route optimization
 function solveTSP(points, worker) {
-    if (points.length === 0) return [];
+    if (points.length === 0) return {
+        start: { lat: worker.lat, lng: worker.lng },
+        waypoints: [],
+        end: { lat: worker.lat, lng: worker.lng }
+    };
 
     const route = [{ lat: worker.lat, lng: worker.lng }];
     const unvisited = [...points];
@@ -273,8 +277,13 @@ function solveTSP(points, worker) {
         current = { lat: nearest.point.lat, lng: nearest.point.lng };
         unvisited.splice(unvisited.indexOf(nearest.point), 1);
     }
+    route.push({ lat: worker.lat, lng: worker.lng }); // Return to starting point
 
-    return route;
+    return {
+        start: { lat: route[0].lat, lng: route[0].lng },
+        waypoints: route.slice(1, -1).map(point => ({ lat: point.lat, lng: point.lng })),
+        end: { lat: route[route.length - 1].lat, lng: route[route.length - 1].lng }
+    };
 }
 
 // Send SMS notification function
@@ -302,20 +311,14 @@ router.post('/group-and-assign-reports', authenticateToken, checkWorkerOrAdminRo
         console.log('Request body:', req.body);
 
         console.log('Fetching unassigned reports from garbagereports...');
-        let result;
-        try {
-            result = await pool.query(
-                `SELECT reportid, wastetype, ST_AsText(location) AS location, datetime, userid
-                 FROM garbagereports
-                 WHERE reportid NOT IN (
-                   SELECT unnest(reportids) FROM taskrequests
-                 )
-                 ORDER BY datetime ASC`
-            );
-        } catch (dbError) {
-            console.error('Database query error:', dbError.message, dbError.stack);
-            throw dbError;
-        }
+        let result = await pool.query(
+            `SELECT reportid, wastetype, ST_AsText(location) AS location, datetime, userid
+             FROM garbagereports
+             WHERE reportid NOT IN (
+               SELECT unnest(reportids) FROM taskrequests
+             )
+             ORDER BY datetime ASC`
+        );
         console.log('Fetched reports:', result.rows);
 
         let reports = result.rows.map(row => {
@@ -367,24 +370,18 @@ router.post('/group-and-assign-reports', authenticateToken, checkWorkerOrAdminRo
             console.log('Clusters formed:', clusters);
 
             console.log('Fetching available workers...');
-            let workerResult;
-            try {
-                workerResult = await pool.query(
-                    `SELECT userid, ST_AsText(location) AS location
-                     FROM users
-                     WHERE role = 'worker'
-                     AND userid NOT IN (
-                       SELECT assignedworkerid
-                       FROM taskrequests
-                       WHERE status != 'completed'
-                       GROUP BY assignedworkerid
-                       HAVING COUNT(*) >= 5
-                     )`
-                );
-            } catch (dbError) {
-                console.error('Worker query error:', dbError.message, dbError.stack);
-                throw dbError;
-            }
+            let workerResult = await pool.query(
+                `SELECT userid, ST_AsText(location) AS location
+                 FROM users
+                 WHERE role = 'worker'
+                 AND userid NOT IN (
+                   SELECT assignedworkerid
+                   FROM taskrequests
+                   WHERE status != 'completed'
+                   GROUP BY assignedworkerid
+                   HAVING COUNT(*) >= 5
+                 )`
+            );
             let workers = workerResult.rows.map(row => {
                 const locMatch = row.location ? row.location.match(/POINT\(([^ ]+) ([^)]+)\)/) : null;
                 return {
@@ -414,29 +411,16 @@ router.post('/group-and-assign-reports', authenticateToken, checkWorkerOrAdminRo
                 const route = solveTSP(cluster, worker);
                 console.log('TSP Route:', route);
 
-                const routeJson = {
-                    start: { lat: route[0].lat, lng: route[0].lng },
-                    waypoints: route.slice(1, -1).map(point => ({ lat: point.lat, lng: point.lng })),
-                    end: { lat: route[route.length - 1].lat, lng: route[route.length - 1].lng },
-                };
-                console.log('Formatted routeJson:', routeJson);
-
                 const reportIds = cluster.map(report => report.reportid);
                 console.log('Report IDs for task:', reportIds);
 
                 console.log('Inserting task into taskrequests...');
-                let taskResult;
-                try {
-                    taskResult = await pool.query(
-                        `INSERT INTO taskrequests (reportids, assignedworkerid, status, starttime, route)
-                         VALUES ($1, $2, 'assigned', NOW(), $3)
-                         RETURNING taskid`,
-                        [reportIds, worker.userid, routeJson]
-                    );
-                } catch (dbError) {
-                    console.error('Task insertion error:', dbError.message, dbError.stack);
-                    throw dbError;
-                }
+                let taskResult = await pool.query(
+                    `INSERT INTO taskrequests (reportids, assignedworkerid, status, starttime, route)
+                     VALUES ($1, $2, 'assigned', NOW(), $3)
+                     RETURNING taskid`,
+                    [reportIds, worker.userid, route]
+                );
                 const taskId = taskResult.rows[0].taskid;
                 console.log(`Task inserted successfully with taskId: ${taskId}`);
 
@@ -467,7 +451,7 @@ router.post('/group-and-assign-reports', authenticateToken, checkWorkerOrAdminRo
                     taskId: taskId,
                     reportIds: reportIds,
                     assignedWorkerId: worker.userid,
-                    route: routeJson,
+                    route: route,
                 });
             }
 
@@ -480,7 +464,7 @@ router.post('/group-and-assign-reports', authenticateToken, checkWorkerOrAdminRo
             assignments,
         });
     } catch (error) {
-        console.error('Error in group-and-assign-reports:', error.message, error.stack);
+        console.error('Error in group-and-align-reports:', error.message, error.stack);
         res.status(500).json({ error: 'Internal Server Error', details: error.message });
     }
 });
@@ -642,8 +626,8 @@ router.patch('/update-progress', authenticateToken, checkWorkerOrAdminRole, asyn
 
         const taskCheck = await pool.query(
             `SELECT 1 
-       FROM taskrequests 
-       WHERE taskid = $1 AND assignedworkerid = $2`,
+             FROM taskrequests 
+             WHERE taskid = $1 AND assignedworkerid = $2`,
             [taskIdInt, workerId]
         );
 
@@ -651,17 +635,16 @@ router.patch('/update-progress', authenticateToken, checkWorkerOrAdminRole, asyn
             return res.status(403).json({ error: 'Task not assigned to this worker' });
         }
 
-        // Update task status and progress
+        // Update task status, progress, and endtime if completed
         const updateFields = ['progress = $1', 'status = $2'];
         const updateValues = [progressFloat, status];
 
-        // If task is completed, set endtime
         if (status === 'completed') {
             updateFields.push('endtime = NOW()');
         }
 
         await pool.query(
-            `UPDATE taskrequests SET ${updateFields.join(', ')} WHERE taskid = $3`,
+            `UPDATE taskrequests SET ${updateFields.join(', ')} WHERE taskid = $${updateFields.length + 1}`,
             updateValues.concat([taskIdInt])
         );
 
@@ -718,7 +701,6 @@ router.get('/completed-tasks', authenticateToken, checkWorkerOrAdminRole, async 
 });
 
 // Mark report as collected
-// Start task endpoint
 // Start task endpoint
 router.post('/start-task', authenticateToken, checkWorkerOrAdminRole, async (req, res) => {
     try {
@@ -788,7 +770,7 @@ router.post('/mark-collected', authenticateToken, checkWorkerOrAdminRole, async 
             });
         }
 
-        // 3. Update the garbagereports table
+        // 3. Update the garbagereports table (assuming a 'status' column exists)
         await pool.query(
             `UPDATE garbagereports 
              SET status = 'collected', 
@@ -808,7 +790,7 @@ router.post('/mark-collected', authenticateToken, checkWorkerOrAdminRole, async 
         const remaining = uncollectedCount.rows[0].count;
 
         // 5. If all collected, mark task as completed
-        if (remaining == 0) {
+        if (remaining === 0) {
             await pool.query(
                 `UPDATE taskrequests 
                  SET status = 'completed', 
