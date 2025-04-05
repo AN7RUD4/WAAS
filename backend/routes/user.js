@@ -5,7 +5,8 @@ const multer = require('multer');
 const sharp = require('sharp');
 const fs = require('fs');
 const path = require('path');
-const fetch = require('node-fetch');
+// Import node-fetch explicitly
+const fetch = (...args) => import('node-fetch').then(({ default: fetch }) => fetch(...args));
 
 const userRouter = express.Router();
 
@@ -139,7 +140,7 @@ userRouter.post('/detect-waste', authenticateToken, upload.single('image'), asyn
   }
 });
 
-//bin Fill endpoint
+// bin Fill endpoint
 userRouter.post('/bin-fill', authenticateToken, async (req, res) => {
   try {
     console.log('Received bin-fill request:', req.body);
@@ -196,7 +197,7 @@ userRouter.post('/report-waste', authenticateToken, upload.single('image'), asyn
       `INSERT INTO garbagereports (userid, location, wastetype, imageurl, datetime) 
        VALUES ($1, ST_GeomFromText('POINT(${long} ${lat})', 4326), $2, $3, NOW()) 
        RETURNING reportid, ST_AsText(location) as location, imageurl`,
-      [req.user.userid, 'public', imageUrl, 'pending']
+      [req.user.userid, 'public', imageUrl]
     );
     await client.query('COMMIT');
     console.log('Waste report submitted:', result.rows[0]);
