@@ -53,8 +53,8 @@ const upload = multer({
   }
 });
 
-// Waste detection endpoint
-// Waste detection endpoint (modified to call only background removal)
+// Waste detection endpoint 
+// Waste detection endpoint 
 userRouter.post('/detect-waste', authenticateToken, upload.single('image'), async (req, res) => {
   let filePath;
   try {
@@ -93,13 +93,23 @@ userRouter.post('/detect-waste', authenticateToken, upload.single('image'), asyn
     console.log('Raw background removal result:', JSON.stringify(bgRemovalResult, null, 2));
 
     // Process the background removal result
-    const backgroundRemoved = bgRemovalResult.outputs?.[0]?.image || null;
+    const predictions = bgRemovalResult.outputs?.[0]?.predictions?.predictions || [];
+    const backgroundRemoved = bgRemovalResult.outputs?.[0]?.output_image?.value || null; // Corrected field name
+
+    // Determine if waste is detected
+    const hasWaste = predictions.some(pred => 
+      pred.class === 'waste-waste' && pred.confidence > 0.5
+    );
 
     const wasteResult = {
-      hasWaste: false, // No detection, so default to false
-      predictions: [], // No predictions since we're skipping detection
-      backgroundRemoved: backgroundRemoved,
-      detailedResults: [] // No detailed results without detection
+      hasWaste,
+      predictions,
+      backgroundRemoved,
+      detailedResults: predictions.map(pred => ({
+        class: pred.class,
+        confidence: pred.confidence,
+        box: pred.bbox // Ensure bbox is included if present
+      }))
     };
 
     res.json(wasteResult);
