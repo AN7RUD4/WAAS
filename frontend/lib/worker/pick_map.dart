@@ -18,26 +18,24 @@ class MapScreen extends StatefulWidget {
 
 class _MapScreenState extends State<MapScreen> {
   final MapController _mapController = MapController();
-  final List<LatLng> _locations = []; // Will store uncollected locations
-  final List<int> _reportIds = []; // Will store uncollected report IDs
-  final List<String> _wasteTypes = []; // Will store uncollected waste types
+  final List<LatLng> _locations = [];
+  final List<int> _reportIds = [];
+  final List<String> _wasteTypes = [];
   List<LatLng> _route = [];
   List<LatLng> _completeRoute = [];
   double _currentZoom = 14.0;
   LatLng _currentCenter = const LatLng(10.235865, 76.405676);
   LatLng? _workerLocation;
-  double? _workerHeading; // New: Store the worker's heading in degrees
+  double? _workerHeading;
   bool _isLoading = false;
   String _errorMessage = '';
   final storage = const FlutterSecureStorage();
 
-  // Collection state
   bool _collectionStarted = false;
-  Set<int> _collectedReports = {}; // Track collected report IDs
+  Set<int> _collectedReports = {};
   LatLng? _currentCollectionPoint;
   String? _currentWasteType;
 
-  // Route info
   double _distanceToNearest = 0.0;
   double _totalDistance = 0.0;
   String _directions = "Calculating directions...";
@@ -47,6 +45,7 @@ class _MapScreenState extends State<MapScreen> {
   @override
   void initState() {
     super.initState();
+    print('Task ID from widget: ${widget.taskid}'); // Debug taskId
     _getWorkerLocation();
     _fetchCollectionRequestData();
   }
@@ -87,7 +86,7 @@ class _MapScreenState extends State<MapScreen> {
       );
       setState(() {
         _workerLocation = LatLng(position.latitude, position.longitude);
-        _workerHeading = position.heading; // Initialize heading
+        _workerHeading = position.heading;
         _currentCenter = _workerLocation!;
         _errorMessage = '';
       });
@@ -97,7 +96,7 @@ class _MapScreenState extends State<MapScreen> {
     } catch (e) {
       setState(() {
         _errorMessage = 'Error getting location: $e';
-        _workerLocation = const LatLng(10.235865, 76.405676); // Fallback
+        _workerLocation = const LatLng(10.235865, 76.405676);
         _currentCenter = _workerLocation!;
         _mapController.move(_currentCenter, _currentZoom);
       });
@@ -110,15 +109,15 @@ class _MapScreenState extends State<MapScreen> {
     Geolocator.getPositionStream(
       locationSettings: const LocationSettings(
         accuracy: LocationAccuracy.high,
-        distanceFilter: 10, // Update every 10 meters
+        distanceFilter: 10,
       ),
     ).listen((Position position) {
       if (mounted) {
         setState(() {
           _workerLocation = LatLng(position.latitude, position.longitude);
-          _workerHeading = position.heading; // Update heading in real-time
-          _currentCenter = _workerLocation!; // Center map on worker
-          _mapController.move(_currentCenter, _currentZoom); // Update map position
+          _workerHeading = position.heading;
+          _currentCenter = _workerLocation!;
+          _mapController.move(_currentCenter, _currentZoom);
         });
         _updateCompleteRoute();
         _calculateDistances();
@@ -145,20 +144,16 @@ class _MapScreenState extends State<MapScreen> {
 
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = jsonDecode(response.body);
-
-        // Parse route from JSONB
         if (data['route'] != null && data['route'] is Map) {
           _parseRouteFromJson(data['route']);
         } else {
           setState(() => _errorMessage = 'No route data found in task');
         }
 
-        // Parse locations, report IDs, and waste types, excluding collected reports
         if (data['locations'] != null && data['locations'] is List) {
           _parseLocations(data['locations']);
         }
 
-        // Set worker location from response if not already set
         if (_workerLocation == null && data['workerLocation'] != null) {
           _workerLocation = LatLng(
             data['workerLocation']['lat'],
@@ -170,7 +165,7 @@ class _MapScreenState extends State<MapScreen> {
         if (_workerLocation != null && _locations.isNotEmpty) {
           _route = await _fetchRouteFromOSRM();
           if (_route.isEmpty) {
-            _route = _locations; // Fallback to straight-line route
+            _route = _locations;
             setState(() => _errorMessage = 'Failed to fetch route from OSRM. Showing straight-line path.');
           }
           _updateCompleteRoute();
@@ -186,9 +181,9 @@ class _MapScreenState extends State<MapScreen> {
           setState(() => _errorMessage = 'Missing worker location or collection points');
         }
       } else {
-        setState(() => _errorMessage = 'Failed to fetch task data: ${response.statusCode}');
+        setState(() => _errorMessage = 'Failed to fetch task data: ${response.statusCode} - ${response.body}');
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to fetch task data: ${response.statusCode}')),
+          SnackBar(content: Text('Failed to fetch task data: ${response.statusCode} - ${response.body}')),
         );
       }
     } catch (e) {
@@ -205,19 +200,12 @@ class _MapScreenState extends State<MapScreen> {
     _reportIds.clear();
     _wasteTypes.clear();
 
-    // Add start point
-    if (routeData['start'] != null &&
-        routeData['start']['lat'] != null &&
-        routeData['start']['lng'] != null) {
-      final startPoint = LatLng(
-        routeData['start']['lat'],
-        routeData['start']['lng'],
-      );
+    if (routeData['start'] != null && routeData['start']['lat'] != null && routeData['start']['lng'] != null) {
+      final startPoint = LatLng(routeData['start']['lat'], routeData['start']['lng']);
       _locations.add(startPoint);
       _route.add(startPoint);
     }
 
-    // Add waypoints (these are the report locations), excluding collected ones
     if (routeData['waypoints'] != null && routeData['waypoints'] is List) {
       for (var waypoint in routeData['waypoints']) {
         if (waypoint['lat'] != null && waypoint['lng'] != null && waypoint['reportid'] != null) {
@@ -232,10 +220,7 @@ class _MapScreenState extends State<MapScreen> {
       }
     }
 
-    // Add end point
-    if (routeData['end'] != null &&
-        routeData['end']['lat'] != null &&
-        routeData['end']['lng'] != null) {
+    if (routeData['end'] != null && routeData['end']['lat'] != null && routeData['end']['lng'] != null) {
       final endPoint = LatLng(routeData['end']['lat'], routeData['end']['lng']);
       _locations.add(endPoint);
       _route.add(endPoint);
@@ -253,10 +238,7 @@ class _MapScreenState extends State<MapScreen> {
     for (var item in data) {
       if (item['lat'] != null && item['lng'] != null && item['reportid'] != null) {
         try {
-          final LatLng latLng = LatLng(
-            double.parse(item['lat'].toString()),
-            double.parse(item['lng'].toString()),
-          );
+          final LatLng latLng = LatLng(double.parse(item['lat'].toString()), double.parse(item['lng'].toString()));
           if (!_collectedReports.contains(item['reportid'])) {
             _locations.add(latLng);
             _reportIds.add(item['reportid']);
@@ -378,44 +360,46 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   void _startCollection() async {
-  setState(() => _isLoading = true);
+    setState(() => _isLoading = true);
 
-  try {
-    final token = await storage.read(key: 'jwt_token');
-    print('Token: $token'); // Debug token
-    if (token == null) throw Exception('No authentication token found');
+    try {
+      final token = await storage.read(key: 'jwt_token');
+      print('Token: $token');
+      if (token == null) throw Exception('No authentication token found');
 
-    print('Starting collection for taskId: ${widget.taskid}'); // Debug taskId
-    final response = await http.post(
-      Uri.parse('$apiBaseUrl/worker/start-task'),
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-      },
-      body: jsonEncode({'taskId': widget.taskid}),
-    );
-
-    print('Response status: ${response.statusCode}, Body: ${response.body}'); // Debug response
-    if (response.statusCode == 200) {
-      setState(() {
-        _collectionStarted = true;
-        _errorMessage = '';
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Collection started! Tap on locations to mark as collected'),
-        ),
+      print('Starting collection for taskId: ${widget.taskid}');
+      final response = await http.post(
+        Uri.parse('$apiBaseUrl/worker/start-task'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({'taskId': widget.taskid}),
       );
-    } else {
-      throw Exception('Failed to start task: ${response.statusCode} - ${response.body}');
+
+      print('Response status: ${response.statusCode}, Body: ${response.body}');
+      if (response.statusCode == 200) {
+        setState(() {
+          _collectionStarted = true;
+          _errorMessage = '';
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Collection started! Tap on locations to mark as collected'),
+          ),
+        );
+      } else if (response.statusCode == 403) {
+        throw Exception('Access denied: ${response.body}');
+      } else {
+        throw Exception('Failed to start task: ${response.statusCode} - ${response.body}');
+      }
+    } catch (e) {
+      setState(() => _errorMessage = 'Error starting collection: $e');
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error starting collection: $e')));
+    } finally {
+      setState(() => _isLoading = false);
     }
-  } catch (e) {
-    setState(() => _errorMessage = 'Error starting collection: $e');
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error starting collection: $e')));
-  } finally {
-    setState(() => _isLoading = false);
   }
-}
 
   Future<void> _markAsCollected(LatLng location, int reportId, String wasteType) async {
     setState(() {
@@ -444,15 +428,14 @@ class _MapScreenState extends State<MapScreen> {
           _collectedReports.add(reportId);
           _currentCollectionPoint = null;
           _currentWasteType = null;
-          // Refresh locations to exclude collected reports
-          _fetchCollectionRequestData(); // Re-fetch to update uncollected locations
+          _fetchCollectionRequestData();
         });
 
         if (responseData['taskStatus'] == 'completed') {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('All locations collected! Task completed')),
           );
-          Navigator.pop(context); // Return to previous screen
+          Navigator.pop(context);
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('${responseData['message']} (${responseData['remainingReports']} remaining)')),
@@ -536,7 +519,6 @@ class _MapScreenState extends State<MapScreen> {
                       width: 40,
                       height: 40,
                       child: Transform.rotate(
-                        // Rotate marker based on heading
                         angle: _workerHeading != null ? -_degreesToRadians(_workerHeading!) : 0.0,
                         child: const Icon(
                           Icons.person_pin_circle,
@@ -619,16 +601,19 @@ class _MapScreenState extends State<MapScreen> {
                       'Heading: ${_workerHeading!.toStringAsFixed(1)}°',
                       style: const TextStyle(fontSize: 14, color: Colors.white70),
                     ),
-                  if (_errorMessage.isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    Text(
-                      'Error: $_errorMessage',
-                      style: const TextStyle(
-                        fontSize: 14,
-                        color: Colors.redAccent,
-                      ),
+                  if (_errorMessage.isNotEmpty)
+                    Column(
+                      children: [
+                        const SizedBox(height: 8),
+                        Text(
+                          'Error: $_errorMessage',
+                          style: const TextStyle(
+                            fontSize: 14,
+                            color: Colors.redAccent,
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
                 ],
               ),
             ),
