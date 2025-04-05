@@ -28,6 +28,14 @@ const authenticateToken = (req, res, next) => {
 };
 
 // Configure storage for uploaded files
+const express = require('express');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+const sharp = require('sharp');
+const fetch = require('node-fetch'); // Add this import
+
+// Configure storage for uploaded files
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
     const uploadDir = 'uploads/';
@@ -52,6 +60,7 @@ const upload = multer({
   }
 });
 
+// Waste detection endpoint
 userRouter.post('/detect-waste', authenticateToken, upload.single('image'), async (req, res) => {
   let filePath;
   try {
@@ -62,26 +71,36 @@ userRouter.post('/detect-waste', authenticateToken, upload.single('image'), asyn
     filePath = req.file.path;
     console.log('Processing image:', filePath);
 
+    // Convert image to base64
     const imageBuffer = await sharp(filePath)
       .resize(640, 640)
       .toBuffer();
     const imageBase64 = imageBuffer.toString('base64');
 
+    // Call both Roboflow APIs in parallel
     const [detectionResponse, bgRemovalResponse] = await Promise.all([
       fetch('https://detect.roboflow.com/infer/workflows/anirudh-anilkumar-go0ru/detect-and-classify', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json'
+        },
         body: JSON.stringify({
           api_key: process.env.ROBOFLOW_API_KEY,
-          inputs: { "image": {"type": "base64", "value": imageBase64} }
+          inputs: {
+            "image": {"type": "base64", "value": imageBase64}
+          }
         })
       }),
       fetch('https://detect.roboflow.com/infer/workflows/anirudh-anilkumar-go0ru/background-removal', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json'
+        },
         body: JSON.stringify({
           api_key: process.env.ROBOFLOW_API_KEY,
-          inputs: { "image": {"type": "base64", "value": imageBase64} }
+          inputs: {
+            "image": {"type": "base64", "value": imageBase64}
+          }
         })
       })
     ]);
@@ -92,10 +111,9 @@ userRouter.post('/detect-waste', authenticateToken, upload.single('image'), asyn
 
     const detectionResult = await detectionResponse.json();
     const bgRemovalResult = await bgRemovalResponse.json();
-    console.log('Full detection result:', JSON.stringify(detectionResult, null, 2));
-    console.log('Full bg removal result:', JSON.stringify(bgRemovalResult, null, 2));
+    console.log('Roboflow responses:', { detectionResult, bgRemovalResult });
 
-    // Enhanced result processing
+    // Process results
     const predictions = detectionResult.outputs?.[0]?.predictions || [];
     const hasWaste = predictions.some(pred => 
       pred.class === 'waste-waste' && pred.confidence > 0.5
@@ -128,6 +146,7 @@ userRouter.post('/detect-waste', authenticateToken, upload.single('image'), asyn
     }
   }
 });
+
 //bin Fill endpoint
 userRouter.post('/bin-fill', authenticateToken, async (req, res) => {
   try {
