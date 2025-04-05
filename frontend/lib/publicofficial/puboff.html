@@ -227,7 +227,7 @@
     <!-- Login Section -->
     <div class="login-container" id="loginContainer">
         <div class="login-box">
-            <h1>Admin Login</h1>
+            <h1>Official Login</h1>
             <form id="loginForm">
                 <div class="form-group">
                     <label for="email">Email</label>
@@ -246,7 +246,7 @@
     <!-- Main Application Content (hidden until login) -->
     <div class="main-content" id="mainContent">
         <div class="container">
-            <h1>Waste Management Official Portal</h1>
+            <h1>WAAS Official Portal</h1>
             
             <nav>
                 <button onclick="showSection('report')">Reports</button>
@@ -309,6 +309,9 @@
         const RENDER_URL = 'https://waas-9pr6.onrender.com';
 
         document.addEventListener('DOMContentLoaded', () => {
+            // Clear localStorage for development testing (comment out in production)
+            localStorage.clear();
+
             // Check for existing login session
             const loggedInUser = localStorage.getItem('loggedInUser');
             if (loggedInUser) {
