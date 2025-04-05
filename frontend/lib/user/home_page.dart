@@ -206,7 +206,6 @@ class UserApp extends StatelessWidget {
   }
 }
 
-// Report Page for submitting public waste reports
 class ReportPage extends StatefulWidget {
   const ReportPage({super.key});
 
@@ -221,6 +220,8 @@ class _ReportPageState extends State<ReportPage> {
   final storage = const FlutterSecureStorage();
   String? _errorMessage;
   bool? _hasWaste;
+  String? _backgroundRemovedImage;
+  List<dynamic>? _detectionDetails;
 
   @override
   void initState() {
@@ -234,6 +235,7 @@ class _ReportPageState extends State<ReportPage> {
 
     serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Location services are disabled')),
       );
@@ -244,6 +246,7 @@ class _ReportPageState extends State<ReportPage> {
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
       if (permission == LocationPermission.denied) {
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Location permissions are denied')),
         );
@@ -252,20 +255,28 @@ class _ReportPageState extends State<ReportPage> {
     }
 
     if (permission == LocationPermission.deniedForever) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Location permissions are permanently denied'),
-        ),
+        const SnackBar(content: Text('Location permissions are permanently denied')),
       );
       return;
     }
 
-    Position position = await Geolocator.getCurrentPosition(
-      desiredAccuracy: LocationAccuracy.high,
-    );
-    setState(() {
-      locationController.text = '${position.latitude},${position.longitude}';
-    });
+    try {
+      Position position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+      if (mounted) {
+        setState(() {
+          locationController.text = '${position.latitude},${position.longitude}';
+        });
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error getting location: ${e.toString()}')),
+      );
+    }
   }
 
   Future<String?> _getToken() async {
@@ -274,110 +285,139 @@ class _ReportPageState extends State<ReportPage> {
 
   Future<void> _handleTokenExpiration() async {
     await storage.delete(key: 'jwt_token');
+    if (!mounted) return;
     Navigator.pushReplacementNamed(context, '/login');
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Session expired. Please log in again.')),
     );
   }
 
-  String? _backgroundRemovedImage;
+  Future<void> _detectWaste() async {
+    if (_image == null) return;
 
-// Update _detectWaste function
-Future<void> _detectWaste() async {
-  if (_image == null) return;
-
-  setState(() {
-    _isLoading = true;
-    _errorMessage = null;
-    _hasWaste = null;
-    _backgroundRemovedImage = null;
-  });
-
-  try {
-    final token = await _getToken();
-    if (token == null) {
-      await _handleTokenExpiration();
-      return;
-    }
-
-    var request = http.MultipartRequest(
-      'POST',
-      Uri.parse('$apiBaseUrl/user/detect-waste'),
-    );
-    request.headers['Authorization'] = 'Bearer $token';
-    request.files.add(
-      await http.MultipartFile.fromPath(
-        'image',
-        _image!.path,
-        contentType: _getImageContentType(_image!.path),
-      ));
-
-    var response = await request.send();
-    var responseBody = await response.stream.bytesToString();
-    final jsonResponse = jsonDecode(responseBody);
-
-    if (response.statusCode == 200) {
-      setState(() {
-        _hasWaste = jsonResponse['hasWaste'] ?? false;
-        _backgroundRemovedImage = jsonResponse['backgroundRemoved'];
-      });
-    } else if (response.statusCode == 403 &&
-        jsonResponse['message'] == 'Invalid token') {
-      await _handleTokenExpiration();
-    } else {
-      throw Exception(jsonResponse['error'] ?? 'Failed to detect waste');
-    }
-  } catch (e) {
     setState(() {
-      _errorMessage = 'Error detecting waste: $e';
+      _isLoading = true;
+      _errorMessage = null;
+      _hasWaste = null;
+      _backgroundRemovedImage = null;
+      _detectionDetails = null;
     });
-  } finally {
-    setState(() => _isLoading = false);
-  }
-}
 
-// Update your build method to show both images
-Widget _buildImagePreview() {
-  if (_image == null) return const Text("No Image Selected", style: TextStyle(color: Colors.black54));
-  
-  return Column(
-    children: [
-      // Original image
-      Text("Original Image", style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
-      ClipRRect(
-        borderRadius: BorderRadius.circular(12),
-        child: Image.file(_image!, height: 200, fit: BoxFit.cover),
-      ),
-      
-      SizedBox(height: 16),
-      
-      // Background removed image if available
-      if (_backgroundRemovedImage != null) ...[
-        Text("Background Removed", style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
+    try {
+      final token = await _getToken();
+      if (token == null) {
+        await _handleTokenExpiration();
+        return;
+      }
+
+      var request = http.MultipartRequest(
+        'POST',
+        Uri.parse('$apiBaseUrl/user/detect-waste'),
+      );
+      request.headers['Authorization'] = 'Bearer $token';
+      request.files.add(
+        await http.MultipartFile.fromPath(
+          'image',
+          _image!.path,
+          contentType: _getImageContentType(_image!.path),
+        ),
+      );
+
+      var response = await request.send();
+      var responseBody = await response.stream.bytesToString();
+      final jsonResponse = jsonDecode(responseBody);
+
+      if (response.statusCode == 200) {
+        setState(() {
+          _hasWaste = jsonResponse['hasWaste'] ?? false;
+          _backgroundRemovedImage = jsonResponse['backgroundRemoved'];
+          _detectionDetails = jsonResponse['detailedResults'];
+        });
+      } else if (response.statusCode == 403 && jsonResponse['message'] == 'Invalid token') {
+        await _handleTokenExpiration();
+      } else {
+        throw Exception(jsonResponse['error'] ?? 'Failed to detect waste');
+      }
+    } catch (e) {
+      setState(() {
+        _errorMessage = 'Error detecting waste: ${e.toString()}';
+      });
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  Widget _buildImagePreview() {
+    if (_image == null) {
+      return const Text(
+        "No Image Selected", 
+        style: TextStyle(color: Colors.black54)
+      );
+    }
+    
+    return Column(
+      children: [
+        // Original image
+        Text(
+          "Original Image", 
+          style: GoogleFonts.poppins(fontWeight: FontWeight.bold)
+        ),
+        const SizedBox(height: 8),
         ClipRRect(
           borderRadius: BorderRadius.circular(12),
-          child: Image.memory(
-            base64Decode(_backgroundRemovedImage!.split(',').last),
+          child: Image.file(
+            _image!,
             height: 200,
+            width: double.infinity,
             fit: BoxFit.cover,
           ),
         ),
-      ],
-      
-      if (_hasWaste != null) ...[
-        SizedBox(height: 8),
-        Text(
-          _hasWaste! ? "Waste Detected" : "Waste Not Detected",
-          style: GoogleFonts.poppins(
-            fontSize: 14,
-            color: _hasWaste! ? Colors.green : Colors.red,
-            fontWeight: FontWeight.w600,
+        
+        // Background removed image
+        if (_backgroundRemovedImage != null) ...[
+          const SizedBox(height: 16),
+          Text(
+            "Background Removed", 
+            style: GoogleFonts.poppins(fontWeight: FontWeight.bold)
           ),
-        ),
+          const SizedBox(height: 8),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: Image.memory(
+              base64Decode(_backgroundRemovedImage!.split(',').last),
+              height: 200,
+              width: double.infinity,
+              fit: BoxFit.cover,
+            ),
+          ),
+        ],
+        
+        // Detection results
+        if (_hasWaste != null) ...[
+          const SizedBox(height: 16),
+          Text(
+            _hasWaste! ? "🚯 Waste Detected" : "✅ Clean Area",
+            style: GoogleFonts.poppins(
+              fontSize: 18,
+              color: _hasWaste! ? Colors.orange : Colors.green,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          
+          if (_detectionDetails != null && _detectionDetails!.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            ..._detectionDetails!.map((detail) => Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Text(
+                "${detail['class']}: ${(detail['confidence'] * 100).toStringAsFixed(1)}%",
+                style: GoogleFonts.poppins(fontSize: 14),
+              ),
+            )),
+          ],
+        ],
       ],
-    ],
-  );
-}
+    );
+  }
 
   MediaType? _getImageContentType(String path) {
     final extension = path.split('.').last.toLowerCase();
@@ -397,260 +437,265 @@ Widget _buildImagePreview() {
   }
 
   Future<void> _submitReport() async {
-  if (_image == null || locationController.text.isEmpty) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text("Please select a photo and provide a location!"),
-      ),
-    );
-    return;
-  }
-
-  if (_hasWaste == null) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text("Please wait for waste detection to complete"),
-      ),
-    );
-    return;
-  }
-
-  if (!_hasWaste!) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text("Cannot submit report: No waste detected in the image"),
-      ),
-    );
-    return;
-  }
-
-  setState(() {
-    _isLoading = true;
-    _errorMessage = null;
-  });
-
-  try {
-    final token = await _getToken();
-    if (token == null) {
-      await _handleTokenExpiration();
+    if (_image == null || locationController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please select a photo and provide a location!")),
+      );
       return;
     }
 
-    var request = http.MultipartRequest(
-      'POST',
-      Uri.parse('$apiBaseUrl/user/report-waste'),
-    );
-    request.headers['Authorization'] = 'Bearer $token';
-    request.fields['location'] = locationController.text;
-    
-    // Add original image
-    request.files.add(
-      await http.MultipartFile.fromPath('image', _image!.path),
-    );
-    
-    // Add background-removed image if available
-    if (_backgroundRemovedImage != null) {
-      // Extract the base64 data part (remove the data:image/png;base64, prefix if present)
-      String base64Data = _backgroundRemovedImage!;
-      if (_backgroundRemovedImage!.contains(',')) {
-        base64Data = _backgroundRemovedImage!.split(',').last;
-      }
-      
-      request.files.add(
-        http.MultipartFile.fromString(
-          'processed_image',
-          base64Data,
-          contentType: MediaType('image', 'png'),
-        ),
-      );
-    }
-
-    var response = await request.send();
-    var responseBody = await response.stream.bytesToString();
-    final jsonResponse = jsonDecode(responseBody);
-
-    if (response.statusCode == 201) {
+    if (_hasWaste == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Report submitted successfully!")),
+        const SnackBar(content: Text("Please wait for waste detection to complete")),
       );
-      Navigator.pop(context);
-    } else if (response.statusCode == 403 &&
-        jsonResponse['message'] == 'Invalid token') {
-      await _handleTokenExpiration();
-    } else {
-      throw Exception(jsonResponse['message'] ?? 'Failed to submit report');
+      return;
     }
-  } catch (e) {
+
+    if (!_hasWaste!) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Cannot submit report: No waste detected in the image")),
+      );
+      return;
+    }
+
     setState(() {
-      _errorMessage = 'Error: $e';
+      _isLoading = true;
+      _errorMessage = null;
     });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text("Submission failed: ${e.toString()}")),
-    );
-  } finally {
-    setState(() => _isLoading = false);
+
+    try {
+      final token = await _getToken();
+      if (token == null) {
+        await _handleTokenExpiration();
+        return;
+      }
+
+      var request = http.MultipartRequest(
+        'POST',
+        Uri.parse('$apiBaseUrl/user/report-waste'),
+      );
+      request.headers['Authorization'] = 'Bearer $token';
+      request.fields['location'] = locationController.text;
+      
+      // Add original image
+      request.files.add(
+        await http.MultipartFile.fromPath('image', _image!.path),
+      );
+      
+      // Add background-removed image if available
+      if (_backgroundRemovedImage != null) {
+        String base64Data = _backgroundRemovedImage!;
+        if (_backgroundRemovedImage!.contains(',')) {
+          base64Data = _backgroundRemovedImage!.split(',').last;
+        }
+        
+        request.files.add(
+          http.MultipartFile.fromString(
+            'processed_image',
+            base64Data,
+            contentType: MediaType('image', 'png'),
+          ),
+        );
+      }
+
+      var response = await request.send();
+      var responseBody = await response.stream.bytesToString();
+      final jsonResponse = jsonDecode(responseBody);
+
+      if (response.statusCode == 201) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Report submitted successfully!")),
+        );
+        Navigator.pop(context);
+      } else if (response.statusCode == 403 && jsonResponse['message'] == 'Invalid token') {
+        await _handleTokenExpiration();
+      } else {
+        throw Exception(jsonResponse['message'] ?? 'Failed to submit report');
+      }
+    } catch (e) {
+      setState(() {
+        _errorMessage = 'Error: ${e.toString()}';
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Submission failed: ${e.toString()}")),
+      );
+    } finally {
+      setState(() => _isLoading = false);
+    }
   }
-}
 
   Future<void> _takePicture() async {
-    final ImagePicker picker = ImagePicker();
-    final XFile? pickedImage = await picker.pickImage(
-      source: ImageSource.camera,
-    );
+    try {
+      final ImagePicker picker = ImagePicker();
+      final XFile? pickedImage = await picker.pickImage(
+        source: ImageSource.camera,
+        maxWidth: 2000,
+        maxHeight: 2000,
+        imageQuality: 85,
+      );
 
-    if (pickedImage != null) {
-      setState(() {
-        _image = File(pickedImage.path);
-        _errorMessage = null;
-        _hasWaste = null;
-      });
-      await _detectWaste();
+      if (pickedImage != null && mounted) {
+        setState(() {
+          _image = File(pickedImage.path);
+          _errorMessage = null;
+          _hasWaste = null;
+          _backgroundRemovedImage = null;
+        });
+        await _detectWaste();
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Error taking picture: ${e.toString()}';
+        });
+      }
     }
   }
 
   Future<void> _pickImageFromGallery() async {
-    final ImagePicker picker = ImagePicker();
-    final XFile? pickedImage = await picker.pickImage(
-      source: ImageSource.gallery,
-    );
+    try {
+      final ImagePicker picker = ImagePicker();
+      final XFile? pickedImage = await picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 2000,
+        maxHeight: 2000,
+        imageQuality: 85,
+      );
 
-    if (pickedImage != null) {
-      setState(() {
-        _image = File(pickedImage.path);
-        _errorMessage = null;
-        _hasWaste = null;
-      });
-
-      await _detectWaste();
+      if (pickedImage != null && mounted) {
+        setState(() {
+          _image = File(pickedImage.path);
+          _errorMessage = null;
+          _hasWaste = null;
+          _backgroundRemovedImage = null;
+        });
+        await _detectWaste();
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Error picking image: ${e.toString()}';
+        });
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Report Public Waste")),
-      body:
-          _isLoading
-              ? const Center(child: CircularProgressIndicator())
-              : SafeArea(
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: SingleChildScrollView(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          "Report Public Waste",
-                          style: GoogleFonts.poppins(
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.black87,
-                          ),
+      appBar: AppBar(
+        title: const Text("Report Public Waste"),
+        backgroundColor: Colors.green.shade700,
+        foregroundColor: Colors.white,
+      ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        "Report Public Waste",
+                        style: GoogleFonts.poppins(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87,
                         ),
-                        const SizedBox(height: 8),
-                        Text(
-                          "Help keep your community clean",
-                          style: GoogleFonts.poppins(
-                            fontSize: 16,
-                            color: Colors.black54,
-                          ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        "Help keep your community clean",
+                        style: GoogleFonts.poppins(
+                          fontSize: 16,
+                          color: Colors.black54,
                         ),
-                        const SizedBox(height: 24),
-                        Text(
-                          "Select a Picture",
-                          style: GoogleFonts.poppins(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.black87,
-                          ),
+                      ),
+                      const SizedBox(height: 24),
+                      Text(
+                        "Select a Picture",
+                        style: GoogleFonts.poppins(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.black87,
                         ),
-                        const SizedBox(height: 8),
-                        Center(
-                          child: Column(
-                            children: [
-                              _image == null
-                                  ? const Text(
-                                    "No Image Selected",
-                                    style: TextStyle(color: Colors.black54),
-                                  )
-                                  : ClipRRect(
-                                    borderRadius: BorderRadius.circular(12),
-                                    child: Image.file(
-                                      _image!,
-                                      height: 200,
-                                      fit: BoxFit.cover,
+                      ),
+                      const SizedBox(height: 8),
+                      Center(
+                        child: Column(
+                          children: [
+                            _buildImagePreview(),
+                            const SizedBox(height: 16),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                              children: [
+                                Expanded(
+                                  child: ElevatedButton.icon(
+                                    icon: const Icon(Icons.camera_alt),
+                                    label: const Text("Open Camera"),
+                                    onPressed: _takePicture,
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.green.shade700,
+                                      foregroundColor: Colors.white,
                                     ),
-                                  ),
-                              const SizedBox(height: 8),
-                              if (_image != null && _hasWaste != null)
-                                Text(
-                                  _hasWaste!
-                                      ? "Waste Detected"
-                                      : "Waste Not Detected",
-                                  style: GoogleFonts.poppins(
-                                    fontSize: 14,
-                                    color:
-                                        _hasWaste! ? Colors.green : Colors.red,
-                                    fontWeight: FontWeight.w600,
                                   ),
                                 ),
-                              const SizedBox(height: 16),
-                              Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceEvenly,
-                                children: [
-                                  Expanded(
-                                    child: ElevatedButton.icon(
-                                      icon: const Icon(Icons.camera_alt),
-                                      label: const Text("Open Camera"),
-                                      onPressed: _takePicture,
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: ElevatedButton.icon(
+                                    icon: const Icon(Icons.photo_library),
+                                    label: const Text("Pick from Gallery"),
+                                    onPressed: _pickImageFromGallery,
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.green.shade700,
+                                      foregroundColor: Colors.white,
                                     ),
                                   ),
-                                  const SizedBox(width: 16),
-                                  Expanded(
-                                    child: ElevatedButton.icon(
-                                      icon: const Icon(Icons.photo_library),
-                                      label: const Text("Pick from Gallery"),
-                                      onPressed: _pickImageFromGallery,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        TextFormField(
-                          controller: locationController,
-                          readOnly: true,
-                          decoration: const InputDecoration(
-                            labelText: "Location",
-                            prefixIcon: Icon(Icons.location_on_outlined),
-                          ),
-                        ),
-                        if (_errorMessage != null) ...[
-                          const SizedBox(height: 16),
-                          Text(
-                            _errorMessage!,
-                            style: GoogleFonts.poppins(
-                              color: Colors.red,
-                              fontSize: 14,
+                                ),
+                              ],
                             ),
-                          ),
-                        ],
-                        const SizedBox(height: 24),
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            onPressed: _submitReport,
-                            child: const Text("Submit Report"),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: locationController,
+                        readOnly: true,
+                        decoration: const InputDecoration(
+                          labelText: "Location",
+                          prefixIcon: Icon(Icons.location_on_outlined),
+                        ),
+                      ),
+                      if (_errorMessage != null) ...[
+                        const SizedBox(height: 16),
+                        Text(
+                          _errorMessage!,
+                          style: GoogleFonts.poppins(
+                            color: Colors.red,
+                            fontSize: 14,
                           ),
                         ),
                       ],
-                    ),
+                      const SizedBox(height: 24),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: _submitReport,
+                          child: const Text("Submit Report"),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.green.shade700,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
+            ),
     );
   }
 }

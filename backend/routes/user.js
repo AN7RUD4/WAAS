@@ -5,6 +5,7 @@ const multer = require('multer');
 const sharp = require('sharp');
 const fs = require('fs');
 const path = require('path');
+const fetch = require('node-fetch');
 
 const userRouter = express.Router();
 
@@ -30,26 +31,20 @@ const authenticateToken = (req, res, next) => {
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
     const uploadDir = 'uploads/';
-    // Create uploads directory if it doesn't exist
     if (!fs.existsSync(uploadDir)) {
       fs.mkdirSync(uploadDir, { recursive: true });
     }
     cb(null, uploadDir);
   },
   filename: function (req, file, cb) {
-    // Create a unique filename
     cb(null, Date.now() + path.extname(file.originalname));
   }
 });
 
-// Initialize multer upload middleware
 const upload = multer({ 
   storage: storage,
-  limits: {
-    fileSize: 5 * 1024 * 1024 // 5MB file size limit
-  },
+  limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    // Accept images only
     if (!file.originalname.match(/\.(jpg|jpeg|png|gif)$/)) {
       return cb(new Error('Only image files are allowed!'), false);
     }
@@ -57,7 +52,6 @@ const upload = multer({
   }
 });
 
-// Waste detection endpoint
 userRouter.post('/detect-waste', authenticateToken, upload.single('image'), async (req, res) => {
   let filePath;
   try {
@@ -68,36 +62,26 @@ userRouter.post('/detect-waste', authenticateToken, upload.single('image'), asyn
     filePath = req.file.path;
     console.log('Processing image:', filePath);
 
-    // Convert image to base64
     const imageBuffer = await sharp(filePath)
-      .resize(640, 640) // Resize to common inference size
+      .resize(640, 640)
       .toBuffer();
     const imageBase64 = imageBuffer.toString('base64');
 
-    // Call both Roboflow APIs in parallel
     const [detectionResponse, bgRemovalResponse] = await Promise.all([
       fetch('https://detect.roboflow.com/infer/workflows/anirudh-anilkumar-go0ru/detect-and-classify', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           api_key: process.env.ROBOFLOW_API_KEY,
-          inputs: {
-            "image": {"type": "base64", "value": imageBase64}
-          }
+          inputs: { "image": {"type": "base64", "value": imageBase64} }
         })
       }),
       fetch('https://detect.roboflow.com/infer/workflows/anirudh-anilkumar-go0ru/background-removal', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           api_key: process.env.ROBOFLOW_API_KEY,
-          inputs: {
-            "image": {"type": "base64", "value": imageBase64}
-          }
+          inputs: { "image": {"type": "base64", "value": imageBase64} }
         })
       })
     ]);
@@ -108,35 +92,35 @@ userRouter.post('/detect-waste', authenticateToken, upload.single('image'), asyn
 
     const detectionResult = await detectionResponse.json();
     const bgRemovalResult = await bgRemovalResponse.json();
-    console.log('Roboflow responses:', { detectionResult, bgRemovalResult });
+    console.log('Full detection result:', JSON.stringify(detectionResult, null, 2));
+    console.log('Full bg removal result:', JSON.stringify(bgRemovalResult, null, 2));
 
-    // Process results
-    // Process results more robustly
-const wasteResult = {
-  hasWaste: detectionResult.outputs?.some(output => 
-    output.predictions?.some(pred => 
+    // Enhanced result processing
+    const predictions = detectionResult.outputs?.[0]?.predictions || [];
+    const hasWaste = predictions.some(pred => 
       pred.class === 'waste-waste' && pred.confidence > 0.5
-    )
-  ),
-  predictions: detectionResult.outputs?.[0]?.predictions || [],
-  backgroundRemoved: bgRemovalResult.outputs?.[0]?.image || null
-};
+    );
 
-// Add detailed class information
-if (wasteResult.predictions.length > 0) {
-  wasteResult.detailedResults = wasteResult.predictions.map(pred => ({
-    class: pred.class,
-    confidence: pred.confidence,
-    box: pred.bbox // if available
-  }));
-}
+    const wasteResult = {
+      hasWaste,
+      predictions,
+      backgroundRemoved: bgRemovalResult.outputs?.[0]?.image || null,
+      detailedResults: predictions.map(pred => ({
+        class: pred.class,
+        confidence: pred.confidence,
+        box: pred.bbox
+      }))
+    };
 
     res.json(wasteResult);
   } catch (error) {
     console.error('Detection error:', error);
-    res.status(500).json({ error: 'Detection failed', details: error.message });
+    res.status(500).json({ 
+      error: 'Detection failed', 
+      details: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   } finally {
-    // Cleanup uploaded file
     if (filePath) {
       fs.unlink(filePath, (err) => {
         if (err) console.error('Failed to delete uploaded file:', err);
