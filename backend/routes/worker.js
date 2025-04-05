@@ -729,6 +729,7 @@ router.post('/start-task', authenticateToken, checkWorkerOrAdminRole, async (req
             [taskId]
         );
 
+        console.log(`Task ${taskId} started by worker ${workerId}, status updated to in-progress`);
         res.status(200).json({
             message: 'Task started successfully',
             status: 'in-progress'
