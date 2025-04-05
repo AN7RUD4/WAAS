@@ -104,10 +104,16 @@ userRouter.post('/detect-waste', authenticateToken, upload.single('image'), asyn
 
     const detectionResult = await detectionResponse.json();
     const bgRemovalResult = await bgRemovalResponse.json();
-    console.log('Roboflow responses:', { detectionResult, bgRemovalResult });
+    console.log('Raw detection result:', JSON.stringify(detectionResult, null, 2));
+    console.log('Raw background removal result:', JSON.stringify(bgRemovalResult, null, 2));
 
     // Process results
     const predictions = detectionResult.outputs?.[0]?.predictions || [];
+    if (!Array.isArray(predictions)) {
+      console.warn('Predictions is not an array, defaulting to empty array:', predictions);
+      throw new Error('Invalid predictions format from Roboflow API');
+    }
+
     const hasWaste = predictions.some(pred => 
       pred.class === 'waste-waste' && pred.confidence > 0.5
     );
