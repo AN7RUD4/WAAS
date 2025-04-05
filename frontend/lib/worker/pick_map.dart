@@ -378,41 +378,44 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   void _startCollection() async {
-    setState(() => _isLoading = true);
+  setState(() => _isLoading = true);
 
-    try {
-      final token = await storage.read(key: 'jwt_token');
-      if (token == null) throw Exception('No authentication token found');
+  try {
+    final token = await storage.read(key: 'jwt_token');
+    print('Token: $token'); // Debug token
+    if (token == null) throw Exception('No authentication token found');
 
-      final response = await http.post(
-        Uri.parse('$apiBaseUrl/worker/start-task'),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode({'taskId': widget.taskid}),
+    print('Starting collection for taskId: ${widget.taskid}'); // Debug taskId
+    final response = await http.post(
+      Uri.parse('$apiBaseUrl/worker/start-task'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({'taskId': widget.taskid}),
+    );
+
+    print('Response status: ${response.statusCode}, Body: ${response.body}'); // Debug response
+    if (response.statusCode == 200) {
+      setState(() {
+        _collectionStarted = true;
+        _errorMessage = '';
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Collection started! Tap on locations to mark as collected'),
+        ),
       );
-
-      if (response.statusCode == 200) {
-        setState(() {
-          _collectionStarted = true;
-          _errorMessage = '';
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Collection started! Tap on locations to mark as collected'),
-          ),
-        );
-      } else {
-        throw Exception('Failed to start task: ${response.statusCode}');
-      }
-    } catch (e) {
-      setState(() => _errorMessage = 'Error starting collection: $e');
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error starting collection: $e')));
-    } finally {
-      setState(() => _isLoading = false);
+    } else {
+      throw Exception('Failed to start task: ${response.statusCode} - ${response.body}');
     }
+  } catch (e) {
+    setState(() => _errorMessage = 'Error starting collection: $e');
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error starting collection: $e')));
+  } finally {
+    setState(() => _isLoading = false);
   }
+}
 
   Future<void> _markAsCollected(LatLng location, int reportId, String wasteType) async {
     setState(() {

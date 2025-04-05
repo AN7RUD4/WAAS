@@ -707,14 +707,23 @@ router.post('/start-task', authenticateToken, checkWorkerOrAdminRole, async (req
         const { taskId } = req.body;
         const workerId = req.user.userid;
 
+        console.log(`Attempting to start task with taskId: ${taskId}, workerId: ${workerId}`);
+
         // Verify the task is assigned to this worker and in 'assigned' state
         const taskCheck = await pool.query(
             `SELECT 1 FROM taskrequests 
              WHERE taskid = $1 AND assignedworkerid = $2 AND status = 'assigned'`,
             [taskId, workerId]
         );
+        console.log(`Task check query result: ${JSON.stringify(taskCheck.rows)}`);
 
         if (taskCheck.rows.length === 0) {
+            // Check the current state of the task for more context
+            const taskState = await pool.query(
+                `SELECT status FROM taskrequests WHERE taskid = $1 AND assignedworkerid = $2`,
+                [taskId, workerId]
+            );
+            console.log(`Task state for taskId ${taskId}: ${JSON.stringify(taskState.rows)}`);
             return res.status(403).json({
                 error: 'Task not assigned to this worker or not in assigned state'
             });
@@ -735,7 +744,7 @@ router.post('/start-task', authenticateToken, checkWorkerOrAdminRole, async (req
             status: 'in-progress'
         });
     } catch (error) {
-        console.error('Error starting task:', error);
+        console.error('Error starting task:', error.message, error.stack);
         res.status(500).json({
             error: 'Internal Server Error',
             details: error.message
