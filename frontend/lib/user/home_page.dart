@@ -280,57 +280,104 @@ class _ReportPageState extends State<ReportPage> {
     );
   }
 
-  Future<void> _detectWaste() async {
-    if (_image == null) return;
+  String? _backgroundRemovedImage;
 
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-      _hasWaste = null;
-    });
+// Update _detectWaste function
+Future<void> _detectWaste() async {
+  if (_image == null) return;
 
-    try {
-      final token = await _getToken();
-      if (token == null) {
-        await _handleTokenExpiration();
-        return;
-      }
+  setState(() {
+    _isLoading = true;
+    _errorMessage = null;
+    _hasWaste = null;
+    _backgroundRemovedImage = null;
+  });
 
-      var request = http.MultipartRequest(
-        'POST',
-        Uri.parse('$apiBaseUrl/user/detect-waste'),
-      );
-      request.headers['Authorization'] = 'Bearer $token';
-      request.files.add(
-        await http.MultipartFile.fromPath(
-          'image',
-          _image!.path,
-          contentType: _getImageContentType(_image!.path),
-        ),
-      );
-
-      var response = await request.send();
-      var responseBody = await response.stream.bytesToString();
-      final jsonResponse = jsonDecode(responseBody);
-
-      if (response.statusCode == 200) {
-        setState(() {
-          _hasWaste = jsonResponse['hasWaste'] ?? false;
-        });
-      } else if (response.statusCode == 403 &&
-          jsonResponse['message'] == 'Invalid token') {
-        await _handleTokenExpiration();
-      } else {
-        throw Exception(jsonResponse['error'] ?? 'Failed to detect waste');
-      }
-    } catch (e) {
-      setState(() {
-        _errorMessage = 'Error detecting waste: $e';
-      });
-    } finally {
-      setState(() => _isLoading = false);
+  try {
+    final token = await _getToken();
+    if (token == null) {
+      await _handleTokenExpiration();
+      return;
     }
+
+    var request = http.MultipartRequest(
+      'POST',
+      Uri.parse('$apiBaseUrl/user/detect-waste'),
+    );
+    request.headers['Authorization'] = 'Bearer $token';
+    request.files.add(
+      await http.MultipartFile.fromPath(
+        'image',
+        _image!.path,
+        contentType: _getImageContentType(_image!.path),
+      ));
+
+    var response = await request.send();
+    var responseBody = await response.stream.bytesToString();
+    final jsonResponse = jsonDecode(responseBody);
+
+    if (response.statusCode == 200) {
+      setState(() {
+        _hasWaste = jsonResponse['hasWaste'] ?? false;
+        _backgroundRemovedImage = jsonResponse['backgroundRemoved'];
+      });
+    } else if (response.statusCode == 403 &&
+        jsonResponse['message'] == 'Invalid token') {
+      await _handleTokenExpiration();
+    } else {
+      throw Exception(jsonResponse['error'] ?? 'Failed to detect waste');
+    }
+  } catch (e) {
+    setState(() {
+      _errorMessage = 'Error detecting waste: $e';
+    });
+  } finally {
+    setState(() => _isLoading = false);
   }
+}
+
+// Update your build method to show both images
+Widget _buildImagePreview() {
+  if (_image == null) return const Text("No Image Selected", style: TextStyle(color: Colors.black54));
+  
+  return Column(
+    children: [
+      // Original image
+      Text("Original Image", style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
+      ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Image.file(_image!, height: 200, fit: BoxFit.cover),
+      ),
+      
+      SizedBox(height: 16),
+      
+      // Background removed image if available
+      if (_backgroundRemovedImage != null) ...[
+        Text("Background Removed", style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: Image.memory(
+            base64Decode(_backgroundRemovedImage!.split(',').last),
+            height: 200,
+            fit: BoxFit.cover,
+          ),
+        ),
+      ],
+      
+      if (_hasWaste != null) ...[
+        SizedBox(height: 8),
+        Text(
+          _hasWaste! ? "Waste Detected" : "Waste Not Detected",
+          style: GoogleFonts.poppins(
+            fontSize: 14,
+            color: _hasWaste! ? Colors.green : Colors.red,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    ],
+  );
+}
 
   MediaType? _getImageContentType(String path) {
     final extension = path.split('.').last.toLowerCase();
@@ -350,78 +397,100 @@ class _ReportPageState extends State<ReportPage> {
   }
 
   Future<void> _submitReport() async {
-    if (_image == null || locationController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Please select a photo and provide a location!"),
-        ),
-      );
-      return;
-    }
-
-    if (_hasWaste == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Please wait for waste detection to complete"),
-        ),
-      );
-      return;
-    }
-
-    if (!_hasWaste!) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Cannot submit report: No waste detected in the image"),
-        ),
-      );
-      return;
-    }
-
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
-
-    try {
-      final token = await _getToken();
-      if (token == null) {
-        await _handleTokenExpiration();
-        return;
-      }
-
-      var request = http.MultipartRequest(
-        'POST',
-        Uri.parse('$apiBaseUrl/user/report-waste'),
-      );
-      request.headers['Authorization'] = 'Bearer $token';
-      request.fields['location'] = locationController.text;
-      request.files.add(
-        await http.MultipartFile.fromPath('image', _image!.path),
-      );
-
-      var response = await request.send();
-      var responseBody = await response.stream.bytesToString();
-      final jsonResponse = jsonDecode(responseBody);
-
-      if (response.statusCode == 201) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Report submitted successfully!")),
-        );
-        Navigator.pop(context);
-      } else if (response.statusCode == 403 &&
-          jsonResponse['message'] == 'Invalid token') {
-        await _handleTokenExpiration();
-      } else {
-        throw Exception(jsonResponse['message'] ?? 'Failed to submit report');
-      }
-    } catch (e) {
-      setState(() {
-        _errorMessage = 'Error: $e';
-      });
-    } finally {
-      setState(() => _isLoading = false);
-    }
+  if (_image == null || locationController.text.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text("Please select a photo and provide a location!"),
+      ),
+    );
+    return;
   }
+
+  if (_hasWaste == null) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text("Please wait for waste detection to complete"),
+      ),
+    );
+    return;
+  }
+
+  if (!_hasWaste!) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text("Cannot submit report: No waste detected in the image"),
+      ),
+    );
+    return;
+  }
+
+  setState(() {
+    _isLoading = true;
+    _errorMessage = null;
+  });
+
+  try {
+    final token = await _getToken();
+    if (token == null) {
+      await _handleTokenExpiration();
+      return;
+    }
+
+    var request = http.MultipartRequest(
+      'POST',
+      Uri.parse('$apiBaseUrl/user/report-waste'),
+    );
+    request.headers['Authorization'] = 'Bearer $token';
+    request.fields['location'] = locationController.text;
+    
+    // Add original image
+    request.files.add(
+      await http.MultipartFile.fromPath('image', _image!.path),
+    );
+    
+    // Add background-removed image if available
+    if (_backgroundRemovedImage != null) {
+      // Extract the base64 data part (remove the data:image/png;base64, prefix if present)
+      String base64Data = _backgroundRemovedImage!;
+      if (_backgroundRemovedImage!.contains(',')) {
+        base64Data = _backgroundRemovedImage!.split(',').last;
+      }
+      
+      request.files.add(
+        http.MultipartFile.fromString(
+          'processed_image',
+          base64Data,
+          contentType: MediaType('image', 'png'),
+        ),
+      );
+    }
+
+    var response = await request.send();
+    var responseBody = await response.stream.bytesToString();
+    final jsonResponse = jsonDecode(responseBody);
+
+    if (response.statusCode == 201) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Report submitted successfully!")),
+      );
+      Navigator.pop(context);
+    } else if (response.statusCode == 403 &&
+        jsonResponse['message'] == 'Invalid token') {
+      await _handleTokenExpiration();
+    } else {
+      throw Exception(jsonResponse['message'] ?? 'Failed to submit report');
+    }
+  } catch (e) {
+    setState(() {
+      _errorMessage = 'Error: $e';
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text("Submission failed: ${e.toString()}")),
+    );
+  } finally {
+    setState(() => _isLoading = false);
+  }
+}
 
   Future<void> _takePicture() async {
     final ImagePicker picker = ImagePicker();

@@ -2,8 +2,6 @@ const express = require('express');
 const { Pool } = require('pg');
 const jwt = require('jsonwebtoken');
 const multer = require('multer');
-const tf = process.env.NODE_ENV === 'production' ? require('@tensorflow/tfjs-node') : require('@tensorflow/tfjs');
-const mobilenet = require('@tensorflow-models/mobilenet');
 const sharp = require('sharp');
 const fs = require('fs');
 
@@ -77,7 +75,6 @@ const fileFilter = (req, file, cb) => {
 };
 
 // Waste detection endpoint
-// Waste detection endpoint using Roboflow
 userRouter.post('/detect-waste', authenticateToken, upload.single('image'), async (req, res) => {
   let filePath;
   try {
@@ -94,33 +91,49 @@ userRouter.post('/detect-waste', authenticateToken, upload.single('image'), asyn
       .toBuffer();
     const imageBase64 = imageBuffer.toString('base64');
 
-    // Call Roboflow API
-    const roboflowResponse = await fetch('https://detect.roboflow.com/infer/workflows/anirudh-anilkumar-go0ru/detect-and-classify', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        api_key: process.env.ROBOFLOW_API_KEY,
-        inputs: {
-          "image": {"type": "base64", "value": imageBase64}
-        }
+    // Call both Roboflow APIs in parallel
+    const [detectionResponse, bgRemovalResponse] = await Promise.all([
+      fetch('https://detect.roboflow.com/infer/workflows/anirudh-anilkumar-go0ru/detect-and-classify', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          api_key: process.env.ROBOFLOW_API_KEY,
+          inputs: {
+            "image": {"type": "base64", "value": imageBase64}
+          }
+        })
+      }),
+      fetch('https://detect.roboflow.com/infer/workflows/anirudh-anilkumar-go0ru/background-removal', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          api_key: process.env.ROBOFLOW_API_KEY,
+          inputs: {
+            "image": {"type": "base64", "value": imageBase64}
+          }
+        })
       })
-    });
+    ]);
 
-    if (!roboflowResponse.ok) {
-      throw new Error(`Roboflow API error: ${roboflowResponse.statusText}`);
+    if (!detectionResponse.ok || !bgRemovalResponse.ok) {
+      throw new Error(`Roboflow API error: ${detectionResponse.statusText || bgRemovalResponse.statusText}`);
     }
 
-    const result = await roboflowResponse.json();
-    console.log('Roboflow response:', result);
+    const detectionResult = await detectionResponse.json();
+    const bgRemovalResult = await bgRemovalResponse.json();
+    console.log('Roboflow responses:', { detectionResult, bgRemovalResult });
 
-    // Process results to match your existing response format
+    // Process results
     const wasteResult = {
-      hasWaste: result.predictions && result.predictions.length > 0,
-      confidence: result.predictions?.[0]?.confidence || 0,
-      label: result.predictions?.[0]?.class || '',
-      predictions: result.predictions || []
+      hasWaste: detectionResult.predictions && detectionResult.predictions.length > 0,
+      confidence: detectionResult.predictions?.[0]?.confidence || 0,
+      label: detectionResult.predictions?.[0]?.class || '',
+      predictions: detectionResult.predictions || [],
+      backgroundRemoved: bgRemovalResult?.outputs?.[0]?.image || null // Base64 of bg removed image
     };
 
     res.json(wasteResult);
