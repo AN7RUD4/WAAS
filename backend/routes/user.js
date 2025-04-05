@@ -111,13 +111,25 @@ userRouter.post('/detect-waste', authenticateToken, upload.single('image'), asyn
     console.log('Roboflow responses:', { detectionResult, bgRemovalResult });
 
     // Process results
-    const wasteResult = {
-      hasWaste: detectionResult.predictions && detectionResult.predictions.length > 0,
-      confidence: detectionResult.predictions?.[0]?.confidence || 0,
-      label: detectionResult.predictions?.[0]?.class || '',
-      predictions: detectionResult.predictions || [],
-      backgroundRemoved: bgRemovalResult?.outputs?.[0]?.image || null // Base64 of bg removed image
-    };
+    // Process results more robustly
+const wasteResult = {
+  hasWaste: detectionResult.outputs?.some(output => 
+    output.predictions?.some(pred => 
+      pred.class === 'waste-waste' && pred.confidence > 0.5
+    )
+  ),
+  predictions: detectionResult.outputs?.[0]?.predictions || [],
+  backgroundRemoved: bgRemovalResult.outputs?.[0]?.image || null
+};
+
+// Add detailed class information
+if (wasteResult.predictions.length > 0) {
+  wasteResult.detailedResults = wasteResult.predictions.map(pred => ({
+    class: pred.class,
+    confidence: pred.confidence,
+    box: pred.bbox // if available
+  }));
+}
 
     res.json(wasteResult);
   } catch (error) {
