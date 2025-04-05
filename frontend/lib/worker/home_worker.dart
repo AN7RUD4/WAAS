@@ -27,8 +27,14 @@ class WorkerApp extends StatelessWidget {
         ),
         scaffoldBackgroundColor: Colors.grey[900],
       ),
-      home: WorkerHomePage(workerName: "Worker", workerId: "201"),
-      routes: {'/pickup-map': (context) => const MapScreen(taskid: 0)},
+      home: WorkerHomePage(workerName: "Worker", workerId: "203"), // Updated to match task 203
+      routes: {
+        '/pickup-map': (context) {
+          final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+          final taskId = args?['taskId'] ?? 0;
+          return MapScreen(taskid: taskId);
+        },
+      },
     );
   }
 }
@@ -76,7 +82,6 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
     }
   }
 
-  // Refresh the assigned works
   void _refreshTasks() {
     setState(() {
       _assignedWorksFuture = fetchAssignedWorks();
@@ -92,7 +97,6 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header Section
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -139,7 +143,6 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
                 ),
               ),
               const SizedBox(height: 16),
-              // Assigned Works Section
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -165,8 +168,7 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder:
-                                    (context) => const PastWorkDetailsPage(),
+                                builder: (context) => const PastWorkDetailsPage(),
                               ),
                             );
                           },
@@ -178,8 +180,7 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
                       child: FutureBuilder<List<Map<String, dynamic>>>(
                         future: _assignedWorksFuture,
                         builder: (context, snapshot) {
-                          if (snapshot.connectionState ==
-                              ConnectionState.waiting) {
+                          if (snapshot.connectionState == ConnectionState.waiting) {
                             return const Center(
                               child: CircularProgressIndicator(),
                             );
@@ -190,8 +191,7 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
                                 style: const TextStyle(color: Colors.white70),
                               ),
                             );
-                          } else if (!snapshot.hasData ||
-                              snapshot.data!.isEmpty) {
+                          } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
                             return const Center(
                               child: Text(
                                 "No tasks currently assigned",
@@ -212,14 +212,10 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
                                   distance: work['distance'],
                                   startTime: work['time'],
                                   onTap: () {
-                                    Navigator.push(
+                                    Navigator.pushNamed(
                                       context,
-                                      MaterialPageRoute(
-                                        builder:
-                                            (context) => MapScreen(
-                                              taskid: int.parse(work['taskId']),
-                                            ),
-                                      ),
+                                      '/pickup-map',
+                                      arguments: {'taskId': int.parse(work['taskId'])},
                                     );
                                   },
                                 );
@@ -344,9 +340,7 @@ class _PastWorkDetailsPageState extends State<PastWorkDetailsPage> {
     } else if (response.statusCode == 403) {
       throw Exception('Access denied: User is not a worker');
     } else {
-      throw Exception(
-        'Failed to load completed works: ${response.statusCode} - ${response.body}',
-      );
+      throw Exception('Failed to load completed works: ${response.body}');
     }
   }
 
@@ -361,9 +355,7 @@ class _PastWorkDetailsPageState extends State<PastWorkDetailsPage> {
         ),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () {
-            Navigator.pop(context);
-          },
+          onPressed: () => Navigator.pop(context),
         ),
       ),
       body: Padding(
@@ -408,19 +400,14 @@ class _PastWorkDetailsPageState extends State<PastWorkDetailsPage> {
                         return WorkListItem(
                           taskId: work['taskId'],
                           title: work['title'],
-                          distance:
-                              'N/A', // Distance not available for completed tasks
-                          startTime: work['startTime'],
+                          distance: 'N/A',
+                          startTime: null,
                           endTime: work['endTime'],
                           onTap: () {
-                            Navigator.push(
+                            Navigator.pushNamed(
                               context,
-                              MaterialPageRoute(
-                                builder:
-                                    (context) => MapScreen(
-                                      taskid: int.parse(work['taskId']),
-                                    ),
-                              ),
+                              '/pickup-map',
+                              arguments: {'taskId': int.parse(work['taskId'])},
                             );
                           },
                         );
