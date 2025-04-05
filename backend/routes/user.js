@@ -4,6 +4,7 @@ const jwt = require('jsonwebtoken');
 const multer = require('multer');
 const sharp = require('sharp');
 const fs = require('fs');
+const path = require('path');
 
 const userRouter = express.Router();
 
@@ -12,39 +13,6 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false },
 });
 
-// Image processing function
-const processImage = async (filePath) => {
-  try {
-    // 1. Process with sharp consistently
-    const { data, info } = await sharp(filePath)
-      .resize(224, 224)
-      .removeAlpha()
-      .ensureAlpha()
-      .raw()
-      .toBuffer({ resolveWithObject: true });
-
-    // 2. Validate buffer
-    const expectedLength = 224 * 224 * 3;
-    if (data.length !== expectedLength) {
-      throw new Error(`Invalid buffer length: ${data.length}, expected ${expectedLength}`);
-    }
-
-    // 3. Create normalized tensor
-    const pixels = new Float32Array(expectedLength);
-    for (let i = 0; i < data.length; i++) {
-      pixels[i] = (data[i] / 127.5) - 1.0; // Consistent [-1, 1] normalization
-    }
-
-    // 4. Create and verify tensor
-    const tensor = tf.tensor4d(pixels, [1, 224, 224, 3]);
-    console.log('Tensor shape:', tensor.shape);
-    
-    return tensor;
-  } catch (error) {
-    console.error('Image processing failed:', error);
-    throw new Error(`Image processing failed: ${error.message}`);
-  }
-};
 // Authentication middleware
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
@@ -58,21 +26,36 @@ const authenticateToken = (req, res, next) => {
   });
 };
 
-// Multer configuration
+// Configure storage for uploaded files
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, 'uploads/'),
-  filename: (req, file, cb) => cb(null, `${Date.now()}-${file.originalname}`),
+  destination: function (req, file, cb) {
+    const uploadDir = 'uploads/';
+    // Create uploads directory if it doesn't exist
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    cb(null, uploadDir);
+  },
+  filename: function (req, file, cb) {
+    // Create a unique filename
+    cb(null, Date.now() + path.extname(file.originalname));
+  }
 });
 
-const fileFilter = (req, file, cb) => {
-  const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/bmp', 'application/octet-stream'];
-  console.log('File MIME type:', file.mimetype);
-  if (allowedTypes.includes(file.mimetype)) {
+// Initialize multer upload middleware
+const upload = multer({ 
+  storage: storage,
+  limits: {
+    fileSize: 5 * 1024 * 1024 // 5MB file size limit
+  },
+  fileFilter: (req, file, cb) => {
+    // Accept images only
+    if (!file.originalname.match(/\.(jpg|jpeg|png|gif)$/)) {
+      return cb(new Error('Only image files are allowed!'), false);
+    }
     cb(null, true);
-  } else {
-    cb(new Error('Invalid file type. Only JPEG, PNG, GIF, BMP, and generic binary streams are allowed.'), false);
   }
-};
+});
 
 // Waste detection endpoint
 userRouter.post('/detect-waste', authenticateToken, upload.single('image'), async (req, res) => {
