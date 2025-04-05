@@ -77,116 +77,53 @@ const fileFilter = (req, file, cb) => {
 };
 
 // Waste detection endpoint
+// Waste detection endpoint using Roboflow
 userRouter.post('/detect-waste', authenticateToken, upload.single('image'), async (req, res) => {
   let filePath;
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'No image provided' });
     }
-    if (!wasteModel) {
-      return res.status(500).json({ error: 'AI model not loaded' });
-    }
 
     filePath = req.file.path;
     console.log('Processing image:', filePath);
 
-    // Convert the uploaded file to JPEG
-    const convertedPath = `uploads/converted-${Date.now()}.jpg`;
-    await sharp(req.file.path)
-      .toFormat('jpeg')
-      .toFile(convertedPath);
+    // Convert image to base64
+    const imageBuffer = await sharp(filePath)
+      .resize(640, 640) // Resize to common inference size
+      .toBuffer();
+    const imageBase64 = imageBuffer.toString('base64');
 
-    // Preprocess the converted image to 224x224
-    let imageBuffer;
-    if (process.env.NODE_ENV === 'production') {
-      imageBuffer = await sharp(convertedPath)
-        .resize(224, 224)
-        .jpeg()
-        .toBuffer();
-
-      console.log('Image buffer length (production):', imageBuffer.length);
-    } else {
-      imageBuffer = await sharp(convertedPath)
-        .resize(224, 224)
-        .toFormat('jpeg')
-        .raw()
-        .toBuffer();
-
-      console.log('Image buffer length (development):', imageBuffer.length);
-    }
-
-    // Clean up the converted file
-    fs.unlink(convertedPath, (err) => {
-      if (err) console.error('Failed to delete converted file:', err);
+    // Call Roboflow API
+    const roboflowResponse = await fetch('https://detect.roboflow.com/infer/workflows/anirudh-anilkumar-go0ru/detect-and-classify', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        api_key: process.env.ROBOFLOW_API_KEY,
+        inputs: {
+          "image": {"type": "base64", "value": imageBase64}
+        }
+      })
     });
 
-    // Convert to tensor based on environment
-    let tensor;
-    if (process.env.NODE_ENV === 'production') {
-      tensor = tf.node.decodeImage(imageBuffer, 3)
-        .toFloat()
-        .div(tf.scalar(127.5))
-        .sub(tf.scalar(1))
-        .expandDims();
-    } else {
-      const imageData = new Uint8Array(imageBuffer);
-      tensor = tf.tensor3d(imageData, [224, 224, 3])
-        .toFloat()
-        .div(tf.scalar(127.5))
-        .sub(tf.scalar(1))
-        .expandDims();
+    if (!roboflowResponse.ok) {
+      throw new Error(`Roboflow API error: ${roboflowResponse.statusText}`);
     }
 
-    // Predict
-    const predictions = await wasteModel.classify(tensor);
-    tf.dispose(tensor);
-    console.log('All predictions:', predictions);
+    const result = await roboflowResponse.json();
+    console.log('Roboflow response:', result);
 
-    // Define waste-related labels
-    // Define waste-related labels
-const wasteLabels = [
-  'trash', 'plastic', 'bottle', 'cardboard', 'paper', 'waste', 'garbage', 'rubbish',
-  'container', 'wrapper', 'can', 'glass', 'metal', 'organic', 'recyclable', 'debris',
-  'water bottle', 'soda can', 'plastic bag', 'bin', 'litter', 'scrap', 'refuse',
-  'dump', 'heap', 'pile', 'junk', 'recycle', 'compost', 'biodegradable'
-];
-    const hasWaste = predictions.some(pred =>
-      wasteLabels.some(label => pred.className.toLowerCase().includes(label))
-    );
+    // Process results to match your existing response format
+    const wasteResult = {
+      hasWaste: result.predictions && result.predictions.length > 0,
+      confidence: result.predictions?.[0]?.confidence || 0,
+      label: result.predictions?.[0]?.class || '',
+      predictions: result.predictions || []
+    };
 
-const MIN_CONFIDENCE = 0.5; // Define a clear threshold
-
-function isWaste(prediction) {
-  const label = prediction.className.toLowerCase();
-  return WASTE_LABELS.has(label) && prediction.probability >= MIN_CONFIDENCE;
-}
-
-    const wasteResult = predictions.reduce((result, pred) => {
-      const isWaste = wasteLabels.some(label =>
-        pred.className.toLowerCase().includes(label)
-      );
-
-      if (isWaste && pred.probability > (result.confidence || 0)) {
-        return {
-          hasWaste: true,
-          confidence: pred.probability,
-          label: pred.className
-        };
-      }
-      return result;
-    }, { hasWaste: false });
-
-    // Log the result
-    if (wasteResult.hasWaste) {
-      console.log('Waste detected:', wasteResult);
-    } else {
-      console.log('No waste detected. Top predictions:', predictions.slice(0, 5));
-    }
-
-    res.json({
-      ...wasteResult,
-      predictions: predictions.slice(0, 5)
-    });
+    res.json(wasteResult);
   } catch (error) {
     console.error('Detection error:', error);
     res.status(500).json({ error: 'Detection failed', details: error.message });
