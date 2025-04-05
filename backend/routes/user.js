@@ -54,6 +54,7 @@ const upload = multer({
 });
 
 // Waste detection endpoint
+// Waste detection endpoint (modified to call only background removal)
 userRouter.post('/detect-waste', authenticateToken, upload.single('image'), async (req, res) => {
   let filePath;
   try {
@@ -70,70 +71,42 @@ userRouter.post('/detect-waste', authenticateToken, upload.single('image'), asyn
       .toBuffer();
     const imageBase64 = imageBuffer.toString('base64');
 
-    // Call both Roboflow APIs in parallel
-    const [detectionResponse, bgRemovalResponse] = await Promise.all([
-      fetch('https://detect.roboflow.com/infer/workflows/anirudh-anilkumar-go0ru/detect-and-classify', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          api_key: process.env.ROBOFLOW_API_KEY,
-          inputs: {
-            "image": {"type": "base64", "value": imageBase64}
-          }
-        })
-      }),
-      fetch('https://detect.roboflow.com/infer/workflows/anirudh-anilkumar-go0ru/background-removal', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          api_key: process.env.ROBOFLOW_API_KEY,
-          inputs: {
-            "image": {"type": "base64", "value": imageBase64}
-          }
-        })
+    // Call only the background removal Roboflow API
+    const bgRemovalResponse = await fetch('https://detect.roboflow.com/infer/workflows/anirudh-anilkumar-go0ru/background-removal', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        api_key: process.env.ROBOFLOW_API_KEY,
+        inputs: {
+          "image": { "type": "base64", "value": imageBase64 }
+        }
       })
-    ]);
+    });
 
-    if (!detectionResponse.ok || !bgRemovalResponse.ok) {
-      throw new Error(`Roboflow API error: ${detectionResponse.statusText || bgRemovalResponse.statusText}`);
+    if (!bgRemovalResponse.ok) {
+      throw new Error(`Roboflow API error: ${bgRemovalResponse.statusText}`);
     }
 
-    const detectionResult = await detectionResponse.json();
     const bgRemovalResult = await bgRemovalResponse.json();
-    console.log('Raw detection result:', JSON.stringify(detectionResult, null, 2));
     console.log('Raw background removal result:', JSON.stringify(bgRemovalResult, null, 2));
 
-    // Process results
-    const predictions = detectionResult.outputs?.[0]?.predictions || [];
-    if (!Array.isArray(predictions)) {
-      console.warn('Predictions is not an array, defaulting to empty array:', predictions);
-      throw new Error('Invalid predictions format from Roboflow API');
-    }
-
-    const hasWaste = predictions.some(pred => 
-      pred.class === 'waste-waste' && pred.confidence > 0.5
-    );
+    // Process the background removal result
+    const backgroundRemoved = bgRemovalResult.outputs?.[0]?.image || null;
 
     const wasteResult = {
-      hasWaste,
-      predictions,
-      backgroundRemoved: bgRemovalResult.outputs?.[0]?.image || null,
-      detailedResults: predictions.map(pred => ({
-        class: pred.class,
-        confidence: pred.confidence,
-        box: pred.bbox
-      }))
+      hasWaste: false, // No detection, so default to false
+      predictions: [], // No predictions since we're skipping detection
+      backgroundRemoved: backgroundRemoved,
+      detailedResults: [] // No detailed results without detection
     };
 
     res.json(wasteResult);
   } catch (error) {
-    console.error('Detection error:', error);
+    console.error('Background removal error:', error);
     res.status(500).json({ 
-      error: 'Detection failed', 
+      error: 'Background removal failed', 
       details: error.message,
       stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
