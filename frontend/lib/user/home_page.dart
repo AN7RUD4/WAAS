@@ -6,12 +6,9 @@ import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:waas/services/chatbot_service.dart';
 import '../colors/colors.dart';
 import 'package:waas/assets/constants.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:flutter_chat_ui/flutter_chat_ui.dart';
-import 'package:flutter_chat_types/flutter_chat_types.dart' as types;
 
 // Main user dashboard page
 class UserApp extends StatelessWidget {
@@ -185,23 +182,6 @@ class UserApp extends StatelessWidget {
             ],
           ),
         ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder:
-                  (context) => ChatbotWidget(
-                    agentId: 'rjty2MMFjS1r_f7Vn_nCf', // Replace with actual ID
-                    apiKey:
-                        'af1z911nzgqobrw7fb07r14yv9kc9vrk', // Replace with actual key
-                  ),
-            ),
-          );
-        },
-        child: const Icon(Icons.chat),
-        backgroundColor: Colors.green.shade700,
       ),
     );
   }
@@ -1179,140 +1159,3 @@ class _CollectionRequestsPageState extends State<CollectionRequestsPage> {
   }
 }
 
-class ChatbotWidget extends StatefulWidget {
-  final String agentId;
-  final String apiKey;
-
-  const ChatbotWidget({super.key, required this.agentId, required this.apiKey});
-
-  @override
-  _ChatbotWidgetState createState() => _ChatbotWidgetState();
-}
-
-class _ChatbotWidgetState extends State<ChatbotWidget> {
-  final List<types.Message> _messages = [];
-  late final ChatbotService _chatbotService;
-  bool _isLoading = false;
-  final _inputController = TextEditingController();
-
-  @override
-  void initState() {
-    super.initState();
-    _chatbotService = ChatbotService(
-      agentId: widget.agentId,
-      apiKey: widget.apiKey,
-    );
-    _addWelcomeMessage();
-  }
-
-  @override
-  void dispose() {
-    _inputController.dispose();
-    super.dispose();
-  }
-
-  void _addWelcomeMessage() {
-    final welcomeMessage = types.TextMessage(
-      author: const types.User(id: 'bot'),
-      createdAt: DateTime.now().millisecondsSinceEpoch,
-      id: 'welcome',
-      text:
-          'Hello! I\'m your waste management assistant. How can I help you today?',
-    );
-    setState(() {
-      _messages.insert(0, welcomeMessage);
-    });
-  }
-
-  void _handleSendPressed(types.PartialText message) async {
-    if (message.text.trim().isEmpty) return;
-
-    final userMessage = types.TextMessage(
-      author: const types.User(id: 'user'),
-      createdAt: DateTime.now().millisecondsSinceEpoch,
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      text: message.text,
-    );
-
-    setState(() {
-      _messages.insert(0, userMessage);
-      _isLoading = true;
-      _inputController.clear();
-    });
-
-    try {
-      final response = await _chatbotService.sendMessage(message.text);
-
-      final botMessage = types.TextMessage(
-        author: const types.User(id: 'bot'),
-        createdAt: DateTime.now().millisecondsSinceEpoch,
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
-        text: response,
-      );
-
-      setState(() {
-        _messages.insert(0, botMessage);
-      });
-    } catch (e) {
-      final errorMessage = types.TextMessage(
-        author: const types.User(id: 'bot'),
-        createdAt: DateTime.now().millisecondsSinceEpoch,
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
-        text: 'Sorry, I encountered an error. Please try again later.',
-      );
-      setState(() {
-        _messages.insert(0, errorMessage);
-      });
-    } finally {
-      setState(() {
-        _isLoading = false;
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Waste Management Assistant'),
-        backgroundColor: Colors.green.shade700,
-        foregroundColor: Colors.white,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.close),
-            onPressed: () => Navigator.pop(context),
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          Expanded(
-            child: Chat(
-              messages: _messages,
-              onSendPressed: _handleSendPressed,
-              showUserAvatars: true,
-              showUserNames: true,
-              theme: DefaultChatTheme(
-                primaryColor: Colors.green.shade700,
-                secondaryColor: Colors.green.shade100,
-                inputBackgroundColor: Colors.grey.shade100,
-                inputTextColor: Colors.black87,
-                receivedMessageBodyTextStyle: TextStyle(
-                  color: Colors.grey.shade800,
-                ),
-                sentMessageBodyTextStyle: const TextStyle(color: Colors.white),
-              ),
-              user: const types.User(id: 'user'),
-            ),
-          ),
-          if (_isLoading)
-            const LinearProgressIndicator(
-              minHeight: 2,
-              backgroundColor: Colors.transparent,
-              color: Colors.green,
-            ),
-        ],
-      ),
-    );
-  }
-}
