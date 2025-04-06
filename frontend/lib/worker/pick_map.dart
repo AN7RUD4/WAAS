@@ -118,7 +118,6 @@ class _MapScreenState extends State<MapScreen> {
         _updateCompleteRoute();
         _calculateDistances();
         _updateDirectionsBasedOnLocation();
-        _erasePolylineAtWorkerLocation();
       }
     });
   }
@@ -381,25 +380,6 @@ class _MapScreenState extends State<MapScreen> {
     }
   }
 
-  void _erasePolylineAtWorkerLocation() {
-    if (_workerLocation == null || _completeRoute.length <= 1) return;
-
-    for (int i = 0; i < _completeRoute.length - 1; i++) {
-      double distanceToPoint = _haversineDistance(_workerLocation!, _completeRoute[i]);
-      if (distanceToPoint < 50) {
-        _completeRoute = _completeRoute.sublist(i + 1);
-        _route = _route.sublist(i);
-        _directionSteps = _directionSteps.sublist(_currentInstructionIndex + 1);
-        _currentInstructionIndex = 0;
-        _directions = _directionSteps.isNotEmpty
-            ? '${_directionSteps[0]['symbol']} (${_directionSteps[0]['distance']} km)'
-            : "🏁 (0.00 km)";
-        _calculateDistances();
-        break;
-      }
-    }
-  }
-
   void _startCollection() async {
     setState(() => _isLoading = true);
 
@@ -462,7 +442,7 @@ class _MapScreenState extends State<MapScreen> {
       final responseData = jsonDecode(response.body);
 
       if (response.statusCode == 200) {
-        setState(() {
+        setState(() async {
           _collectedReports.add(reportId);
           _currentCollectionPoint = null;
           _currentWasteType = null;
@@ -474,7 +454,8 @@ class _MapScreenState extends State<MapScreen> {
             _wasteTypes.removeAt(index);
             _updateCompleteRoute();
             _calculateDistances();
-            _fetchRouteFromOSRM(); // Re-fetch route to update polyline
+            _route = await _fetchRouteFromOSRM(); // Re-fetch route to update polyline
+            _updateDirectionsBasedOnLocation();
           }
         });
 
@@ -486,7 +467,8 @@ class _MapScreenState extends State<MapScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('All locations collected! Task completed')),
           );
-          Navigator.popUntil(context, (route) => route.isFirst); // Return to home page
+          // Navigate to the homepage
+          Navigator.pushNamedAndRemoveUntil(context, '/home', (route) => false);
         }
       } else {
         throw Exception(responseData['error'] ?? 'Failed to mark collected');
