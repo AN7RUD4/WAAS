@@ -748,7 +748,7 @@ router.post('/mark-collected', authenticateToken, checkWorkerOrAdminRole, async 
         await pool.query(
             `UPDATE garbagereports 
              SET status = 'collected', 
-             WHERE reportid = $2`,
+             WHERE reportid = $1`,
             [reportId]
         );
 
