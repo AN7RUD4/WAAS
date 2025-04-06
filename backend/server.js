@@ -4,6 +4,7 @@ const profileRouter = require('./routes/profile');
 const userRouter = require('./routes/user');
 const workerRouter = require('./routes/worker'); 
 const cors = require('cors');
+const cron = require('node-cron');
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -30,22 +31,75 @@ app.use('/api/profile', profileRouter);
 app.use('/api/user', userRouter);
 app.use('/api/worker', workerRouter); 
 
-const cron = require('node-cron');
-const axios = require('axios');
-
-// Schedule to run every hour
-cron.schedule('0 * * * *', async () => {
+async function getAdminToken() {
   try {
+    // If you have a stored token that's still valid, use it
+    if (process.env.ADMIN_JWT_TOKEN) {
+      try {
+        jwt.verify(process.env.ADMIN_JWT_TOKEN, process.env.JWT_SECRET || 'passwordKey');
+        return process.env.ADMIN_JWT_TOKEN;
+      } catch (e) {
+        // Token expired, need to get a new one
+      }
+    }
+
+    // Get new token by logging in
     const response = await axios.post(
-      process.env.API_BASE_URL || '$apiBaseUrl/worker/group-and-assign-reports', // Replace $apiBaseUrl with environment variable
-      {},
-      { headers: { Authorization: 'Bearer <admin-jwt-token>' } }
+      `${process.env.API_BASE_URL}/admin-login`,
+      {
+        username: process.env.ADMIN_USERNAME,
+        password: process.env.ADMIN_PASSWORD
+      }
     );
-    console.log('Scheduled assignment completed:', response.data);
+
+    // Store the new token in memory (or in a secure storage for production)
+    process.env.ADMIN_JWT_TOKEN = response.data.token;
+    return response.data.token;
   } catch (error) {
-    console.error('Scheduled assignment failed:', error.message);
+    console.error('Failed to get admin token:', error.message);
+    return null;
   }
+}
+
+// Schedule to run every 2 hours
+cron.schedule('0 */2 * * *', async () => {
+  try {
+    const adminJwtToken = await getAdminToken();
+    
+    if (!adminJwtToken) {
+      throw new Error('Admin JWT token not available');
+    }
+
+    const response = await axios.post(
+      `${process.env.API_BASE_URL_WORKER}/worker/group-and-assign-reports`,
+      {}, // Empty request body
+      {
+        headers: { 
+          Authorization: `Bearer ${adminJwtToken}`,
+          'Content-Type': 'application/json'
+        },
+        timeout: 30000 // 30-second timeout
+      }
+    );
+
+    console.log('Scheduled assignment completed:', {
+      status: response.status,
+      data: response.data
+    });
+    
+  } catch (error) {
+    console.error('Scheduled assignment failed:', {
+      time: new Date().toISOString(),
+      error: error.response?.data || error.message,
+      stack: error.stack
+    });
+  }
+}, {
+  scheduled: true,
+  timezone: "Asia/Kolkata" // Using IANA timezone for India
 });
+
+console.log('Cron job scheduled to run every 2 hours for report assignments');
 
 // Error handling middleware
 app.use((err, req, res, next) => {

@@ -61,7 +61,7 @@ const authenticateToken = (req, res, next) => {
 // Role check middleware
 const checkWorkerOrAdminRole = (req, res, next) => {
     console.log('Checking role for user:', req.user);
-    if (!req.user || (req.user.role.toLowerCase() !== 'worker' && req.user.role.toLowerCase() !== 'admin')) {
+    if (!req.user || (req.user.role.toLowerCase() !== 'worker' && req.user.role.toLowerCase() !== 'official')) {
         console.log('Access denied: role not worker or admin');
         return res.status(403).json({ message: 'Access denied: Only workers or admins can access this endpoint' });
     }
@@ -359,16 +359,20 @@ router.post('/group-and-assign-reports', authenticateToken, checkWorkerOrAdminRo
 
             console.log('Fetching available workers...');
             let workerResult = await pool.query(
+                // `SELECT userid, ST_AsText(location) AS location
+                //  FROM users
+                //  WHERE role = 'worker'
+                //  AND userid NOT IN (
+                //    SELECT assignedworkerid
+                //    FROM taskrequests
+                //    WHERE status != 'completed'
+                //    GROUP BY assignedworkerid
+                //    HAVING COUNT(*) >= 5
+                //  )`
                 `SELECT userid, ST_AsText(location) AS location
                  FROM users
                  WHERE role = 'worker'
-                 AND userid NOT IN (
-                   SELECT assignedworkerid
-                   FROM taskrequests
-                   WHERE status != 'completed'
-                   GROUP BY assignedworkerid
-                   HAVING COUNT(*) >= 5
-                 )`
+                 AND status='available`
             );
             let workers = workerResult.rows.map(row => {
                 const locMatch = row.location ? row.location.match(/POINT\(([^ ]+) ([^)]+)\)/) : null;
@@ -665,7 +669,6 @@ router.post('/start-task', authenticateToken, checkWorkerOrAdminRole, async (req
 });
 
 // Mark collected endpoint
-// Mark collected endpoint - updated
 router.post('/mark-collected', authenticateToken, checkWorkerOrAdminRole, async (req, res) => {
     try {
         const { taskId, reportId } = req.body;
@@ -744,7 +747,6 @@ router.post('/mark-collected', authenticateToken, checkWorkerOrAdminRole, async 
                  WHERE taskid = $2`,
                 [progress, taskId]
             );
-
         }
 
         // Commit the transaction
