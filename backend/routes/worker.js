@@ -359,16 +359,20 @@ router.post('/group-and-assign-reports', authenticateToken, checkWorkerOrAdminRo
 
             console.log('Fetching available workers...');
             let workerResult = await pool.query(
+                // `SELECT userid, ST_AsText(location) AS location
+                //  FROM users
+                //  WHERE role = 'worker'
+                //  AND userid NOT IN (
+                //    SELECT assignedworkerid
+                //    FROM taskrequests
+                //    WHERE status != 'completed'
+                //    GROUP BY assignedworkerid
+                //    HAVING COUNT(*) >= 5
+                //  )`
                 `SELECT userid, ST_AsText(location) AS location
                  FROM users
                  WHERE role = 'worker'
-                 AND userid NOT IN (
-                   SELECT assignedworkerid
-                   FROM taskrequests
-                   WHERE status != 'completed'
-                   GROUP BY assignedworkerid
-                   HAVING COUNT(*) >= 5
-                 )`
+                 AND status='available`
             );
             let workers = workerResult.rows.map(row => {
                 const locMatch = row.location ? row.location.match(/POINT\(([^ ]+) ([^)]+)\)/) : null;
