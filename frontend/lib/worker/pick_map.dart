@@ -167,11 +167,7 @@ class _MapScreenState extends State<MapScreen> {
         });
 
         if (_workerLocation != null && _locations.isNotEmpty) {
-          _route = await _fetchRouteFromOSRM();
-          if (_route.isEmpty) {
-            _route = _locations;
-            setState(() => _errorMessage = 'Failed to fetch route from OSRM. Showing straight-line path.');
-          }
+          await _updateRoute();
           _updateCompleteRoute();
           _calculateDistances();
           _updateDirectionsBasedOnLocation();
@@ -195,6 +191,14 @@ class _MapScreenState extends State<MapScreen> {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error fetching task data: $e')));
     } finally {
       setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _updateRoute() async {
+    _route = await _fetchRouteFromOSRM();
+    if (_route.isEmpty) {
+      _route = _locations;
+      setState(() => _errorMessage = 'Failed to fetch route from OSRM. Showing straight-line path.');
     }
   }
 
@@ -420,6 +424,13 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   Future<void> _markAsCollected(LatLng location, int reportId, String wasteType) async {
+    if (_collectedReports.contains(reportId)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('This report is already collected')),
+      );
+      return;
+    }
+
     setState(() {
       _currentCollectionPoint = location;
       _currentWasteType = wasteType;
@@ -442,7 +453,7 @@ class _MapScreenState extends State<MapScreen> {
       final responseData = jsonDecode(response.body);
 
       if (response.statusCode == 200) {
-        setState(() async {
+        setState(() {
           _collectedReports.add(reportId);
           _currentCollectionPoint = null;
           _currentWasteType = null;
@@ -452,22 +463,30 @@ class _MapScreenState extends State<MapScreen> {
             _route.removeAt(index + 1); // +1 to skip worker location at index 0
             _reportIds.removeAt(index);
             _wasteTypes.removeAt(index);
-            _updateCompleteRoute();
-            _calculateDistances();
-            _route = await _fetchRouteFromOSRM(); // Re-fetch route to update polyline
-            _updateDirectionsBasedOnLocation();
           }
         });
+
+        await _updateRoute(); // Re-fetch route after collection
+        _updateCompleteRoute();
+        _calculateDistances();
+        _updateDirectionsBasedOnLocation();
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('${responseData['message']} (${responseData['remainingReports']} remaining)')),
         );
 
         if (responseData['taskStatus'] == 'completed') {
+          setState(() {
+            _locations.clear();
+            _route.clear();
+            _completeRoute.clear();
+            _collectedReports.clear();
+            _reportIds.clear();
+            _wasteTypes.clear();
+          });
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('All locations collected! Task completed')),
           );
-          // Navigate to the homepage
           Navigator.pushNamedAndRemoveUntil(context, '/home', (route) => false);
         }
       } else {

@@ -27,10 +27,14 @@ class WorkerApp extends StatelessWidget {
         ),
         scaffoldBackgroundColor: Colors.grey[900],
       ),
-      home: WorkerHomePage(workerName: "Worker", workerId: "203"), // Updated to match task 203
+      initialRoute: '/home',
       routes: {
+        '/home':
+            (context) => WorkerHomePage(workerName: "Worker", workerId: "203"),
         '/pickup-map': (context) {
-          final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+          final args =
+              ModalRoute.of(context)?.settings.arguments
+                  as Map<String, dynamic>?;
           final taskId = args?['taskId'] ?? 0;
           return MapScreen(taskid: taskId);
         },
@@ -38,6 +42,8 @@ class WorkerApp extends StatelessWidget {
     );
   }
 }
+
+// [Rest of WorkerHomePage, WorkListItem, and PastWorkDetailsPage remain unchanged]
 
 class WorkerHomePage extends StatefulWidget {
   final String workerName;
@@ -168,7 +174,8 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (context) => const PastWorkDetailsPage(),
+                                builder:
+                                    (context) => const PastWorkDetailsPage(),
                               ),
                             );
                           },
@@ -180,7 +187,8 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
                       child: FutureBuilder<List<Map<String, dynamic>>>(
                         future: _assignedWorksFuture,
                         builder: (context, snapshot) {
-                          if (snapshot.connectionState == ConnectionState.waiting) {
+                          if (snapshot.connectionState ==
+                              ConnectionState.waiting) {
                             return const Center(
                               child: CircularProgressIndicator(),
                             );
@@ -191,7 +199,8 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
                                 style: const TextStyle(color: Colors.white70),
                               ),
                             );
-                          } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                          } else if (!snapshot.hasData ||
+                              snapshot.data!.isEmpty) {
                             return const Center(
                               child: Text(
                                 "No tasks currently assigned",
@@ -215,7 +224,9 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
                                     Navigator.pushNamed(
                                       context,
                                       '/pickup-map',
-                                      arguments: {'taskId': int.parse(work['taskId'])},
+                                      arguments: {
+                                        'taskId': int.parse(work['taskId']),
+                                      },
                                     );
                                   },
                                 );

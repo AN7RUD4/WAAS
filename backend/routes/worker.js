@@ -721,10 +721,13 @@ router.post('/start-task', authenticateToken, checkWorkerOrAdminRole, async (req
 });
 
 // Mark collected endpoint
+// Mark collected endpoint (Updated)
 router.post('/mark-collected', authenticateToken, checkWorkerOrAdminRole, async (req, res) => {
     try {
         const { taskId, reportId } = req.body;
         const workerId = req.user.userid;
+
+        console.log(`Marking report ${reportId} as collected for task ${taskId} by worker ${workerId}`);
 
         const taskCheck = await pool.query(
             `SELECT reportids FROM taskrequests 
@@ -746,13 +749,16 @@ router.post('/mark-collected', authenticateToken, checkWorkerOrAdminRole, async 
             });
         }
 
+        // Update report status to 'collected'
         await pool.query(
             `UPDATE garbagereports 
              SET status = 'collected' 
              WHERE reportid = $1`,
             [reportId]
         );
+        console.log(`Report ${reportId} marked as collected`);
 
+        // Check remaining uncollected reports
         const uncollectedCount = await pool.query(
             `SELECT COUNT(*) FROM garbagereports 
              WHERE reportid = ANY($1) AND status != 'collected'`,
@@ -760,6 +766,7 @@ router.post('/mark-collected', authenticateToken, checkWorkerOrAdminRole, async 
         );
 
         const remaining = uncollectedCount.rows[0].count;
+        console.log(`Remaining uncollected reports: ${remaining}`);
 
         if (remaining === 0) {
             await pool.query(
@@ -769,9 +776,11 @@ router.post('/mark-collected', authenticateToken, checkWorkerOrAdminRole, async 
                  WHERE taskid = $1`,
                 [taskId]
             );
+            console.log(`Task ${taskId} marked as completed`);
             return res.status(200).json({
                 message: 'All reports collected! Task completed',
-                taskStatus: 'completed'
+                taskStatus: 'completed',
+                remainingReports: 0
             });
         }
 
@@ -781,7 +790,7 @@ router.post('/mark-collected', authenticateToken, checkWorkerOrAdminRole, async 
             taskStatus: 'in-progress'
         });
     } catch (error) {
-        console.error('Error marking report as collected:', error);
+        console.error('Error marking report as collected:', error.message, error.stack);
         res.status(500).json({
             error: 'Internal Server Error',
             details: error.message
