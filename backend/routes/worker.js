@@ -716,7 +716,7 @@ router.post('/mark-collected', authenticateToken, checkWorkerOrAdminRole, async 
         const remaining = parseInt(uncollectedCount.rows[0].count);
 
         // 5. Update task progress
-        const progress = 1 - (remaining / reportIds.length);
+        const progress = (1 - (remaining / reportIds.length))*100;
         let taskStatus = taskCheck.rows[0].status;
 
         // If all reports are collected, update task status
@@ -733,11 +733,18 @@ router.post('/mark-collected', authenticateToken, checkWorkerOrAdminRole, async 
         } else {
             // Just update progress if not completed
             await pool.query(
+                `UPDATE garbagereports 
+                 SET status = $1
+                 WHERE reportid = $2`,
+                ['collected', reportId]
+            );
+            await pool.query(
                 `UPDATE taskrequests 
                  SET progress = $1
                  WHERE taskid = $2`,
                 [progress, taskId]
             );
+
         }
 
         // Commit the transaction
