@@ -297,47 +297,65 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   Future<void> _markAsCollected() async {
-    if (_selectedLocation == null || _selectedReportId == null) return;
+  if (_selectedLocation == null || _selectedReportId == null) return;
 
-    setState(() => _isLoading = true);
-    try {
-      final token = await storage.read(key: 'jwt_token');
-      if (token == null) throw Exception('No authentication token found');
+  setState(() => _isLoading = true);
+  try {
+    final token = await storage.read(key: 'jwt_token');
+    if (token == null) throw Exception('No authentication token found');
 
-      final response = await http.post(
-        Uri.parse('$apiBaseUrl/worker/mark-collected'),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode({
-          'taskId': widget.taskid,
-          'reportId': _selectedReportId,
-        }),
-      );
+    final response = await http.post(
+      Uri.parse('$apiBaseUrl/worker/mark-collected'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({
+        'taskId': widget.taskid,
+        'reportId': _selectedReportId,
+      }),
+    );
 
-      final responseData = jsonDecode(response.body);
+    final responseData = jsonDecode(response.body);
 
-      if (response.statusCode == 200) {
-        setState(() {
-          _collectedReports.add(_selectedReportId!);
-          _selectedLocation = null;
-          _selectedReportId = null;
-          _selectedWasteType = null;
-        });
+    if (response.statusCode == 200) {
+      // Immediately update the UI
+      setState(() {
+        _collectedReports.add(_selectedReportId!);
+        _locations.removeWhere((loc) => loc == _selectedLocation);
+        _reportIds.remove(_selectedReportId);
+        _wasteTypes.remove(_selectedWasteType);
+        _selectedLocation = null;
+        _selectedReportId = null;
+        _selectedWasteType = null;
+      });
 
-        if (responseData['taskStatus'] == 'completed') {
-          Navigator.pop(context);
-        } else {
-          _fetchCollectionRequestData();
-        }
+      // Refresh the route
+      if (_workerLocation != null && _locations.isNotEmpty) {
+        _route = await _fetchRouteFromOSRM();
+        _updateCompleteRoute();
+        _calculateDistances();
       }
-    } catch (e) {
-      setState(() => _errorMessage = 'Error marking collected: $e');
-    } finally {
-      setState(() => _isLoading = false);
+
+      if (responseData['taskStatus'] == 'completed') {
+        // Show success message and navigate back
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Task completed successfully!')),
+        );
+        Navigator.pop(context, true); // Pass true to indicate completion
+      }
+    } else {
+      throw Exception('Failed to mark collected: ${response.body}');
     }
+  } catch (e) {
+    setState(() => _errorMessage = 'Error marking collected: $e');
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Error: $e')),
+    );
+  } finally {
+    setState(() => _isLoading = false);
   }
+}
 
   void _selectLocation(int index) {
     if (index >= _locations.length) return;

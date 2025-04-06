@@ -671,28 +671,34 @@ router.post('/mark-collected', authenticateToken, checkWorkerOrAdminRole, async 
         const { taskId, reportId } = req.body;
         const workerId = req.user.userid;
 
-        // First check if the task is assigned to this worker
+        // Start a transaction
+        await pool.query('BEGIN');
+
+        // 1. First check if the task is assigned to this worker
         const taskCheck = await pool.query(
             `SELECT reportids, status FROM taskrequests 
-             WHERE taskid = $1 AND assignedworkerid = $2`,
+             WHERE taskid = $1 AND assignedworkerid = $2
+             FOR UPDATE`, // Lock the row
             [taskId, workerId]
         );
 
         if (taskCheck.rows.length === 0) {
+            await pool.query('ROLLBACK');
             return res.status(403).json({
                 error: 'Task not assigned to this worker'
             });
         }
 
-        // Check if report exists in this task
+        // 2. Check if report exists in this task
         const reportIds = taskCheck.rows[0].reportids;
         if (!reportIds.includes(reportId)) {
+            await pool.query('ROLLBACK');
             return res.status(404).json({
                 error: 'Report not found in this task'
             });
         }
 
-        // Update report status
+        // 3. Update report status
         await pool.query(
             `UPDATE garbagereports 
              SET status = 'collected' 
@@ -700,7 +706,7 @@ router.post('/mark-collected', authenticateToken, checkWorkerOrAdminRole, async 
             [reportId]
         );
 
-        // Check how many reports are left uncollected
+        // 4. Check how many reports are left uncollected
         const uncollectedCount = await pool.query(
             `SELECT COUNT(*) FROM garbagereports 
              WHERE reportid = ANY($1) AND status != 'collected'`,
@@ -709,8 +715,13 @@ router.post('/mark-collected', authenticateToken, checkWorkerOrAdminRole, async 
 
         const remaining = parseInt(uncollectedCount.rows[0].count);
 
+        // 5. Update task progress
+        const progress = 1 - (remaining / reportIds.length);
+        let taskStatus = taskCheck.rows[0].status;
+
         // If all reports are collected, update task status
         if (remaining === 0) {
+            taskStatus = 'completed';
             await pool.query(
                 `UPDATE taskrequests 
                  SET status = 'completed', 
@@ -719,27 +730,26 @@ router.post('/mark-collected', authenticateToken, checkWorkerOrAdminRole, async 
                  WHERE taskid = $1`,
                 [taskId]
             );
-            return res.status(200).json({
-                message: 'All reports collected! Task completed',
-                taskStatus: 'completed'
-            });
+        } else {
+            // Just update progress if not completed
+            await pool.query(
+                `UPDATE taskrequests 
+                 SET progress = $1
+                 WHERE taskid = $2`,
+                [progress, taskId]
+            );
         }
 
-        // Update task progress
-        const progress = 1 - (remaining / reportIds.length);
-        await pool.query(
-            `UPDATE taskrequests 
-             SET progress = $1
-             WHERE taskid = $2`,
-            [progress, taskId]
-        );
+        // Commit the transaction
+        await pool.query('COMMIT');
 
         res.status(200).json({
             message: 'Report marked as collected successfully',
             remainingReports: remaining,
-            taskStatus: taskCheck.rows[0].status
+            taskStatus: taskStatus
         });
     } catch (error) {
+        await pool.query('ROLLBACK');
         console.error('Error marking report as collected:', error);
         res.status(500).json({
             error: 'Internal Server Error',
@@ -754,14 +764,19 @@ router.get('/task-route/:taskid', authenticateToken, checkWorkerOrAdminRole, asy
     const workerId = req.user.userid;
 
     try {
+        // Start transaction
+        await pool.query('BEGIN');
+
         const taskResult = await pool.query(
             `SELECT taskid, reportids, assignedworkerid, status, route, starttime, endtime
              FROM taskrequests
-             WHERE taskid = $1 AND assignedworkerid = $2`,
+             WHERE taskid = $1 AND assignedworkerid = $2
+             FOR UPDATE`,
             [taskId, workerId]
         );
 
         if (taskResult.rows.length === 0) {
+            await pool.query('ROLLBACK');
             return res.status(404).json({ message: 'Task not found or not assigned to this worker' });
         }
 
@@ -773,6 +788,9 @@ router.get('/task-route/:taskid', authenticateToken, checkWorkerOrAdminRole, asy
              WHERE reportid = ANY($1)`,
             [task.reportids]
         );
+
+        // Commit transaction
+        await pool.query('COMMIT');
 
         const collectionPoints = reportsResult.rows.map(report => {
             const locationMatch = report.location.match(/POINT\(([^ ]+) ([^)]+)\)/);
@@ -798,6 +816,7 @@ router.get('/task-route/:taskid', authenticateToken, checkWorkerOrAdminRole, asy
             workerLocation: { lat: 10.235865, lng: 76.405676 } // Default location
         });
     } catch (error) {
+        await pool.query('ROLLBACK');
         console.error('Error fetching task route:', error.message, error.stack);
         res.status(500).json({ error: 'Internal Server Error', details: error.message });
     }
