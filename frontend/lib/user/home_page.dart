@@ -194,7 +194,8 @@ class UserApp extends StatelessWidget {
               builder:
                   (context) => ChatbotWidget(
                     agentId: 'rjty2MMFjS1r_f7Vn_nCf', // Replace with actual ID
-                    apiKey: 'your-chatbase-api-key', // Replace with actual key
+                    apiKey:
+                        'af1z911nzgqobrw7fb07r14yv9kc9vrk', // Replace with actual key
                   ),
             ),
           );
@@ -257,7 +258,9 @@ class _ReportPageState extends State<ReportPage> {
     if (permission == LocationPermission.deniedForever) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Location permissions are permanently denied')),
+        const SnackBar(
+          content: Text('Location permissions are permanently denied'),
+        ),
       );
       return;
     }
@@ -268,7 +271,8 @@ class _ReportPageState extends State<ReportPage> {
       );
       if (mounted) {
         setState(() {
-          locationController.text = '${position.latitude},${position.longitude}';
+          locationController.text =
+              '${position.latitude},${position.longitude}';
         });
       }
     } catch (e) {
@@ -333,7 +337,8 @@ class _ReportPageState extends State<ReportPage> {
           _backgroundRemovedImage = jsonResponse['backgroundRemoved'];
           _detectionDetails = jsonResponse['detailedResults'];
         });
-      } else if (response.statusCode == 403 && jsonResponse['message'] == 'Invalid token') {
+      } else if (response.statusCode == 403 &&
+          jsonResponse['message'] == 'Invalid token') {
         await _handleTokenExpiration();
       } else {
         throw Exception(jsonResponse['error'] ?? 'Failed to detect waste');
@@ -350,17 +355,17 @@ class _ReportPageState extends State<ReportPage> {
   Widget _buildImagePreview() {
     if (_image == null) {
       return const Text(
-        "No Image Selected", 
-        style: TextStyle(color: Colors.black54)
+        "No Image Selected",
+        style: TextStyle(color: Colors.black54),
       );
     }
-    
+
     return Column(
       children: [
         // Original image
         Text(
-          "Original Image", 
-          style: GoogleFonts.poppins(fontWeight: FontWeight.bold)
+          "Original Image",
+          style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 8),
         ClipRRect(
@@ -372,13 +377,13 @@ class _ReportPageState extends State<ReportPage> {
             fit: BoxFit.cover,
           ),
         ),
-        
+
         // Background removed image
         if (_backgroundRemovedImage != null) ...[
           const SizedBox(height: 16),
           Text(
-            "Background Removed", 
-            style: GoogleFonts.poppins(fontWeight: FontWeight.bold)
+            "Background Removed",
+            style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
           ClipRRect(
@@ -391,7 +396,7 @@ class _ReportPageState extends State<ReportPage> {
             ),
           ),
         ],
-        
+
         // Detection results
         if (_hasWaste != null) ...[
           const SizedBox(height: 16),
@@ -403,16 +408,18 @@ class _ReportPageState extends State<ReportPage> {
               fontWeight: FontWeight.bold,
             ),
           ),
-          
+
           if (_detectionDetails != null && _detectionDetails!.isNotEmpty) ...[
             const SizedBox(height: 8),
-            ..._detectionDetails!.map((detail) => Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              child: Text(
-                "${detail['class']}: ${(detail['confidence'] * 100).toStringAsFixed(1)}%",
-                style: GoogleFonts.poppins(fontSize: 14),
+            ..._detectionDetails!.map(
+              (detail) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Text(
+                  "${detail['class']}: ${(detail['confidence'] * 100).toStringAsFixed(1)}%",
+                  style: GoogleFonts.poppins(fontSize: 14),
+                ),
               ),
-            )),
+            ),
           ],
         ],
       ],
@@ -439,21 +446,27 @@ class _ReportPageState extends State<ReportPage> {
   Future<void> _submitReport() async {
     if (_image == null || locationController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please select a photo and provide a location!")),
+        const SnackBar(
+          content: Text("Please select a photo and provide a location!"),
+        ),
       );
       return;
     }
 
     if (_hasWaste == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please wait for waste detection to complete")),
+        const SnackBar(
+          content: Text("Please wait for waste detection to complete"),
+        ),
       );
       return;
     }
 
     if (!_hasWaste!) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Cannot submit report: No waste detected in the image")),
+        const SnackBar(
+          content: Text("Cannot submit report: No waste detected in the image"),
+        ),
       );
       return;
     }
@@ -476,19 +489,19 @@ class _ReportPageState extends State<ReportPage> {
       );
       request.headers['Authorization'] = 'Bearer $token';
       request.fields['location'] = locationController.text;
-      
+
       // Add original image
       request.files.add(
         await http.MultipartFile.fromPath('image', _image!.path),
       );
-      
+
       // Add background-removed image if available
       if (_backgroundRemovedImage != null) {
         String base64Data = _backgroundRemovedImage!;
         if (_backgroundRemovedImage!.contains(',')) {
           base64Data = _backgroundRemovedImage!.split(',').last;
         }
-        
+
         request.files.add(
           http.MultipartFile.fromString(
             'processed_image',
@@ -507,7 +520,8 @@ class _ReportPageState extends State<ReportPage> {
           const SnackBar(content: Text("Report submitted successfully!")),
         );
         Navigator.pop(context);
-      } else if (response.statusCode == 403 && jsonResponse['message'] == 'Invalid token') {
+      } else if (response.statusCode == 403 &&
+          jsonResponse['message'] == 'Invalid token') {
         await _handleTokenExpiration();
       } else {
         throw Exception(jsonResponse['message'] ?? 'Failed to submit report');
@@ -588,114 +602,116 @@ class _ReportPageState extends State<ReportPage> {
         backgroundColor: Colors.green.shade700,
         foregroundColor: Colors.white,
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        "Report Public Waste",
-                        style: GoogleFonts.poppins(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black87,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        "Help keep your community clean",
-                        style: GoogleFonts.poppins(
-                          fontSize: 16,
-                          color: Colors.black54,
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                      Text(
-                        "Select a Picture",
-                        style: GoogleFonts.poppins(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.black87,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Center(
-                        child: Column(
-                          children: [
-                            _buildImagePreview(),
-                            const SizedBox(height: 16),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                              children: [
-                                Expanded(
-                                  child: ElevatedButton.icon(
-                                    icon: const Icon(Icons.camera_alt),
-                                    label: const Text("Open Camera"),
-                                    onPressed: _takePicture,
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.green.shade700,
-                                      foregroundColor: Colors.white,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 16),
-                                Expanded(
-                                  child: ElevatedButton.icon(
-                                    icon: const Icon(Icons.photo_library),
-                                    label: const Text("Pick from Gallery"),
-                                    onPressed: _pickImageFromGallery,
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.green.shade700,
-                                      foregroundColor: Colors.white,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: locationController,
-                        readOnly: true,
-                        decoration: const InputDecoration(
-                          labelText: "Location",
-                          prefixIcon: Icon(Icons.location_on_outlined),
-                        ),
-                      ),
-                      if (_errorMessage != null) ...[
-                        const SizedBox(height: 16),
+      body:
+          _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
                         Text(
-                          _errorMessage!,
+                          "Report Public Waste",
                           style: GoogleFonts.poppins(
-                            color: Colors.red,
-                            fontSize: 14,
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black87,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          "Help keep your community clean",
+                          style: GoogleFonts.poppins(
+                            fontSize: 16,
+                            color: Colors.black54,
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        Text(
+                          "Select a Picture",
+                          style: GoogleFonts.poppins(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.black87,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Center(
+                          child: Column(
+                            children: [
+                              _buildImagePreview(),
+                              const SizedBox(height: 16),
+                              Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceEvenly,
+                                children: [
+                                  Expanded(
+                                    child: ElevatedButton.icon(
+                                      icon: const Icon(Icons.camera_alt),
+                                      label: const Text("Open Camera"),
+                                      onPressed: _takePicture,
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.green.shade700,
+                                        foregroundColor: Colors.white,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 16),
+                                  Expanded(
+                                    child: ElevatedButton.icon(
+                                      icon: const Icon(Icons.photo_library),
+                                      label: const Text("Pick from Gallery"),
+                                      onPressed: _pickImageFromGallery,
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.green.shade700,
+                                        foregroundColor: Colors.white,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        TextFormField(
+                          controller: locationController,
+                          readOnly: true,
+                          decoration: const InputDecoration(
+                            labelText: "Location",
+                            prefixIcon: Icon(Icons.location_on_outlined),
+                          ),
+                        ),
+                        if (_errorMessage != null) ...[
+                          const SizedBox(height: 16),
+                          Text(
+                            _errorMessage!,
+                            style: GoogleFonts.poppins(
+                              color: Colors.red,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 24),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: _submitReport,
+                            child: const Text("Submit Report"),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.green.shade700,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                            ),
                           ),
                         ),
                       ],
-                      const SizedBox(height: 24),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton(
-                          onPressed: _submitReport,
-                          child: const Text("Submit Report"),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.green.shade700,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                          ),
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
                 ),
               ),
-            ),
     );
   }
 }
