@@ -4,7 +4,7 @@ import 'package:waas/widget/login.dart';
 import 'package:waas/widget/signup_page.dart';
 import 'colors/colors.dart';
 
-void main() async {
+ void main() async {
   runApp(const MyApp());
 }
 
