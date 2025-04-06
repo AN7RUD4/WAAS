@@ -31,19 +31,19 @@ class _MapScreenState extends State<MapScreen> {
   String _errorMessage = '';
   final storage = const FlutterSecureStorage();
 
-  bool _collectionStarted = false; // Will be set based on task status
+  bool _collectionStarted = false;
   Set<int> _collectedReports = {};
   LatLng? _currentCollectionPoint;
   String? _currentWasteType;
 
   double _totalDistance = 0.0;
-  List<Map<String, dynamic>> _directionSteps = []; // Store symbol and distance for each step
+  List<Map<String, dynamic>> _directionSteps = [];
   int _currentInstructionIndex = 0;
 
   @override
   void initState() {
     super.initState();
-    print('Task ID from widget: ${widget.taskid}'); // Debug taskId
+    print('Task ID from widget: ${widget.taskid}');
     _getWorkerLocation();
     _fetchCollectionRequestData();
   }
@@ -113,12 +113,12 @@ class _MapScreenState extends State<MapScreen> {
         setState(() {
           _workerLocation = LatLng(position.latitude, position.longitude);
           _currentCenter = _workerLocation!;
-          _mapController.move(_currentCenter, _currentZoom); // Update map as worker moves
+          _mapController.move(_currentCenter, _currentZoom);
         });
         _updateCompleteRoute();
         _calculateDistances();
         _updateDirectionsBasedOnLocation();
-        _erasePolylineAtWorkerLocation(); // Check and erase polyline segments
+        _erasePolylineAtWorkerLocation();
       }
     });
   }
@@ -149,11 +149,6 @@ class _MapScreenState extends State<MapScreen> {
 
         if (data['locations'] != null && data['locations'] is List) {
           _parseLocations(data['locations']);
-          // Update collected reports based on backend data
-          final collected = await _fetchCollectedReports(data['reportids']);
-          setState(() {
-            _collectedReports = collected;
-          });
         }
 
         if (_workerLocation == null && data['workerLocation'] != null) {
@@ -164,9 +159,12 @@ class _MapScreenState extends State<MapScreen> {
           _currentCenter = _workerLocation!;
         }
 
-        // Set _collectionStarted based on task status
         setState(() {
           _collectionStarted = data['status'] == 'in-progress';
+          _collectedReports = data['locations']
+              .where((loc) => loc['status'] == 'collected')
+              .map((loc) => loc['reportid'] as int)
+              .toSet();
         });
 
         if (_workerLocation != null && _locations.isNotEmpty) {
@@ -199,26 +197,6 @@ class _MapScreenState extends State<MapScreen> {
     } finally {
       setState(() => _isLoading = false);
     }
-  }
-
-  Future<Set<int>> _fetchCollectedReports(List<dynamic>? reportIds) async {
-    if (reportIds == null) return {};
-    final token = await storage.read(key: 'jwt_token');
-    if (token == null) return {};
-    
-    final response = await http.get(
-      Uri.parse('$apiBaseUrl/garbagereports/status?reportIds=${jsonEncode(reportIds)}'),
-      headers: {'Authorization': 'Bearer $token'},
-    );
-
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      return (data as List)
-          .where((r) => r['status'] == 'collected')
-          .map((r) => r['reportid'] as int)
-          .toSet();
-    }
-    return {};
   }
 
   void _parseRouteFromJson(Map<String, dynamic> routeData) {
@@ -308,7 +286,7 @@ class _MapScreenState extends State<MapScreen> {
               if (step['maneuver'] != null && step['maneuver']['instruction'] != null) {
                 String symbol = _convertInstructionToSymbol(step['maneuver']['instruction']);
                 if (symbol.isNotEmpty) {
-                  cumulativeDistance += (step['distance'] ?? 0.0) / 1000; // Convert meters to km
+                  cumulativeDistance += (step['distance'] ?? 0.0) / 1000;
                   _directionSteps.add({
                     'symbol': symbol,
                     'distance': cumulativeDistance.toStringAsFixed(2),
@@ -345,7 +323,7 @@ class _MapScreenState extends State<MapScreen> {
     if (instruction.toLowerCase().contains('continue')) return '🡺';
     if (instruction.toLowerCase().contains('uturn')) return '↺';
     if (instruction.toLowerCase().contains('arrive')) return '🏁';
-    return '🡺'; // Default straight arrow
+    return '🡺';
   }
 
   void _updateCompleteRoute() {
@@ -357,13 +335,13 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   double _haversineDistance(LatLng start, LatLng end) {
-    const double earthRadius = 6371.0; // Radius in kilometers
+    const double earthRadius = 6371.0;
     final double dLat = _degreesToRadians(end.latitude - start.latitude);
     final double dLon = _degreesToRadians(end.longitude - start.longitude);
     final double a = sin(dLat / 2) * sin(dLat / 2) +
         cos(_degreesToRadians(start.latitude)) * cos(_degreesToRadians(end.latitude)) * sin(dLon / 2) * sin(dLon / 2);
     final double c = 2 * asin(sqrt(a));
-    return earthRadius * c * 1000; // Convert to meters for closer proximity check
+    return earthRadius * c * 1000;
   }
 
   double _degreesToRadians(double degrees) => degrees * (pi / 180.0);
@@ -378,7 +356,7 @@ class _MapScreenState extends State<MapScreen> {
 
     _totalDistance = 0.0;
     for (int i = 0; i < _completeRoute.length - 1; i++) {
-      _totalDistance += _haversineDistance(_completeRoute[i], _completeRoute[i + 1]) / 1000; // Convert back to km
+      _totalDistance += _haversineDistance(_completeRoute[i], _completeRoute[i + 1]) / 1000;
     }
     setState(() {});
   }
@@ -396,7 +374,7 @@ class _MapScreenState extends State<MapScreen> {
       }
     }
 
-    if (minDistance < 0.05 * 1000 && _currentInstructionIndex < _directionSteps.length - 1) { // 50 meters
+    if (minDistance < 0.05 * 1000 && _currentInstructionIndex < _directionSteps.length - 1) {
       _currentInstructionIndex++;
       _directions = '${_directionSteps[_currentInstructionIndex]['symbol']} (${_directionSteps[_currentInstructionIndex]['distance']} km)';
       setState(() {});
@@ -408,17 +386,16 @@ class _MapScreenState extends State<MapScreen> {
 
     for (int i = 0; i < _completeRoute.length - 1; i++) {
       double distanceToPoint = _haversineDistance(_workerLocation!, _completeRoute[i]);
-      if (distanceToPoint < 50) { // Erase if within 50 meters
-        // Remove the segment up to this point
+      if (distanceToPoint < 50) {
         _completeRoute = _completeRoute.sublist(i + 1);
-        _route = _route.sublist(i); // Adjust route if needed, but typically handled by OSRM
+        _route = _route.sublist(i);
         _directionSteps = _directionSteps.sublist(_currentInstructionIndex + 1);
         _currentInstructionIndex = 0;
         _directions = _directionSteps.isNotEmpty
             ? '${_directionSteps[0]['symbol']} (${_directionSteps[0]['distance']} km)'
-            : "🏁 (0.00 km)"; // End of route
+            : "🏁 (0.00 km)";
         _calculateDistances();
-        break; // Exit after erasing one segment
+        break;
       }
     }
   }
@@ -428,10 +405,8 @@ class _MapScreenState extends State<MapScreen> {
 
     try {
       final token = await storage.read(key: 'jwt_token');
-      print('Token: $token');
       if (token == null) throw Exception('No authentication token found');
 
-      print('Starting collection for taskId: ${widget.taskid}');
       final response = await http.post(
         Uri.parse('$apiBaseUrl/worker/start-task'),
         headers: {
@@ -441,7 +416,6 @@ class _MapScreenState extends State<MapScreen> {
         body: jsonEncode({'taskId': widget.taskid}),
       );
 
-      print('Response status: ${response.statusCode}, Body: ${response.body}');
       if (response.statusCode == 200) {
         setState(() {
           _collectionStarted = true;
@@ -492,7 +466,6 @@ class _MapScreenState extends State<MapScreen> {
           _collectedReports.add(reportId);
           _currentCollectionPoint = null;
           _currentWasteType = null;
-          // Remove the collected location from _locations, _route, and _reportIds
           final index = _locations.indexWhere((loc) => loc == location);
           if (index != -1) {
             _locations.removeAt(index);
@@ -505,15 +478,15 @@ class _MapScreenState extends State<MapScreen> {
           }
         });
 
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${responseData['message']} (${responseData['remainingReports']} remaining)')),
+        );
+
         if (responseData['taskStatus'] == 'completed') {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('All locations collected! Task completed')),
           );
-          Navigator.pop(context);
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('${responseData['message']} (${responseData['remainingReports']} remaining)')),
-          );
+          Navigator.popUntil(context, (route) => route.isFirst); // Return to home page
         }
       } else {
         throw Exception(responseData['error'] ?? 'Failed to mark collected');
@@ -538,7 +511,6 @@ class _MapScreenState extends State<MapScreen> {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: () {
-        // Clear location details when tapping outside a marker
         if (_currentCollectionPoint != null) {
           setState(() {
             _currentCollectionPoint = null;
@@ -721,7 +693,7 @@ class _MapScreenState extends State<MapScreen> {
         floatingActionButton: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (!_collectionStarted) // Only show Start button if not in-progress
+            if (!_collectionStarted)
               FloatingActionButton.extended(
                 onPressed: _startCollection,
                 backgroundColor: Colors.green.shade700,
