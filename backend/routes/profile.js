@@ -35,7 +35,7 @@ profileRouter.get('/profile', authenticateToken, async (req, res) => {
   try {
     await client.query('BEGIN');
     const user = await client.query(
-      'SELECT userid, name, email FROM users WHERE userid = $1',
+      'SELECT userid, name, email,role FROM users WHERE userid = $1',
       [req.user.userid]
     );
     if (user.rows.length === 0) {
@@ -47,6 +47,7 @@ profileRouter.get('/profile', authenticateToken, async (req, res) => {
         userid: user.rows[0].userid,
         name: user.rows[0].name,
         email: user.rows[0].email,
+        role: user.rows[0].role
       },
     });
   } catch (error) {
@@ -99,6 +100,7 @@ profileRouter.put('/profile', authenticateToken, async (req, res) => {
         userid: updatedUser.rows[0].userid,
         name: updatedUser.rows[0].name,
         email: updatedUser.rows[0].email,
+        role: updatedUser.rows[0].role,
       },
       process.env.JWT_SECRET || 'passwordKey',
       { expiresIn: '1h' }
@@ -111,6 +113,7 @@ profileRouter.put('/profile', authenticateToken, async (req, res) => {
         userid: updatedUser.rows[0].userid,
         name: updatedUser.rows[0].name,
         email: updatedUser.rows[0].email,
+        role: updatedUser.rows[0].role,
       },
       token: newToken,
     });
