@@ -37,8 +37,7 @@ class _MapScreenState extends State<MapScreen> {
   String? _currentWasteType;
 
   double _totalDistance = 0.0;
-  List<Map<String, dynamic>> _directionSteps =
-      []; // Store symbol and distance for each step
+  List<Map<String, dynamic>> _directionSteps = []; // Store symbol and distance for each step
   int _currentInstructionIndex = 0;
 
   @override
@@ -73,13 +72,9 @@ class _MapScreenState extends State<MapScreen> {
       }
 
       if (permission == LocationPermission.deniedForever) {
-        setState(
-          () => _errorMessage = 'Location permissions are permanently denied',
-        );
+        setState(() => _errorMessage = 'Location permissions are permanently denied');
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Location permissions are permanently denied'),
-          ),
+          const SnackBar(content: Text('Location permissions are permanently denied')),
         );
         return;
       }
@@ -118,7 +113,7 @@ class _MapScreenState extends State<MapScreen> {
         setState(() {
           _workerLocation = LatLng(position.latitude, position.longitude);
           _currentCenter = _workerLocation!;
-          _mapController.move(_currentCenter, _currentZoom);
+          _mapController.move(_currentCenter, _currentZoom); // Update map as worker moves
         });
         _updateCompleteRoute();
         _calculateDistances();
@@ -167,11 +162,7 @@ class _MapScreenState extends State<MapScreen> {
           _route = await _fetchRouteFromOSRM();
           if (_route.isEmpty) {
             _route = _locations;
-            setState(
-              () =>
-                  _errorMessage =
-                      'Failed to fetch route from OSRM. Showing straight-line path.',
-            );
+            setState(() => _errorMessage = 'Failed to fetch route from OSRM. Showing straight-line path.');
           }
           _updateCompleteRoute();
           _calculateDistances();
@@ -183,30 +174,17 @@ class _MapScreenState extends State<MapScreen> {
           ]);
           _mapController.fitCamera(CameraFit.bounds(bounds: bounds));
         } else {
-          setState(
-            () =>
-                _errorMessage = 'Missing worker location or collection points',
-          );
+          setState(() => _errorMessage = 'Missing worker location or collection points');
         }
       } else {
-        setState(
-          () =>
-              _errorMessage =
-                  'Failed to fetch task data: ${response.statusCode} - ${response.body}',
-        );
+        setState(() => _errorMessage = 'Failed to fetch task data: ${response.statusCode} - ${response.body}');
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Failed to fetch task data: ${response.statusCode} - ${response.body}',
-            ),
-          ),
+          SnackBar(content: Text('Failed to fetch task data: ${response.statusCode} - ${response.body}')),
         );
       }
     } catch (e) {
       setState(() => _errorMessage = 'Error fetching task data: $e');
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error fetching task data: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error fetching task data: $e')));
     } finally {
       setState(() => _isLoading = false);
     }
@@ -218,22 +196,15 @@ class _MapScreenState extends State<MapScreen> {
     _reportIds.clear();
     _wasteTypes.clear();
 
-    if (routeData['start'] != null &&
-        routeData['start']['lat'] != null &&
-        routeData['start']['lng'] != null) {
-      final startPoint = LatLng(
-        routeData['start']['lat'],
-        routeData['start']['lng'],
-      );
+    if (routeData['start'] != null && routeData['start']['lat'] != null && routeData['start']['lng'] != null) {
+      final startPoint = LatLng(routeData['start']['lat'], routeData['start']['lng']);
       _locations.add(startPoint);
       _route.add(startPoint);
     }
 
     if (routeData['waypoints'] != null && routeData['waypoints'] is List) {
       for (var waypoint in routeData['waypoints']) {
-        if (waypoint['lat'] != null &&
-            waypoint['lng'] != null &&
-            waypoint['reportid'] != null) {
+        if (waypoint['lat'] != null && waypoint['lng'] != null && waypoint['reportid'] != null) {
           final latLng = LatLng(waypoint['lat'], waypoint['lng']);
           if (!_collectedReports.contains(waypoint['reportid'])) {
             _locations.add(latLng);
@@ -245,9 +216,7 @@ class _MapScreenState extends State<MapScreen> {
       }
     }
 
-    if (routeData['end'] != null &&
-        routeData['end']['lat'] != null &&
-        routeData['end']['lng'] != null) {
+    if (routeData['end'] != null && routeData['end']['lat'] != null && routeData['end']['lng'] != null) {
       final endPoint = LatLng(routeData['end']['lat'], routeData['end']['lng']);
       _locations.add(endPoint);
       _route.add(endPoint);
@@ -263,14 +232,9 @@ class _MapScreenState extends State<MapScreen> {
     _reportIds.clear();
     _wasteTypes.clear();
     for (var item in data) {
-      if (item['lat'] != null &&
-          item['lng'] != null &&
-          item['reportid'] != null) {
+      if (item['lat'] != null && item['lng'] != null && item['reportid'] != null) {
         try {
-          final LatLng latLng = LatLng(
-            double.parse(item['lat'].toString()),
-            double.parse(item['lng'].toString()),
-          );
+          final LatLng latLng = LatLng(double.parse(item['lat'].toString()), double.parse(item['lng'].toString()));
           if (!_collectedReports.contains(item['reportid'])) {
             _locations.add(latLng);
             _reportIds.add(item['reportid']);
@@ -292,13 +256,9 @@ class _MapScreenState extends State<MapScreen> {
     }
 
     List<LatLng> waypoints = [_workerLocation!, ..._locations];
-    final String osrmBaseUrl =
-        'http://router.project-osrm.org/route/v1/driving/';
-    String coordinates = waypoints
-        .map((point) => '${point.longitude},${point.latitude}')
-        .join(';');
-    final String osrmUrl =
-        '$osrmBaseUrl$coordinates?overview=full&geometries=geojson&steps=true';
+    final String osrmBaseUrl = 'http://router.project-osrm.org/route/v1/driving/';
+    String coordinates = waypoints.map((point) => '${point.longitude},${point.latitude}').join(';');
+    final String osrmUrl = '$osrmBaseUrl$coordinates?overview=full&geometries=geojson&steps=true';
 
     try {
       final response = await http.get(Uri.parse(osrmUrl));
@@ -307,24 +267,17 @@ class _MapScreenState extends State<MapScreen> {
         final Map<String, dynamic> data = jsonDecode(response.body);
         if (data['code'] == 'Ok' && data['routes'].isNotEmpty) {
           final routeGeometry = data['routes'][0]['geometry']['coordinates'];
-          List<LatLng> routePoints =
-              routeGeometry
-                  .map<LatLng>((coord) => LatLng(coord[1], coord[0]))
-                  .toList();
+          List<LatLng> routePoints = routeGeometry.map<LatLng>((coord) => LatLng(coord[1], coord[0])).toList();
 
           _directionSteps.clear();
           final legs = data['routes'][0]['legs'];
           double cumulativeDistance = 0.0;
           for (var leg in legs) {
             for (var step in leg['steps']) {
-              if (step['maneuver'] != null &&
-                  step['maneuver']['instruction'] != null) {
-                String symbol = _convertInstructionToSymbol(
-                  step['maneuver']['instruction'],
-                );
+              if (step['maneuver'] != null && step['maneuver']['instruction'] != null) {
+                String symbol = _convertInstructionToSymbol(step['maneuver']['instruction']);
                 if (symbol.isNotEmpty) {
-                  cumulativeDistance +=
-                      (step['distance'] ?? 0.0) / 1000; // Convert meters to km
+                  cumulativeDistance += (step['distance'] ?? 0.0) / 1000; // Convert meters to km
                   _directionSteps.add({
                     'symbol': symbol,
                     'distance': cumulativeDistance.toStringAsFixed(2),
@@ -334,19 +287,16 @@ class _MapScreenState extends State<MapScreen> {
             }
           }
           _currentInstructionIndex = 0;
-          _directions =
-              _directionSteps.isNotEmpty
-                  ? '${_directionSteps[0]['symbol']} (${_directionSteps[0]['distance']} km)'
-                  : "🡺 (0.00 km)";
+          _directions = _directionSteps.isNotEmpty
+              ? '${_directionSteps[0]['symbol']} (${_directionSteps[0]['distance']} km)'
+              : "🡺 (0.00 km)";
 
           return routePoints;
         } else {
           throw Exception('OSRM API error: ${data['message']}');
         }
       } else {
-        throw Exception(
-          'Failed to fetch route from OSRM: ${response.statusCode}',
-        );
+        throw Exception('Failed to fetch route from OSRM: ${response.statusCode}');
       }
     } catch (e) {
       print('Error fetching route from OSRM: $e');
@@ -358,7 +308,6 @@ class _MapScreenState extends State<MapScreen> {
     }
   }
 
-  // Convert text instructions to symbols
   String _convertInstructionToSymbol(String instruction) {
     if (instruction.toLowerCase().contains('turn left')) return '⬅️';
     if (instruction.toLowerCase().contains('turn right')) return '➡️';
@@ -380,12 +329,8 @@ class _MapScreenState extends State<MapScreen> {
     const double earthRadius = 6371.0;
     final double dLat = _degreesToRadians(end.latitude - start.latitude);
     final double dLon = _degreesToRadians(end.longitude - start.longitude);
-    final double a =
-        sin(dLat / 2) * sin(dLat / 2) +
-        cos(_degreesToRadians(start.latitude)) *
-            cos(_degreesToRadians(end.latitude)) *
-            sin(dLon / 2) *
-            sin(dLon / 2);
+    final double a = sin(dLat / 2) * sin(dLat / 2) +
+        cos(_degreesToRadians(start.latitude)) * cos(_degreesToRadians(end.latitude)) * sin(dLon / 2) * sin(dLon / 2);
     final double c = 2 * asin(sqrt(a));
     return earthRadius * c;
   }
@@ -402,19 +347,13 @@ class _MapScreenState extends State<MapScreen> {
 
     _totalDistance = 0.0;
     for (int i = 0; i < _completeRoute.length - 1; i++) {
-      _totalDistance += _haversineDistance(
-        _completeRoute[i],
-        _completeRoute[i + 1],
-      );
+      _totalDistance += _haversineDistance(_completeRoute[i], _completeRoute[i + 1]);
     }
     setState(() {});
   }
 
   void _updateDirectionsBasedOnLocation() {
-    if (_workerLocation == null ||
-        _completeRoute.isEmpty ||
-        _directionSteps.isEmpty)
-      return;
+    if (_workerLocation == null || _completeRoute.isEmpty || _directionSteps.isEmpty) return;
 
     double minDistance = double.infinity;
     int closestIndex = 0;
@@ -426,11 +365,9 @@ class _MapScreenState extends State<MapScreen> {
       }
     }
 
-    if (minDistance < 0.05 &&
-        _currentInstructionIndex < _directionSteps.length - 1) {
+    if (minDistance < 0.05 && _currentInstructionIndex < _directionSteps.length - 1) {
       _currentInstructionIndex++;
-      _directions =
-          '${_directionSteps[_currentInstructionIndex]['symbol']} (${_directionSteps[_currentInstructionIndex]['distance']} km)';
+      _directions = '${_directionSteps[_currentInstructionIndex]['symbol']} (${_directionSteps[_currentInstructionIndex]['distance']} km)';
       setState(() {});
     }
   }
@@ -461,33 +398,23 @@ class _MapScreenState extends State<MapScreen> {
         });
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text(
-              'Collection started! Tap on locations to mark as collected',
-            ),
+            content: Text('Collection started! Tap on locations to mark as collected'),
           ),
         );
       } else if (response.statusCode == 403) {
         throw Exception('Access denied: ${response.body}');
       } else {
-        throw Exception(
-          'Failed to start task: ${response.statusCode} - ${response.body}',
-        );
+        throw Exception('Failed to start task: ${response.statusCode} - ${response.body}');
       }
     } catch (e) {
       setState(() => _errorMessage = 'Error starting collection: $e');
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error starting collection: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error starting collection: $e')));
     } finally {
       setState(() => _isLoading = false);
     }
   }
 
-  Future<void> _markAsCollected(
-    LatLng location,
-    int reportId,
-    String wasteType,
-  ) async {
+  Future<void> _markAsCollected(LatLng location, int reportId, String wasteType) async {
     setState(() {
       _currentCollectionPoint = location;
       _currentWasteType = wasteType;
@@ -514,23 +441,27 @@ class _MapScreenState extends State<MapScreen> {
           _collectedReports.add(reportId);
           _currentCollectionPoint = null;
           _currentWasteType = null;
-          _fetchCollectionRequestData();
+          // Remove the collected location from _locations, _route, and _reportIds
+          final index = _locations.indexWhere((loc) => loc == location);
+          if (index != -1) {
+            _locations.removeAt(index);
+            _route.removeAt(index + 1); // +1 to skip worker location at index 0
+            _reportIds.removeAt(index);
+            _wasteTypes.removeAt(index);
+            _updateCompleteRoute();
+            _calculateDistances();
+            _fetchRouteFromOSRM(); // Re-fetch route to update polyline
+          }
         });
 
         if (responseData['taskStatus'] == 'completed') {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('All locations collected! Task completed'),
-            ),
+            const SnackBar(content: Text('All locations collected! Task completed')),
           );
           Navigator.pop(context);
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                '${responseData['message']} (${responseData['remainingReports']} remaining)',
-              ),
-            ),
+            SnackBar(content: Text('${responseData['message']} (${responseData['remainingReports']} remaining)')),
           );
         }
       } else {
@@ -538,9 +469,7 @@ class _MapScreenState extends State<MapScreen> {
       }
     } catch (e) {
       setState(() => _errorMessage = 'Error marking collected: $e');
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error marking collected: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error marking collected: $e')));
     } finally {
       setState(() => _isLoading = false);
     }
@@ -556,205 +485,215 @@ class _MapScreenState extends State<MapScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Colors.green.shade700,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: const Text(
-          'Collection Points',
-          style: TextStyle(
-            fontWeight: FontWeight.w600,
-            color: Colors.white,
-            fontSize: 20,
+    return GestureDetector(
+      onTap: () {
+        // Clear location details when tapping outside a marker
+        if (_currentCollectionPoint != null) {
+          setState(() {
+            _currentCollectionPoint = null;
+            _currentWasteType = null;
+          });
+        }
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          backgroundColor: Colors.green.shade700,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back, color: Colors.white),
+            onPressed: () => Navigator.pop(context),
+          ),
+          title: const Text(
+            'Collection Points',
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              color: Colors.white,
+              fontSize: 20,
+            ),
           ),
         ),
-      ),
-      body: Stack(
-        children: [
-          FlutterMap(
-            mapController: _mapController,
-            options: MapOptions(
-              initialCenter: _currentCenter,
-              initialZoom: _currentZoom,
-              minZoom: 10,
-              maxZoom: 18,
-              onPositionChanged: (position, hasGesture) {
-                if (hasGesture) {
-                  setState(() {
-                    _currentCenter = position.center;
-                    _currentZoom = position.zoom;
-                  });
-                }
-              },
-            ),
-            children: [
-              TileLayer(
-                urlTemplate:
-                    "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-                subdomains: ['a', 'b', 'c'],
+        body: Stack(
+          children: [
+            FlutterMap(
+              mapController: _mapController,
+              options: MapOptions(
+                initialCenter: _currentCenter,
+                initialZoom: _currentZoom,
+                minZoom: 10,
+                maxZoom: 18,
+                onPositionChanged: (position, hasGesture) {
+                  if (hasGesture) {
+                    setState(() {
+                      _currentCenter = position.center;
+                      _currentZoom = position.zoom;
+                    });
+                  }
+                },
               ),
-              if (_completeRoute.isNotEmpty)
-                PolylineLayer(
-                  polylines: [
-                    Polyline(
-                      points: _completeRoute,
-                      strokeWidth: 4.0,
-                      color: Colors.green.shade700,
-                    ),
-                  ],
+              children: [
+                TileLayer(
+                  urlTemplate: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+                  subdomains: ['a', 'b', 'c'],
                 ),
-              MarkerLayer(
-                markers: [
-                  if (_workerLocation != null)
-                    Marker(
-                      point: _workerLocation!,
-                      width: 40,
-                      height: 40,
-                      child: const Icon(
-                        Icons.person_pin_circle,
-                        color: Colors.blue,
-                        size: 40,
+                if (_completeRoute.isNotEmpty)
+                  PolylineLayer(
+                    polylines: [
+                      Polyline(
+                        points: _completeRoute,
+                        strokeWidth: 4.0,
+                        color: Colors.green.shade700,
                       ),
-                    ),
-                  ..._locations.asMap().entries.map((entry) {
-                    final index = entry.key;
-                    final loc = entry.value;
-                    final reportId = _getReportIdForIndex(index);
-                    final wasteType = _getWasteTypeForIndex(index);
-
-                    return Marker(
-                      point: loc,
-                      width: 40,
-                      height: 40,
-                      child: GestureDetector(
-                        onTap: () {
-                          if (_collectionStarted &&
-                              !_collectedReports.contains(reportId)) {
-                            _markAsCollected(loc, reportId, wasteType);
-                          } else {
-                            setState(() {
-                              _currentCollectionPoint = loc;
-                              _currentWasteType = wasteType;
-                            });
-                          }
-                        },
-                        child: Icon(
-                          _collectedReports.contains(reportId)
-                              ? Icons.check_circle
-                              : Icons.location_pin,
-                          color:
-                              _collectedReports.contains(reportId)
-                                  ? Colors.green
-                                  : (_collectionStarted
-                                      ? Colors.orangeAccent
-                                      : Colors.redAccent),
+                    ],
+                  ),
+                MarkerLayer(
+                  markers: [
+                    if (_workerLocation != null)
+                      Marker(
+                        point: _workerLocation!,
+                        width: 40,
+                        height: 40,
+                        child: const Icon(
+                          Icons.person_pin_circle,
+                          color: Colors.blue,
                           size: 40,
                         ),
                       ),
-                    );
-                  }),
-                ],
-              ),
-            ],
-          ),
-          Positioned(
-            top: 16,
-            left: 16,
-            right: 16,
-            child: Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.6),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.white.withOpacity(0.2)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    _directions,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Total Distance: ${_totalDistance.toStringAsFixed(2)} km',
-                    style: const TextStyle(fontSize: 14, color: Colors.white70),
-                  ),
-                  if (_currentCollectionPoint != null &&
-                      _currentWasteType != null)
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const SizedBox(height: 8),
-                        Text(
-                          'Selected Location Details:',
-                          style: TextStyle(fontSize: 14, color: Colors.white70),
-                        ),
-                        Text(
-                          'Waste Type: $_currentWasteType',
-                          style: TextStyle(fontSize: 14, color: Colors.white70),
-                        ),
-                        Text(
-                          'Location: ${_currentCollectionPoint!.latitude.toStringAsFixed(6)}, '
-                          '${_currentCollectionPoint!.longitude.toStringAsFixed(6)}',
-                          style: TextStyle(fontSize: 14, color: Colors.white70),
-                        ),
-                      ],
-                    ),
-                  if (_errorMessage.isNotEmpty)
-                    Column(
-                      children: [
-                        const SizedBox(height: 8),
-                        Text(
-                          'Error: $_errorMessage',
-                          style: const TextStyle(
-                            fontSize: 14,
-                            color: Colors.redAccent,
+                    ..._locations.asMap().entries.map((entry) {
+                      final index = entry.key;
+                      final loc = entry.value;
+                      final reportId = _getReportIdForIndex(index);
+                      final wasteType = _getWasteTypeForIndex(index);
+
+                      return Marker(
+                        point: loc,
+                        width: 40,
+                        height: 40,
+                        child: GestureDetector(
+                          onTap: () {
+                            if (_collectionStarted && !_collectedReports.contains(reportId)) {
+                              setState(() {
+                                _currentCollectionPoint = loc;
+                                _currentWasteType = wasteType;
+                              });
+                            }
+                          },
+                          child: Icon(
+                            _collectedReports.contains(reportId) ? Icons.check_circle : Icons.location_pin,
+                            color: _collectedReports.contains(reportId) ? Colors.green : (_collectionStarted ? Colors.orangeAccent : Colors.redAccent),
+                            size: 40,
                           ),
                         ),
-                      ],
+                      );
+                    }),
+                  ],
+                ),
+              ],
+            ),
+            Positioned(
+              top: 16,
+              left: 16,
+              right: 16,
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.6),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.white.withOpacity(0.2)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _directions,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
                     ),
-                ],
+                    const SizedBox(height: 8),
+                    Text(
+                      'Total Distance: ${_totalDistance.toStringAsFixed(2)} km',
+                      style: const TextStyle(fontSize: 14, color: Colors.white70),
+                    ),
+                    if (_currentCollectionPoint != null && _currentWasteType != null)
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const SizedBox(height: 8),
+                          Text(
+                            'Selected Location Details:',
+                            style: TextStyle(fontSize: 14, color: Colors.white70),
+                          ),
+                          Text(
+                            'Waste Type: $_currentWasteType',
+                            style: TextStyle(fontSize: 14, color: Colors.white70),
+                          ),
+                          Text(
+                            'Location: ${_currentCollectionPoint!.latitude.toStringAsFixed(6)}, '
+                                '${_currentCollectionPoint!.longitude.toStringAsFixed(6)}',
+                            style: TextStyle(fontSize: 14, color: Colors.white70),
+                          ),
+                          const SizedBox(height: 8),
+                          ElevatedButton(
+                            onPressed: _collectionStarted && !_collectedReports.contains(_getReportIdForIndex(_locations.indexOf(_currentCollectionPoint!)))
+                                ? () => _markAsCollected(_currentCollectionPoint!, _getReportIdForIndex(_locations.indexOf(_currentCollectionPoint!)), _currentWasteType!)
+                                : null,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.green.shade700,
+                              foregroundColor: Colors.white,
+                            ),
+                            child: const Text('Collected'),
+                          ),
+                        ],
+                      ),
+                    if (_errorMessage.isNotEmpty)
+                      Column(
+                        children: [
+                          const SizedBox(height: 8),
+                          Text(
+                            'Error: $_errorMessage',
+                            style: const TextStyle(
+                              fontSize: 14,
+                              color: Colors.redAccent,
+                            ),
+                          ),
+                        ],
+                      ),
+                  ],
+                ),
               ),
             ),
-          ),
-          if (_isLoading)
-            const Center(child: CircularProgressIndicator(color: Colors.green)),
-        ],
-      ),
-      floatingActionButton: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (!_collectionStarted)
-            FloatingActionButton.extended(
-              onPressed: _startCollection,
+            if (_isLoading)
+              const Center(child: CircularProgressIndicator(color: Colors.green)),
+          ],
+        ),
+        floatingActionButton: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (!_collectionStarted)
+              FloatingActionButton.extended(
+                onPressed: _startCollection,
+                backgroundColor: Colors.green.shade700,
+                label: const Text(
+                  'Start Collection',
+                  style: TextStyle(color: Colors.white),
+                ),
+                icon: const Icon(Icons.play_arrow, color: Colors.white),
+              ),
+            const SizedBox(height: 16),
+            FloatingActionButton(
+              onPressed: () {
+                if (_workerLocation != null) {
+                  _currentCenter = _workerLocation!;
+                  _currentZoom = 14;
+                  _mapController.move(_currentCenter, _currentZoom);
+                }
+              },
               backgroundColor: Colors.green.shade700,
-              label: const Text(
-                'Start Collection',
-                style: TextStyle(color: Colors.white),
-              ),
-              icon: const Icon(Icons.play_arrow, color: Colors.white),
+              child: const Icon(Icons.my_location, color: Colors.white),
             ),
-          const SizedBox(height: 16),
-          FloatingActionButton(
-            onPressed: () {
-              if (_workerLocation != null) {
-                _currentCenter = _workerLocation!;
-                _currentZoom = 14;
-                _mapController.move(_currentCenter, _currentZoom);
-              }
-            },
-            backgroundColor: Colors.green.shade700,
-            child: const Icon(Icons.my_location, color: Colors.white),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
