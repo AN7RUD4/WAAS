@@ -548,11 +548,11 @@ router.get('/task-route/:taskid', authenticateToken, checkWorkerOrAdminRole, asy
         const collectionPoints = reportsResult.rows.map(report => {
             const locationMatch = report.location.match(/POINT\(([^ ]+) ([^)]+)\)/);
             return {
-                reportid: report.reportid,
+                reportid: parseInt(report.reportid), // Ensure reportid is an integer
                 wastetype: report.wastetype,
                 lat: locationMatch ? parseFloat(locationMatch[2]) : null,
                 lng: locationMatch ? parseFloat(locationMatch[1]) : null,
-                status: report.status // Include status of each report
+                status: report.status // Include status to check collected state
             };
         }).filter(point => point.lat !== null && point.lng !== null);
 
@@ -563,7 +563,7 @@ router.get('/task-route/:taskid', authenticateToken, checkWorkerOrAdminRole, asy
             reportids: task.reportids,
             status: task.status,
             route: routeData,
-            locations: collectionPoints,
+            locations: collectionPoints, // Ensure this is a plain array
             wasteTypes: [...new Set(collectionPoints.map(p => p.wastetype))],
             workerLocation: { lat: workerLat, lng: workerLng }
         });
