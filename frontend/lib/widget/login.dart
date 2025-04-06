@@ -352,98 +352,64 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
-  Future<void> login() async {
-    if (usernameController.text.trim().isEmpty ||
-        passwordController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter both username and password'),
+  // In your LoginPage widget
+Future<void> login() async {
+  if (usernameController.text.trim().isEmpty ||
+      passwordController.text.trim().isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Please enter both username and password'),
+      ),
+    );
+    return;
+  }
+
+  setState(() => _isLoading = true);
+
+  try {
+    final jsonData = {
+      'email': usernameController.text.trim(),
+      'password': passwordController.text.trim(),
+    };
+    final response = await http.post(
+      Uri.parse('$apiBaseUrl/login'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode(jsonData),
+    );
+
+    if (!mounted) return;
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      final token = data['token'];
+      if (token != null) {
+        await storage.write(key: 'jwt_token', value: token);
+        await _updateStatus(token, 'available');
+      } else {
+        throw Exception('No token received from server');
+      }
+
+      final user = data['user'];
+      if (user == null) throw Exception('No user data in response');
+      final userID = user['userid'] as int? ?? (throw Exception('No userid in response'));
+      final role = user['role'] as String? ?? (throw Exception('No role in response'));
+
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => MainPage(userID: userID, role: role),
         ),
       );
-      return;
+    } else {
+      final errorMessage = jsonDecode(response.body)['message'] ?? 'Login failed';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(errorMessage)));
     }
-
-    setState(() => _isLoading = true);
-
-    try {
-      final jsonData = {
-        'email': usernameController.text.trim(),
-        'password': passwordController.text.trim(),
-      };
-      final response = await http.post(
-        Uri.parse('$apiBaseUrl/login'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode(jsonData),
-      );
-
-      if (!mounted) return;
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final token = data['token'];
-        if (token != null) {
-          await storage.write(key: 'jwt_token', value: token);
-          print('Token stored: $token'); // Debug print
-          final storedToken = await storage.read(key: 'jwt_token');
-          print('Token retrieved after store: $storedToken'); // Verify storage
-          await _updateStatus(token, 'available');
-        } else {
-          throw Exception('No token received from server');
-        }
-
-        final user = data['user'];
-        if (user == null) throw Exception('No user data in response');
-        final userID =
-            user['userid'] as int? ??
-            (throw Exception('No userid in response'));
-        final role =
-            user['role'] as String? ?? (throw Exception('No role in response'));
-
-        if (role == 'worker') {
-          try {
-            final assignResponse = await http.post(
-              Uri.parse('$apiBaseUrl/worker/group-and-assign-reports'),
-              headers: {
-                'Authorization': 'Bearer $token',
-                'Content-Type': 'application/json',
-              },
-              body: jsonEncode({'workerId': userID}),
-            );
-            print('Assignment Response Status: ${assignResponse.statusCode}');
-            print('Assignment Response Body: ${assignResponse.body}');
-            if (assignResponse.statusCode != 200) {
-              throw Exception('Assignment failed: ${assignResponse.body}');
-            }
-          } catch (e) {
-            print('🔥 Critical Assignment Error: $e');
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Task assignment failed: ${e.toString()}'),
-              ),
-            );
-          }
-        }
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (context) => MainPage(userID: userID, role: role),
-          ),
-        );
-      } else {
-        final errorMessage =
-            jsonDecode(response.body)['message'] ?? 'Login failed';
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(errorMessage)));
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Network error: $e')));
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
-    }
+  } catch (e) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Network error: $e')));
+  } finally {
+    if (mounted) setState(() => _isLoading = false);
   }
+}
 
   @override
   Widget build(BuildContext context) {

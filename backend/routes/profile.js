@@ -6,7 +6,7 @@ const bcryptjs = require('bcryptjs');
 const profileRouter = express.Router();
 
 const pool = new Pool({
-  connectionString: 'postgresql://postgres.hrzroqrgkvzhomsosqzl:7H.6k2wS*F$q2zY@aws-0-ap-south-1.pooler.supabase.com:6543/postgres',
+  connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false },
 });
 
