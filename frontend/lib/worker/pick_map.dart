@@ -31,19 +31,19 @@ class _MapScreenState extends State<MapScreen> {
   String _errorMessage = '';
   final storage = const FlutterSecureStorage();
 
-  bool _collectionStarted = false; // Will be set based on task status
+  bool _collectionStarted = false;
   Set<int> _collectedReports = {};
-  LatLng? _currentCollectionPoint;
-  String? _currentWasteType;
+  LatLng? _selectedLocation;
+  String? _selectedWasteType;
+  int? _selectedReportId;
 
   double _totalDistance = 0.0;
-  List<Map<String, dynamic>> _directionSteps = []; // Store symbol and distance for each step
+  List<Map<String, dynamic>> _directionSteps = [];
   int _currentInstructionIndex = 0;
 
   @override
   void initState() {
     super.initState();
-    print('Task ID from widget: ${widget.taskid}'); // Debug taskId
     _getWorkerLocation();
     _fetchCollectionRequestData();
   }
@@ -53,9 +53,6 @@ class _MapScreenState extends State<MapScreen> {
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
         setState(() => _errorMessage = 'Please enable location services');
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please enable location services')),
-        );
         return;
       }
 
@@ -64,18 +61,12 @@ class _MapScreenState extends State<MapScreen> {
         permission = await Geolocator.requestPermission();
         if (permission == LocationPermission.denied) {
           setState(() => _errorMessage = 'Location permissions are denied');
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Location permissions are denied')),
-          );
           return;
         }
       }
 
       if (permission == LocationPermission.deniedForever) {
         setState(() => _errorMessage = 'Location permissions are permanently denied');
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Location permissions are permanently denied')),
-        );
         return;
       }
 
@@ -113,12 +104,11 @@ class _MapScreenState extends State<MapScreen> {
         setState(() {
           _workerLocation = LatLng(position.latitude, position.longitude);
           _currentCenter = _workerLocation!;
-          _mapController.move(_currentCenter, _currentZoom); // Update map as worker moves
+          _mapController.move(_currentCenter, _currentZoom);
         });
         _updateCompleteRoute();
         _calculateDistances();
         _updateDirectionsBasedOnLocation();
-        _erasePolylineAtWorkerLocation(); // Check and erase polyline segments
       }
     });
   }
@@ -128,7 +118,7 @@ class _MapScreenState extends State<MapScreen> {
       _isLoading = true;
       _errorMessage = '';
     });
-    final String apiUrl = '$apiBaseUrl/worker/task-route/${widget.taskid}?workerLat=${_workerLocation?.latitude ?? 10.235865}&workerLng=${_workerLocation?.longitude ?? 76.405676}';
+    final String apiUrl = '$apiBaseUrl/worker/task-route/${widget.taskid}';
 
     try {
       final token = await storage.read(key: 'jwt_token');
@@ -141,21 +131,8 @@ class _MapScreenState extends State<MapScreen> {
 
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = jsonDecode(response.body);
-        if (data['route'] != null && data['route'] is Map) {
-          _parseRouteFromJson(data['route']);
-        } else {
-          setState(() => _errorMessage = 'No route data found in task');
-        }
-
-        if (data['locations'] != null && data['locations'] is List) {
-          _parseLocations(data['locations']);
-          // Update collected reports based on backend data
-          final collected = await _fetchCollectedReports(data['reportids']);
-          setState(() {
-            _collectedReports = collected;
-          });
-        }
-
+        _parseRouteFromJson(data);
+        
         if (_workerLocation == null && data['workerLocation'] != null) {
           _workerLocation = LatLng(
             data['workerLocation']['lat'],
@@ -164,17 +141,8 @@ class _MapScreenState extends State<MapScreen> {
           _currentCenter = _workerLocation!;
         }
 
-        // Set _collectionStarted based on task status
-        setState(() {
-          _collectionStarted = data['status'] == 'in-progress';
-        });
-
         if (_workerLocation != null && _locations.isNotEmpty) {
           _route = await _fetchRouteFromOSRM();
-          if (_route.isEmpty) {
-            _route = _locations;
-            setState(() => _errorMessage = 'Failed to fetch route from OSRM. Showing straight-line path.');
-          }
           _updateCompleteRoute();
           _calculateDistances();
           _updateDirectionsBasedOnLocation();
@@ -184,111 +152,52 @@ class _MapScreenState extends State<MapScreen> {
             ..._locations,
           ]);
           _mapController.fitCamera(CameraFit.bounds(bounds: bounds));
-        } else {
-          setState(() => _errorMessage = 'Missing worker location or collection points');
         }
       } else {
-        setState(() => _errorMessage = 'Failed to fetch task data: ${response.statusCode} - ${response.body}');
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to fetch task data: ${response.statusCode} - ${response.body}')),
-        );
+        throw Exception('Failed to fetch task data: ${response.statusCode}');
       }
     } catch (e) {
       setState(() => _errorMessage = 'Error fetching task data: $e');
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error fetching task data: $e')));
     } finally {
       setState(() => _isLoading = false);
     }
   }
 
-  Future<Set<int>> _fetchCollectedReports(List<dynamic>? reportIds) async {
-    if (reportIds == null) return {};
-    final token = await storage.read(key: 'jwt_token');
-    if (token == null) return {};
-    
-    final response = await http.get(
-      Uri.parse('$apiBaseUrl/garbagereports/status?reportIds=${jsonEncode(reportIds)}'),
-      headers: {'Authorization': 'Bearer $token'},
-    );
-
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      return (data as List)
-          .where((r) => r['status'] == 'collected')
-          .map((r) => r['reportid'] as int)
-          .toSet();
-    }
-    return {};
-  }
-
-  void _parseRouteFromJson(Map<String, dynamic> routeData) {
+  void _parseRouteFromJson(Map<String, dynamic> data) {
     _locations.clear();
     _route.clear();
     _reportIds.clear();
     _wasteTypes.clear();
 
-    if (routeData['start'] != null && routeData['start']['lat'] != null && routeData['start']['lng'] != null) {
-      final startPoint = LatLng(routeData['start']['lat'], routeData['start']['lng']);
-      _locations.add(startPoint);
-      _route.add(startPoint);
-    }
-
-    if (routeData['waypoints'] != null && routeData['waypoints'] is List) {
-      for (var waypoint in routeData['waypoints']) {
-        if (waypoint['lat'] != null && waypoint['lng'] != null && waypoint['reportid'] != null) {
-          final latLng = LatLng(waypoint['lat'], waypoint['lng']);
-          if (!_collectedReports.contains(waypoint['reportid'])) {
-            _locations.add(latLng);
-            _route.add(latLng);
-            _reportIds.add(waypoint['reportid']);
-            _wasteTypes.add(waypoint['wastetype'] ?? 'Unknown');
+    if (data['locations'] != null && data['locations'] is List) {
+      for (var item in data['locations']) {
+        if (item['lat'] != null && item['lng'] != null && item['reportid'] != null) {
+          try {
+            final LatLng latLng = LatLng(
+              double.parse(item['lat'].toString()),
+              double.parse(item['lng'].toString()),
+            );
+            if (!_collectedReports.contains(item['reportid'])) {
+              _locations.add(latLng);
+              _reportIds.add(item['reportid']);
+              _wasteTypes.add(item['wastetype'] ?? 'Unknown');
+            }
+          } catch (e) {
+            print('Error parsing location: $e');
           }
         }
       }
-    }
-
-    if (routeData['end'] != null && routeData['end']['lat'] != null && routeData['end']['lng'] != null) {
-      final endPoint = LatLng(routeData['end']['lat'], routeData['end']['lng']);
-      _locations.add(endPoint);
-      _route.add(endPoint);
-    }
-
-    if (_locations.isEmpty) {
-      setState(() => _errorMessage = 'No valid waypoints found in route');
-    }
-  }
-
-  void _parseLocations(List<dynamic> data) {
-    _locations.clear();
-    _reportIds.clear();
-    _wasteTypes.clear();
-    for (var item in data) {
-      if (item['lat'] != null && item['lng'] != null && item['reportid'] != null) {
-        try {
-          final LatLng latLng = LatLng(double.parse(item['lat'].toString()), double.parse(item['lng'].toString()));
-          if (!_collectedReports.contains(item['reportid'])) {
-            _locations.add(latLng);
-            _reportIds.add(item['reportid']);
-            _wasteTypes.add(item['wastetype'] ?? 'Unknown');
-          }
-        } catch (e) {
-          print('Error parsing location: $e');
-        }
-      }
-    }
-    if (_locations.isEmpty) {
-      setState(() => _errorMessage = 'No valid collection points found');
     }
   }
 
   Future<List<LatLng>> _fetchRouteFromOSRM() async {
-    if (_workerLocation == null || _locations.isEmpty) {
-      return [];
-    }
+    if (_workerLocation == null || _locations.isEmpty) return [];
 
     List<LatLng> waypoints = [_workerLocation!, ..._locations];
     final String osrmBaseUrl = 'http://router.project-osrm.org/route/v1/driving/';
-    String coordinates = waypoints.map((point) => '${point.longitude},${point.latitude}').join(';');
+    String coordinates = waypoints
+        .map((point) => '${point.longitude},${point.latitude}')
+        .join(';');
     final String osrmUrl = '$osrmBaseUrl$coordinates?overview=full&geometries=geojson&steps=true';
 
     try {
@@ -298,54 +207,15 @@ class _MapScreenState extends State<MapScreen> {
         final Map<String, dynamic> data = jsonDecode(response.body);
         if (data['code'] == 'Ok' && data['routes'].isNotEmpty) {
           final routeGeometry = data['routes'][0]['geometry']['coordinates'];
-          List<LatLng> routePoints = routeGeometry.map<LatLng>((coord) => LatLng(coord[1], coord[0])).toList();
-
-          _directionSteps.clear();
-          final legs = data['routes'][0]['legs'];
-          double cumulativeDistance = 0.0;
-          for (var leg in legs) {
-            for (var step in leg['steps']) {
-              if (step['maneuver'] != null && step['maneuver']['instruction'] != null) {
-                String symbol = _convertInstructionToSymbol(step['maneuver']['instruction']);
-                if (symbol.isNotEmpty) {
-                  cumulativeDistance += (step['distance'] ?? 0.0) / 1000; // Convert meters to km
-                  _directionSteps.add({
-                    'symbol': symbol,
-                    'distance': cumulativeDistance.toStringAsFixed(2),
-                  });
-                }
-              }
-            }
-          }
-          _currentInstructionIndex = 0;
-          _directions = _directionSteps.isNotEmpty
-              ? '${_directionSteps[0]['symbol']} (${_directionSteps[0]['distance']} km)'
-              : "🡺 (0.00 km)";
-
-          return routePoints;
-        } else {
-          throw Exception('OSRM API error: ${data['message']}');
+          return routeGeometry
+              .map<LatLng>((coord) => LatLng(coord[1], coord[0]))
+              .toList();
         }
-      } else {
-        throw Exception('Failed to fetch route from OSRM: ${response.statusCode}');
       }
     } catch (e) {
       print('Error fetching route from OSRM: $e');
-      setState(() {
-        _errorMessage = 'Error fetching route from OSRM: $e';
-        _directions = '🡺 (0.00 km)';
-      });
-      return _locations;
     }
-  }
-
-  String _convertInstructionToSymbol(String instruction) {
-    if (instruction.toLowerCase().contains('turn left')) return '⬅️';
-    if (instruction.toLowerCase().contains('turn right')) return '➡️';
-    if (instruction.toLowerCase().contains('continue')) return '🡺';
-    if (instruction.toLowerCase().contains('uturn')) return '↺';
-    if (instruction.toLowerCase().contains('arrive')) return '🏁';
-    return '🡺'; // Default straight arrow
+    return _locations;
   }
 
   void _updateCompleteRoute() {
@@ -357,81 +227,54 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   double _haversineDistance(LatLng start, LatLng end) {
-    const double earthRadius = 6371.0; // Radius in kilometers
+    const double earthRadius = 6371.0;
     final double dLat = _degreesToRadians(end.latitude - start.latitude);
     final double dLon = _degreesToRadians(end.longitude - start.longitude);
-    final double a = sin(dLat / 2) * sin(dLat / 2) +
-        cos(_degreesToRadians(start.latitude)) * cos(_degreesToRadians(end.latitude)) * sin(dLon / 2) * sin(dLon / 2);
+    final double a =
+        sin(dLat / 2) * sin(dLat / 2) +
+        cos(_degreesToRadians(start.latitude)) *
+            cos(_degreesToRadians(end.latitude)) *
+            sin(dLon / 2) *
+            sin(dLon / 2);
     final double c = 2 * asin(sqrt(a));
-    return earthRadius * c * 1000; // Convert to meters for closer proximity check
+    return earthRadius * c;
   }
 
   double _degreesToRadians(double degrees) => degrees * (pi / 180.0);
 
   void _calculateDistances() {
     if (_workerLocation == null || _completeRoute.isEmpty) {
-      setState(() {
-        _totalDistance = 0.0;
-      });
+      setState(() => _totalDistance = 0.0);
       return;
     }
 
     _totalDistance = 0.0;
     for (int i = 0; i < _completeRoute.length - 1; i++) {
-      _totalDistance += _haversineDistance(_completeRoute[i], _completeRoute[i + 1]) / 1000; // Convert back to km
+      _totalDistance += _haversineDistance(_completeRoute[i], _completeRoute[i + 1]);
     }
     setState(() {});
   }
 
   void _updateDirectionsBasedOnLocation() {
-    if (_workerLocation == null || _completeRoute.isEmpty || _directionSteps.isEmpty) return;
+    if (_workerLocation == null || _completeRoute.isEmpty) return;
 
     double minDistance = double.infinity;
-    int closestIndex = 0;
-    for (int i = 0; i < _completeRoute.length; i++) {
-      final distance = _haversineDistance(_workerLocation!, _completeRoute[i]);
-      if (distance < minDistance) {
-        minDistance = distance;
-        closestIndex = i;
-      }
+    for (final point in _completeRoute) {
+      final distance = _haversineDistance(_workerLocation!, point);
+      if (distance < minDistance) minDistance = distance;
     }
 
-    if (minDistance < 0.05 * 1000 && _currentInstructionIndex < _directionSteps.length - 1) { // 50 meters
-      _currentInstructionIndex++;
-      _directions = '${_directionSteps[_currentInstructionIndex]['symbol']} (${_directionSteps[_currentInstructionIndex]['distance']} km)';
-      setState(() {});
-    }
-  }
-
-  void _erasePolylineAtWorkerLocation() {
-    if (_workerLocation == null || _completeRoute.length <= 1) return;
-
-    for (int i = 0; i < _completeRoute.length - 1; i++) {
-      double distanceToPoint = _haversineDistance(_workerLocation!, _completeRoute[i]);
-      if (distanceToPoint < 50) { // Erase if within 50 meters
-        // Remove the segment up to this point
-        _completeRoute = _completeRoute.sublist(i + 1);
-        _route = _route.sublist(i); // Adjust route if needed, but typically handled by OSRM
-        _directionSteps = _directionSteps.sublist(_currentInstructionIndex + 1);
-        _currentInstructionIndex = 0;
-        _directions = _directionSteps.isNotEmpty
-            ? '${_directionSteps[0]['symbol']} (${_directionSteps[0]['distance']} km)'
-            : "🏁 (0.00 km)"; // End of route
-        _calculateDistances();
-        break; // Exit after erasing one segment
-      }
-    }
+    setState(() {
+      _directions = 'Distance to nearest point: ${minDistance.toStringAsFixed(2)} km';
+    });
   }
 
   void _startCollection() async {
     setState(() => _isLoading = true);
-
     try {
       final token = await storage.read(key: 'jwt_token');
-      print('Token: $token');
       if (token == null) throw Exception('No authentication token found');
 
-      print('Starting collection for taskId: ${widget.taskid}');
       final response = await http.post(
         Uri.parse('$apiBaseUrl/worker/start-task'),
         headers: {
@@ -441,310 +284,281 @@ class _MapScreenState extends State<MapScreen> {
         body: jsonEncode({'taskId': widget.taskid}),
       );
 
-      print('Response status: ${response.statusCode}, Body: ${response.body}');
       if (response.statusCode == 200) {
-        setState(() {
-          _collectionStarted = true;
-          _errorMessage = '';
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Collection started! Tap on locations to mark as collected'),
-          ),
-        );
-      } else if (response.statusCode == 403) {
-        throw Exception('Access denied: ${response.body}');
+        setState(() => _collectionStarted = true);
       } else {
-        throw Exception('Failed to start task: ${response.statusCode} - ${response.body}');
+        throw Exception('Failed to start task: ${response.statusCode}');
       }
     } catch (e) {
       setState(() => _errorMessage = 'Error starting collection: $e');
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error starting collection: $e')));
     } finally {
       setState(() => _isLoading = false);
     }
   }
 
-  Future<void> _markAsCollected(LatLng location, int reportId, String wasteType) async {
-    setState(() {
-      _currentCollectionPoint = location;
-      _currentWasteType = wasteType;
-      _isLoading = true;
-    });
+  Future<void> _markAsCollected() async {
+  if (_selectedLocation == null || _selectedReportId == null) return;
 
-    try {
-      final token = await storage.read(key: 'jwt_token');
-      if (token == null) throw Exception('No authentication token found');
+  setState(() => _isLoading = true);
+  try {
+    final token = await storage.read(key: 'jwt_token');
+    if (token == null) throw Exception('No authentication token found');
 
-      final response = await http.post(
-        Uri.parse('$apiBaseUrl/worker/mark-collected'),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode({'taskId': widget.taskid, 'reportId': reportId}),
-      );
+    final response = await http.post(
+      Uri.parse('$apiBaseUrl/worker/mark-collected'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({
+        'taskId': widget.taskid,
+        'reportId': _selectedReportId,
+      }),
+    );
 
-      final responseData = jsonDecode(response.body);
+    final responseData = jsonDecode(response.body);
 
-      if (response.statusCode == 200) {
-        setState(() {
-          _collectedReports.add(reportId);
-          _currentCollectionPoint = null;
-          _currentWasteType = null;
-          // Remove the collected location from _locations, _route, and _reportIds
-          final index = _locations.indexWhere((loc) => loc == location);
-          if (index != -1) {
-            _locations.removeAt(index);
-            _route.removeAt(index + 1); // +1 to skip worker location at index 0
-            _reportIds.removeAt(index);
-            _wasteTypes.removeAt(index);
-            _updateCompleteRoute();
-            _calculateDistances();
-            _fetchRouteFromOSRM(); // Re-fetch route to update polyline
-          }
-        });
+    if (response.statusCode == 200) {
+      // Immediately update the UI
+      setState(() {
+        _collectedReports.add(_selectedReportId!);
+        _locations.removeWhere((loc) => loc == _selectedLocation);
+        _reportIds.remove(_selectedReportId);
+        _wasteTypes.remove(_selectedWasteType);
+        _selectedLocation = null;
+        _selectedReportId = null;
+        _selectedWasteType = null;
+      });
 
-        if (responseData['taskStatus'] == 'completed') {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('All locations collected! Task completed')),
-          );
-          Navigator.pop(context);
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('${responseData['message']} (${responseData['remainingReports']} remaining)')),
-          );
-        }
-      } else {
-        throw Exception(responseData['error'] ?? 'Failed to mark collected');
+      // Refresh the route
+      if (_workerLocation != null && _locations.isNotEmpty) {
+        _route = await _fetchRouteFromOSRM();
+        _updateCompleteRoute();
+        _calculateDistances();
       }
-    } catch (e) {
-      setState(() => _errorMessage = 'Error marking collected: $e');
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error marking collected: $e')));
-    } finally {
-      setState(() => _isLoading = false);
+
+      if (responseData['taskStatus'] == 'completed') {
+        // Show success message and navigate back
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Task completed successfully!')),
+        );
+        Navigator.pop(context, true); // Pass true to indicate completion
+      }
+    } else {
+      throw Exception('Failed to mark collected: ${response.body}');
     }
+  } catch (e) {
+    setState(() => _errorMessage = 'Error marking collected: $e');
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Error: $e')),
+    );
+  } finally {
+    setState(() => _isLoading = false);
   }
+}
 
-  int _getReportIdForIndex(int index) {
-    return index < _reportIds.length ? _reportIds[index] : -1;
-  }
-
-  String _getWasteTypeForIndex(int index) {
-    return index < _wasteTypes.length ? _wasteTypes[index] : 'Unknown';
+  void _selectLocation(int index) {
+    if (index >= _locations.length) return;
+    
+    setState(() {
+      _selectedLocation = _locations[index];
+      _selectedReportId = _reportIds[index];
+      _selectedWasteType = _wasteTypes[index];
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () {
-        // Clear location details when tapping outside a marker
-        if (_currentCollectionPoint != null) {
-          setState(() {
-            _currentCollectionPoint = null;
-            _currentWasteType = null;
-          });
-        }
-      },
-      child: Scaffold(
-        appBar: AppBar(
-          backgroundColor: Colors.green.shade700,
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back, color: Colors.white),
-            onPressed: () => Navigator.pop(context),
-          ),
-          title: const Text(
-            'Collection Points',
-            style: TextStyle(
-              fontWeight: FontWeight.w600,
-              color: Colors.white,
-              fontSize: 20,
-            ),
+    return Scaffold(
+      appBar: AppBar(
+        backgroundColor: Colors.green.shade700,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: const Text(
+          'Collection Points',
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            color: Colors.white,
+            fontSize: 20,
           ),
         ),
-        body: Stack(
-          children: [
-            FlutterMap(
-              mapController: _mapController,
-              options: MapOptions(
-                initialCenter: _currentCenter,
-                initialZoom: _currentZoom,
-                minZoom: 10,
-                maxZoom: 18,
-                onPositionChanged: (position, hasGesture) {
-                  if (hasGesture) {
-                    setState(() {
-                      _currentCenter = position.center;
-                      _currentZoom = position.zoom;
-                    });
-                  }
-                },
+      ),
+      body: Stack(
+        children: [
+          FlutterMap(
+            mapController: _mapController,
+            options: MapOptions(
+              initialCenter: _currentCenter,
+              initialZoom: _currentZoom,
+              minZoom: 10,
+              maxZoom: 18,
+              onPositionChanged: (position, hasGesture) {
+                if (hasGesture) {
+                  setState(() {
+                    _currentCenter = position.center;
+                    _currentZoom = position.zoom;
+                  });
+                }
+              },
+              onTap: (_, __) {
+                setState(() {
+                  _selectedLocation = null;
+                  _selectedReportId = null;
+                  _selectedWasteType = null;
+                });
+              },
+            ),
+            children: [
+              TileLayer(
+                urlTemplate: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+                subdomains: ['a', 'b', 'c'],
               ),
-              children: [
-                TileLayer(
-                  urlTemplate: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-                  subdomains: ['a', 'b', 'c'],
+              if (_completeRoute.isNotEmpty)
+                PolylineLayer(
+                  polylines: [
+                    Polyline(
+                      points: _completeRoute,
+                      strokeWidth: 4.0,
+                      color: Colors.green.shade700,
+                    ),
+                  ],
                 ),
-                if (_completeRoute.isNotEmpty)
-                  PolylineLayer(
-                    polylines: [
-                      Polyline(
-                        points: _completeRoute,
-                        strokeWidth: 4.0,
-                        color: Colors.green.shade700,
+              MarkerLayer(
+                markers: [
+                  if (_workerLocation != null)
+                    Marker(
+                      point: _workerLocation!,
+                      width: 40,
+                      height: 40,
+                      child: const Icon(
+                        Icons.person_pin_circle,
+                        color: Colors.blue,
+                        size: 40,
                       ),
-                    ],
-                  ),
-                MarkerLayer(
-                  markers: [
-                    if (_workerLocation != null)
-                      Marker(
-                        point: _workerLocation!,
-                        width: 40,
-                        height: 40,
-                        child: const Icon(
-                          Icons.person_pin_circle,
-                          color: Colors.blue,
+                    ),
+                  ..._locations.asMap().entries.map((entry) {
+                    final index = entry.key;
+                    final loc = entry.value;
+                    final isCollected = _collectedReports.contains(_reportIds[index]);
+
+                    return Marker(
+                      point: loc,
+                      width: 40,
+                      height: 40,
+                      child: GestureDetector(
+                        onTap: () => _selectLocation(index),
+                        child: Icon(
+                          isCollected ? Icons.check_circle : Icons.location_pin,
+                          color: isCollected
+                              ? Colors.green
+                              : (_collectionStarted ? Colors.orange : Colors.red),
                           size: 40,
                         ),
                       ),
-                    ..._locations.asMap().entries.map((entry) {
-                      final index = entry.key;
-                      final loc = entry.value;
-                      final reportId = _getReportIdForIndex(index);
-                      final wasteType = _getWasteTypeForIndex(index);
-
-                      return Marker(
-                        point: loc,
-                        width: 40,
-                        height: 40,
-                        child: GestureDetector(
-                          onTap: () {
-                            if (_collectionStarted && !_collectedReports.contains(reportId)) {
-                              setState(() {
-                                _currentCollectionPoint = loc;
-                                _currentWasteType = wasteType;
-                              });
-                            }
-                          },
-                          child: Icon(
-                            _collectedReports.contains(reportId) ? Icons.check_circle : Icons.location_pin,
-                            color: _collectedReports.contains(reportId) ? Colors.green : (_collectionStarted ? Colors.orangeAccent : Colors.redAccent),
-                            size: 40,
-                          ),
+                    );
+                  }),
+                ],
+              ),
+            ],
+          ),
+          Positioned(
+            top: 16,
+            left: 16,
+            right: 16,
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.6),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.white.withOpacity(0.2)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _directions,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Total Distance: ${_totalDistance.toStringAsFixed(2)} km',
+                    style: const TextStyle(fontSize: 14, color: Colors.white70),
+                  ),
+                  if (_selectedLocation != null && _selectedWasteType != null)
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const SizedBox(height: 8),
+                        Text(
+                          'Selected Location:',
+                          style: TextStyle(fontSize: 14, color: Colors.white70),
                         ),
-                      );
-                    }),
-                  ],
-                ),
-              ],
-            ),
-            Positioned(
-              top: 16,
-              left: 16,
-              right: 16,
-              child: Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.6),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.white.withOpacity(0.2)),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _directions,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Total Distance: ${_totalDistance.toStringAsFixed(2)} km',
-                      style: const TextStyle(fontSize: 14, color: Colors.white70),
-                    ),
-                    if (_currentCollectionPoint != null && _currentWasteType != null)
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const SizedBox(height: 8),
-                          Text(
-                            'Selected Location Details:',
-                            style: TextStyle(fontSize: 14, color: Colors.white70),
-                          ),
-                          Text(
-                            'Waste Type: $_currentWasteType',
-                            style: TextStyle(fontSize: 14, color: Colors.white70),
-                          ),
-                          Text(
-                            'Location: ${_currentCollectionPoint!.latitude.toStringAsFixed(6)}, '
-                                '${_currentCollectionPoint!.longitude.toStringAsFixed(6)}',
-                            style: TextStyle(fontSize: 14, color: Colors.white70),
-                          ),
-                          const SizedBox(height: 8),
+                        Text(
+                          'Waste Type: $_selectedWasteType',
+                          style: TextStyle(fontSize: 14, color: Colors.white70),
+                        ),
+                        Text(
+                          'Coordinates: ${_selectedLocation!.latitude.toStringAsFixed(6)}, '
+                          '${_selectedLocation!.longitude.toStringAsFixed(6)}',
+                          style: TextStyle(fontSize: 14, color: Colors.white70),
+                        ),
+                        if (_collectionStarted && !_collectedReports.contains(_selectedReportId))
                           ElevatedButton(
-                            onPressed: _collectionStarted && !_collectedReports.contains(_getReportIdForIndex(_locations.indexOf(_currentCollectionPoint!)))
-                                ? () => _markAsCollected(_currentCollectionPoint!, _getReportIdForIndex(_locations.indexOf(_currentCollectionPoint!)), _currentWasteType!)
-                                : null,
+                            onPressed: _markAsCollected,
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.green.shade700,
+                              backgroundColor: Colors.green,
                               foregroundColor: Colors.white,
                             ),
-                            child: const Text('Collected'),
+                            child: const Text('Mark as Collected'),
                           ),
-                        ],
+                      ],
+                    ),
+                  if (_errorMessage.isNotEmpty)
+                    Text(
+                      'Error: $_errorMessage',
+                      style: const TextStyle(
+                        fontSize: 14,
+                        color: Colors.redAccent,
                       ),
-                    if (_errorMessage.isNotEmpty)
-                      Column(
-                        children: [
-                          const SizedBox(height: 8),
-                          Text(
-                            'Error: $_errorMessage',
-                            style: const TextStyle(
-                              fontSize: 14,
-                              color: Colors.redAccent,
-                            ),
-                          ),
-                        ],
-                      ),
-                  ],
-                ),
+                    ),
+                ],
               ),
             ),
-            if (_isLoading)
-              const Center(child: CircularProgressIndicator(color: Colors.green)),
-          ],
-        ),
-        floatingActionButton: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (!_collectionStarted) // Only show Start button if not in-progress
-              FloatingActionButton.extended(
-                onPressed: _startCollection,
-                backgroundColor: Colors.green.shade700,
-                label: const Text(
-                  'Start Collection',
-                  style: TextStyle(color: Colors.white),
-                ),
-                icon: const Icon(Icons.play_arrow, color: Colors.white),
-              ),
-            const SizedBox(height: 16),
-            FloatingActionButton(
-              onPressed: () {
-                if (_workerLocation != null) {
-                  _currentCenter = _workerLocation!;
-                  _currentZoom = 14;
-                  _mapController.move(_currentCenter, _currentZoom);
-                }
-              },
+          ),
+          if (_isLoading)
+            const Center(child: CircularProgressIndicator(color: Colors.green)),
+        ],
+      ),
+      floatingActionButton: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (!_collectionStarted)
+            FloatingActionButton.extended(
+              onPressed: _startCollection,
               backgroundColor: Colors.green.shade700,
-              child: const Icon(Icons.my_location, color: Colors.white),
+              label: const Text(
+                'Start Collection',
+                style: TextStyle(color: Colors.white),
+              ),
+              icon: const Icon(Icons.play_arrow, color: Colors.white),
             ),
-          ],
-        ),
+          const SizedBox(height: 16),
+          FloatingActionButton(
+            onPressed: () {
+              if (_workerLocation != null) {
+                _mapController.move(_workerLocation!, 14);
+              }
+            },
+            backgroundColor: Colors.green.shade700,
+            child: const Icon(Icons.my_location, color: Colors.white),
+          ),
+        ],
       ),
     );
   }
