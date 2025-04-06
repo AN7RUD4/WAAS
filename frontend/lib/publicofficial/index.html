@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Waste Management - Official Portal</title>
+    <!-- CDN for Supabase and XLSX -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <!-- Link to CSS -->
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- Login Section -->
+    <div class="login-container" id="loginContainer">
+        <div class="login-box">
+            <h1>Official Login</h1>
+            <form id="loginForm">
+                <div class="form-group">
+                    <label for="email">Email</label>
+                    <input type="email" id="email" required>
+                </div>
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" required>
+                </div>
+                <button type="submit" class="login-btn">Login</button>
+                <div id="loginError" class="error-message"></div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Main Application Content (hidden until login) -->
+    <div class="main-content" id="mainContent">
+        <!-- Header for Logout Button -->
+        <header class="header">
+            <button onclick="logout()" class="logout-btn">Logout</button>
+        </header>
+
+        <div class="container">
+            <h1>WAAS Official Portal</h1>
+            
+            <nav>
+                <button onclick="showSection('report')">Reports</button>
+                <button onclick="showSection('workers')">Workers</button>
+            </nav>
+
+            <section id="report" class="section">
+                <h2>Generate Report</h2>
+                <form id="reportForm">
+                    <label for="month">Month:</label>
+                    <input type="month" id="month" required>
+                    <label for="reportid">Report ID (Optional):</label>
+                    <input type="number" id="reportid" placeholder="Enter Report ID">
+                    <button type="submit">Generate Report</button>
+                </form>
+                <div id="reportResult"></div>
+            </section>
+
+            <section id="workers" class="section">
+                <h2>Worker Management</h2>
+                <div class="worker-form">
+                    <h3>Add New Worker</h3>
+                    <form id="workerForm">
+                        <label for="workerName">Worker Name:</label>
+                        <input type="text" id="workerName" placeholder="Enter name" required>
+                        <label for="workerId">Worker ID:</label>
+                        <input type="number" id="workerId" placeholder="Enter ID" required>
+                        <label for="workerEmail">Worker Email:</label>
+                        <input type="email" id="workerEmail" placeholder="Enter email" required>
+                        <label for="workerPhone">Worker Phone:</label>
+                        <input type="tel" id="workerPhone" placeholder="Enter phone" required>
+                        <label for="workerAddress">Worker Address:</label>
+                        <input type="text" id="workerAddress" placeholder="Enter address" required>
+                        <button type="submit">Add Worker</button>
+                    </form>
+                </div>
+
+                <div class="worker-list">
+                    <h3>Worker List</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Name</th>
+                                <th>Email</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="workerTableBody"></tbody>
+                    </table>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <!-- Link to JavaScript (defer ensures it loads after HTML) -->
+    <script src="script.js" defer></script>
+</body>
+</html>
