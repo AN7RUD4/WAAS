@@ -748,10 +748,8 @@ router.post('/mark-collected', authenticateToken, checkWorkerOrAdminRole, async 
         await pool.query(
             `UPDATE garbagereports 
              SET status = 'collected', 
-                 collected_at = NOW(), 
-                 collected_by = $1 
              WHERE reportid = $2`,
-            [workerId, reportId]
+            [reportId]
         );
 
         const uncollectedCount = await pool.query(
