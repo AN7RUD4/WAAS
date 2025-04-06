@@ -31,7 +31,7 @@ class _MapScreenState extends State<MapScreen> {
   String _errorMessage = '';
   final storage = const FlutterSecureStorage();
 
-  bool _collectionStarted = false;
+  bool _collectionStarted = false; // Will be set based on task status
   Set<int> _collectedReports = {};
   LatLng? _currentCollectionPoint;
   String? _currentWasteType;
@@ -118,6 +118,7 @@ class _MapScreenState extends State<MapScreen> {
         _updateCompleteRoute();
         _calculateDistances();
         _updateDirectionsBasedOnLocation();
+        _erasePolylineAtWorkerLocation(); // Check and erase polyline segments
       }
     });
   }
@@ -127,7 +128,7 @@ class _MapScreenState extends State<MapScreen> {
       _isLoading = true;
       _errorMessage = '';
     });
-    final String apiUrl = '$apiBaseUrl/worker/task-route/${widget.taskid}';
+    final String apiUrl = '$apiBaseUrl/worker/task-route/${widget.taskid}?workerLat=${_workerLocation?.latitude ?? 10.235865}&workerLng=${_workerLocation?.longitude ?? 76.405676}';
 
     try {
       final token = await storage.read(key: 'jwt_token');
@@ -148,6 +149,11 @@ class _MapScreenState extends State<MapScreen> {
 
         if (data['locations'] != null && data['locations'] is List) {
           _parseLocations(data['locations']);
+          // Update collected reports based on backend data
+          final collected = await _fetchCollectedReports(data['reportids']);
+          setState(() {
+            _collectedReports = collected;
+          });
         }
 
         if (_workerLocation == null && data['workerLocation'] != null) {
@@ -157,6 +163,11 @@ class _MapScreenState extends State<MapScreen> {
           );
           _currentCenter = _workerLocation!;
         }
+
+        // Set _collectionStarted based on task status
+        setState(() {
+          _collectionStarted = data['status'] == 'in-progress';
+        });
 
         if (_workerLocation != null && _locations.isNotEmpty) {
           _route = await _fetchRouteFromOSRM();
@@ -188,6 +199,26 @@ class _MapScreenState extends State<MapScreen> {
     } finally {
       setState(() => _isLoading = false);
     }
+  }
+
+  Future<Set<int>> _fetchCollectedReports(List<dynamic>? reportIds) async {
+    if (reportIds == null) return {};
+    final token = await storage.read(key: 'jwt_token');
+    if (token == null) return {};
+    
+    final response = await http.get(
+      Uri.parse('$apiBaseUrl/garbagereports/status?reportIds=${jsonEncode(reportIds)}'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return (data as List)
+          .where((r) => r['status'] == 'collected')
+          .map((r) => r['reportid'] as int)
+          .toSet();
+    }
+    return {};
   }
 
   void _parseRouteFromJson(Map<String, dynamic> routeData) {
@@ -326,13 +357,13 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   double _haversineDistance(LatLng start, LatLng end) {
-    const double earthRadius = 6371.0;
+    const double earthRadius = 6371.0; // Radius in kilometers
     final double dLat = _degreesToRadians(end.latitude - start.latitude);
     final double dLon = _degreesToRadians(end.longitude - start.longitude);
     final double a = sin(dLat / 2) * sin(dLat / 2) +
         cos(_degreesToRadians(start.latitude)) * cos(_degreesToRadians(end.latitude)) * sin(dLon / 2) * sin(dLon / 2);
     final double c = 2 * asin(sqrt(a));
-    return earthRadius * c;
+    return earthRadius * c * 1000; // Convert to meters for closer proximity check
   }
 
   double _degreesToRadians(double degrees) => degrees * (pi / 180.0);
@@ -347,7 +378,7 @@ class _MapScreenState extends State<MapScreen> {
 
     _totalDistance = 0.0;
     for (int i = 0; i < _completeRoute.length - 1; i++) {
-      _totalDistance += _haversineDistance(_completeRoute[i], _completeRoute[i + 1]);
+      _totalDistance += _haversineDistance(_completeRoute[i], _completeRoute[i + 1]) / 1000; // Convert back to km
     }
     setState(() {});
   }
@@ -365,10 +396,30 @@ class _MapScreenState extends State<MapScreen> {
       }
     }
 
-    if (minDistance < 0.05 && _currentInstructionIndex < _directionSteps.length - 1) {
+    if (minDistance < 0.05 * 1000 && _currentInstructionIndex < _directionSteps.length - 1) { // 50 meters
       _currentInstructionIndex++;
       _directions = '${_directionSteps[_currentInstructionIndex]['symbol']} (${_directionSteps[_currentInstructionIndex]['distance']} km)';
       setState(() {});
+    }
+  }
+
+  void _erasePolylineAtWorkerLocation() {
+    if (_workerLocation == null || _completeRoute.length <= 1) return;
+
+    for (int i = 0; i < _completeRoute.length - 1; i++) {
+      double distanceToPoint = _haversineDistance(_workerLocation!, _completeRoute[i]);
+      if (distanceToPoint < 50) { // Erase if within 50 meters
+        // Remove the segment up to this point
+        _completeRoute = _completeRoute.sublist(i + 1);
+        _route = _route.sublist(i); // Adjust route if needed, but typically handled by OSRM
+        _directionSteps = _directionSteps.sublist(_currentInstructionIndex + 1);
+        _currentInstructionIndex = 0;
+        _directions = _directionSteps.isNotEmpty
+            ? '${_directionSteps[0]['symbol']} (${_directionSteps[0]['distance']} km)'
+            : "🏁 (0.00 km)"; // End of route
+        _calculateDistances();
+        break; // Exit after erasing one segment
+      }
     }
   }
 
@@ -670,7 +721,7 @@ class _MapScreenState extends State<MapScreen> {
         floatingActionButton: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (!_collectionStarted)
+            if (!_collectionStarted) // Only show Start button if not in-progress
               FloatingActionButton.extended(
                 onPressed: _startCollection,
                 backgroundColor: Colors.green.shade700,

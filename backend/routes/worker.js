@@ -141,7 +141,7 @@ function kmeansClustering(points, k) {
 
         const clusters = Array.from({ length: k }, () => []);
         points.forEach((point) => {
-            const pointCoords = [point.lat, point.lng];
+            const pointCoords = [point.lat, p.lng];
             let closestCentroidIdx = 0;
             let minDistance = calculateDistance(pointCoords, centroids[0]);
 
@@ -517,7 +517,7 @@ router.get('/assigned-tasks', authenticateToken, checkWorkerOrAdminRole, async (
     }
 });
 
-// Map endpoint
+// Map endpoint (Updated to include report status)
 router.get('/task-route/:taskid', authenticateToken, checkWorkerOrAdminRole, async (req, res) => {
     const taskId = parseInt(req.params.taskid, 10);
     const workerId = req.user.userid;
@@ -539,7 +539,7 @@ router.get('/task-route/:taskid', authenticateToken, checkWorkerOrAdminRole, asy
         const task = taskResult.rows[0];
 
         const reportsResult = await pool.query(
-            `SELECT reportid, wastetype, ST_AsText(location) AS location 
+            `SELECT reportid, wastetype, ST_AsText(location) AS location, status
              FROM garbagereports 
              WHERE reportid = ANY($1)`,
             [task.reportids]
@@ -552,6 +552,7 @@ router.get('/task-route/:taskid', authenticateToken, checkWorkerOrAdminRole, asy
                 wastetype: report.wastetype,
                 lat: locationMatch ? parseFloat(locationMatch[2]) : null,
                 lng: locationMatch ? parseFloat(locationMatch[1]) : null,
+                status: report.status // Include status of each report
             };
         }).filter(point => point.lat !== null && point.lng !== null);
 
@@ -785,6 +786,26 @@ router.post('/mark-collected', authenticateToken, checkWorkerOrAdminRole, async 
             error: 'Internal Server Error',
             details: error.message
         });
+    }
+});
+
+// New endpoint to fetch report statuses
+router.get('/garbagereports/status', authenticateToken, checkWorkerOrAdminRole, async (req, res) => {
+    try {
+        const reportIds = JSON.parse(req.query.reportIds);
+        if (!Array.isArray(reportIds) || reportIds.length === 0) {
+            return res.status(400).json({ error: 'Invalid or empty reportIds array' });
+        }
+
+        const result = await pool.query(
+            `SELECT reportid, status FROM garbagereports WHERE reportid = ANY($1)`,
+            [reportIds]
+        );
+
+        res.status(200).json(result.rows);
+    } catch (error) {
+        console.error('Error fetching report statuses:', error.message, error.stack);
+        res.status(500).json({ error: 'Internal Server Error', details: error.message });
     }
 });
 
