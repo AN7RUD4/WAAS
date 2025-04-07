@@ -71,44 +71,88 @@ function haversineDistance(lat1, lon1, lat2, lon2) {
 }
 
 // Enhanced K-Means clustering with priority handling
+// Enhanced and fixed K-Means clustering
 function kmeansClustering(points, k) {
-    if (!points.length) return [];
-    if (points.length < k) return points.map(p => [p]);
+    if (!points || !Array.isArray(points) || points.length === 0) {
+        console.error('Invalid or empty points array');
+        return [];
+    }
+
+    // Ensure k is valid
+    k = Math.min(Math.max(1, k), points.length);
+    if (k <= 1) return [points];
+
+    // Initialize clusters array properly
+    const clusters = Array.from({ length: k }, () => []);
 
     // Sort by severity (high priority first)
     points.sort((a, b) => {
         const severityOrder = { high: 3, medium: 2, low: 1 };
-        return severityOrder[b.severity] - severityOrder[a.severity];
-    });
-
-    const kmeans = new KMeans({
-        distance: (p1, p2) => haversineDistance(p1[0], p1[1], p2[0], p2[1]),
+        return (severityOrder[b.severity] || 1) - (severityOrder[a.severity] || 1);
     });
 
     try {
+        // Convert to coordinates array
         const data = points.map(p => [p.lat, p.lng]);
-        const centroids = kmeans.cluster(data, k, "kmeans++");
-        
-        const clusters = Array(k).fill().map(() => []);
-        points.forEach(point => {
-            const pointCoords = [point.lat, point.lng];
-            let minDistance = Infinity;
-            let closestIdx = 0;
 
+        // Initialize centroids using first k points
+        const centroids = [];
+        for (let i = 0; i < k; i++) {
+            centroids.push(data[i % data.length]); // Ensure we don't go out of bounds
+        }
+
+        // Cluster assignment
+        let changed = true;
+        let iterations = 0;
+        const maxIterations = 100;
+
+        while (changed && iterations < maxIterations) {
+            iterations++;
+            changed = false;
+
+            // Reset clusters
+            clusters.forEach(cluster => cluster.length = 0);
+
+            // Assign points to nearest centroid
+            points.forEach(point => {
+                const pointCoords = [point.lat, point.lng];
+                let minDistance = Infinity;
+                let closestIdx = 0;
+
+                centroids.forEach((centroid, i) => {
+                    const dist = haversineDistance(
+                        pointCoords[0], pointCoords[1],
+                        centroid[0], centroid[1]
+                    );
+                    if (dist < minDistance) {
+                        minDistance = dist;
+                        closestIdx = i;
+                    }
+                });
+
+                clusters[closestIdx].push(point);
+            });
+
+            // Update centroids
             centroids.forEach((centroid, i) => {
-                const dist = haversineDistance(pointCoords[0], pointCoords[1], centroid[0], centroid[1]);
-                if (dist < minDistance) {
-                    minDistance = dist;
-                    closestIdx = i;
+                if (clusters[i].length > 0) {
+                    const newLat = clusters[i].reduce((sum, p) => sum + p.lat, 0) / clusters[i].length;
+                    const newLng = clusters[i].reduce((sum, p) => sum + p.lng, 0) / clusters[i].length;
+                    
+                    // Check if centroid moved significantly
+                    if (haversineDistance(centroid[0], centroid[1], newLat, newLng) > 0.01) {
+                        changed = true;
+                    }
+                    centroid[0] = newLat;
+                    centroid[1] = newLng;
                 }
             });
-            clusters[closestIdx].push(point);
-        });
+        }
 
         return clusters.filter(c => c.length > 0);
     } catch (error) {
         console.error('Clustering error:', error);
-        return points.map(p => [p]); // Fallback
+        return points.map(p => [p]);
     }
 }
 
