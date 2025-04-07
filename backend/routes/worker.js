@@ -222,6 +222,16 @@ async function sendSMS(phoneNumber, messageBody) {
     }
 }
 
+// Role check middleware
+const checkWorkerOrAdminRole = (req, res, next) => {
+    console.log('Checking role for user:', req.user);
+    if (!req.user || (req.user.role.toLowerCase() !== 'worker' && req.user.role.toLowerCase() !== 'official')) {
+        console.log('Access denied: role not worker or admin');
+        return res.status(403).json({ message: 'Access denied: Only workers or admins can access this endpoint' });
+    }
+    next();
+};
+
 // Update worker location endpoint
 router.post('/update-worker-location', authenticateToken, async (req, res) => {
     try {
