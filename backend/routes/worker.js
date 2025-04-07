@@ -395,14 +395,12 @@ async function notifyUsers(cluster, taskId) {
     for (const userId of uniqueUserIds) {
         try {
             const user = await pool.query(`
-                SELECT phone, language FROM users WHERE userid = $1
+                SELECT phone FROM users WHERE userid = $1
             `, [userId]);
             
             if (user.rows[0]?.phone) {
                 const reports = cluster.filter(r => r.userid === userId);
-                const message = user.rows[0].language === 'es' ?
-                    `Sus reportes (${reports.map(r => r.wastetype).join(', ')}) han sido asignados. ID: ${taskId}` :
-                    `Your reports (${reports.map(r => r.wastetype).join(', ')}) have been assigned. ID: ${taskId}`;
+                const message = `Your reports (${reports.map(r => r.wastetype).join(', ')}) have been assigned. ID: ${taskId}`;
                 
                 await twilioClient.messages.create({
                     body: message,
