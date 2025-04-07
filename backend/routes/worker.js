@@ -309,7 +309,6 @@ router.post('/group-and-assign-reports', authenticateToken, async (req, res) => 
         if (workersResult.rows.length === 0) {
             return res.status(400).json({ error: 'No available workers with capacity' });
         }
-        
         // 3. Cluster reports
         const clusterCount = Math.ceil(reports.length / maxReportsPerWorker);
         const clusters = kmeansClustering(reports, clusterCount);
@@ -348,12 +347,6 @@ router.post('/group-and-assign-reports', authenticateToken, async (req, res) => 
                 route.totalDistance
             ]);
 
-            // Update report statuses
-            await pool.query(`
-                UPDATE garbagereports
-                SET status = 'assigned'
-                WHERE reportid = ANY($1)
-            `, [cluster.map(r => r.reportid)]);
 
             // Update worker status if at capacity
             if (cluster.length >= worker.capacity) {
@@ -372,7 +365,7 @@ router.post('/group-and-assign-reports', authenticateToken, async (req, res) => 
                 workerId: worker.userid,
                 reportCount: cluster.length,
                 estimatedDistance: route.totalDistance,
-                hazardous: cluster.some(r => r.wastetype === 'hazardous')
+                hazardous: cluster.some(r => r.wastetype === 'public') // Adjusted for public/home
             });
         }
 
@@ -382,13 +375,9 @@ router.post('/group-and-assign-reports', authenticateToken, async (req, res) => 
             assignments: results,
             unassignedReports: reports.length - results.reduce((sum, r) => sum + r.reportCount, 0)
         });
-
     } catch (error) {
         console.error('Assignment error:', error);
-        res.status(500).json({ 
-            error: 'Internal server error',
-            details: error.message 
-        });
+        res.status(500).json({ error: 'Internal server error', details: error.message });
     }
 });
 
