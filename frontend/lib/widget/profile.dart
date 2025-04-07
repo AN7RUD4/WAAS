@@ -600,9 +600,7 @@ class ApiService {
 
     try {
       final response = await http.put(
-        Uri.parse(
-          '$apiBaseUrl/profile/update-status',
-        ), // Adjust endpoint as needed
+        Uri.parse('$apiBaseUrl/profile/update-status'),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
@@ -617,6 +615,8 @@ class ApiService {
     }
   }
 }
+ 
+
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -660,7 +660,7 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Future<void> _logout() async {
-    await apiService.updateStatus('busy'); // Set status to unavailable
+    await apiService.updateStatus('busy'); 
     await ApiService.storage.delete(key: 'jwt_token');
     Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
   }
