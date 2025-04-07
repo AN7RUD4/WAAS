@@ -286,21 +286,6 @@ router.post('/update-worker-location', authenticateToken, async (req, res) => {
     }
 });
 
-router.put('/profile/update-status', authenticateToken, async (req, res) => {
-    try {
-      const { status } = req.body;
-      const { userid } = req.user;
-      await pool.query(
-        `UPDATE users SET status = $1 WHERE userid = $2`,
-        [status, userid]
-      );
-      res.status(200).json({ message: `Status updated to: ${status}` });
-    } catch (error) {
-      console.error('Status update error:', error);
-      res.status(500).json({ error: 'Failed to update status' });
-    }
-  });
-
 // Group and assign reports endpoint
 router.post('/group-and-assign-reports', authenticateToken, async (req, res) => {
     try {

@@ -186,20 +186,27 @@ profileRouter.put('/change-password', authenticateToken, async (req, res) => {
   }
 });
 
+// Add this route to your router file
 profileRouter.put('/update-status', authenticateToken, async (req, res) => {
-  const { status } = req.body; 
-  const userId = req.user.userid; 
   try {
-    const { rows } = await pool.query(
-      'UPDATE users SET status = $1 WHERE userid = $2 RETURNING *',
-      [status, userId]
-    );
-    if (rows.length === 0) return res.status(404).json({ error: 'User not found' });
-    res.status(200).json({ user: rows[0] });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Failed to update status'});
-}
+      const { status } = req.body;
+      const { userid } = req.user;
+      if (!['available', 'busy'].includes(status)) {
+          return res.status(400).json({ error: 'Invalid status value' });
+      }
+      const result = await pool.query(
+          `UPDATE users SET status = $1, last_updated = NOW() WHERE userid = $2 RETURNING status`,
+          [status, userid]
+      );
+      if (result.rowCount === 0) {
+          return res.status(404).json({ error: 'User not found' });
+      }
+      console.log(`User ${userid} status updated to: ${status}`);
+      res.status(200).json({ message: `Status updated to: ${status}` });
+  } catch (error) {
+      console.error('Status update error:', error);
+      res.status(500).json({ error: 'Failed to update status', details: error.message });
+  }
 });
 
 module.exports = profileRouter;
