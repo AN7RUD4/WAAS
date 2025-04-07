@@ -47,108 +47,136 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Future<void> login() async {
-  if (usernameController.text.trim().isEmpty || passwordController.text.trim().isEmpty) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Please enter both username and password')),
-    );
-    return;
-  }
+    if (usernameController.text.trim().isEmpty ||
+        passwordController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter both username and password'),
+        ),
+      );
+      return;
+    }
 
-  setState(() => _isLoading = true);
+    setState(() => _isLoading = true);
+    print('Login process started for email: ${usernameController.text.trim()}');
 
-  try {
-    final jsonData = {
-      'email': usernameController.text.trim(),
-      'password': passwordController.text.trim(),
-    };
-    print('Sending login request with email: ${jsonData['email']}');
-    final response = await http.post(
-      Uri.parse('$apiBaseUrl/login'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode(jsonData),
-    );
+    try {
+      final jsonData = {
+        'email': usernameController.text.trim(),
+        'password': passwordController.text.trim(),
+      };
+      print('Sending login request with email: ${jsonData['email']}');
+      final response = await http.post(
+        Uri.parse('$apiBaseUrl/login'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(jsonData),
+      );
 
-    if (!mounted) return;
-
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      final token = data['token'];
-      print('Login response received, token: $token');
-      if (token != null) {
-        await storage.write(key: 'jwt_token', value: token);
-        print('Token stored: $token');
-
-        // Attempt to update status to 'available'
-        print('Attempting to update status to available with token: $token');
-        final statusResponse = await http.put(
-          Uri.parse('$apiBaseUrl/profile/update-status'),
-          headers: {
-            'Authorization': 'Bearer $token',
-            'Content-Type': 'application/json',
-          },
-          body: jsonEncode({'status': 'available'}),
-        );
-
-        print('Status update response status: ${statusResponse.statusCode}');
-        print('Status update response body: ${statusResponse.body}');
-        if (statusResponse.statusCode == 200) {
-          print('Status updated to: available');
-        } else {
-          print('Failed to update status: ${statusResponse.statusCode} - ${statusResponse.body}');
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Failed to set status: ${statusResponse.body}')),
-          );
-          return; // Stop if status update fails
-        }
-      } else {
-        throw Exception('No token received from server');
+      print('Login response status: ${response.statusCode}');
+      if (!mounted) {
+        print('Widget unmounted during login response');
+        return;
       }
 
-      final user = data['user'];
-      if (user == null) throw Exception('No user data in response');
-      final userID = user['userid'] as int? ?? (throw Exception('No userid in response'));
-      final role = user['role'] as String? ?? 'user';
-      print('User logged in: userid=$userID, role=$role');
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final token = data['token'];
+        print('Login response received, token: $token');
+        if (token != null) {
+          await storage.write(key: 'jwt_token', value: token);
+          print('Token stored: $token');
 
-      if (role == 'worker') {
-        try {
-          final assignResponse = await http.post(
-            Uri.parse('$apiBaseUrl/worker/group-and-assign-reports'),
+          // Attempt to update status to 'available'
+          print('Attempting to update status to available with token: $token');
+          final statusResponse = await http.put(
+            Uri.parse('$apiBaseUrl/profile/update-status'),
             headers: {
               'Authorization': 'Bearer $token',
               'Content-Type': 'application/json',
             },
-            body: jsonEncode({'workerId': userID, 'maxDistance': 30, 'maxReportsPerWorker': 3, 'urgencyWindow': '24 hours'}),
+            body: jsonEncode({'status': 'available'}),
           );
-          print('Assignment Response Status: ${assignResponse.statusCode}');
-          print('Assignment Response Body: ${assignResponse.body}');
-          if (assignResponse.statusCode != 200) {
-            throw Exception('Assignment failed: ${assignResponse.body}');
-          }
-        } catch (e) {
-          print('🔥 Critical Assignment Error: $e');
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Task assignment failed: $e')),
-          );
-        }
-      }
 
-      Navigator.pushReplacement(
+          print('Status update response status: ${statusResponse.statusCode}');
+          print('Status update response body: ${statusResponse.body}');
+          if (statusResponse.statusCode == 200) {
+            print('Status updated to: available');
+          } else {
+            print(
+              'Failed to update status: ${statusResponse.statusCode} - ${statusResponse.body}',
+            );
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Failed to set status: ${statusResponse.body}'),
+              ),
+            );
+            return; // Stop if status update fails
+          }
+        } else {
+          throw Exception('No token received from server');
+        }
+
+        final user = data['user'];
+        if (user == null) throw Exception('No user data in response');
+        final userID =
+            user['userid'] as int? ??
+            (throw Exception('No userid in response'));
+        final role = user['role'] as String? ?? 'user';
+        print('User logged in: userid=$userID, role=$role');
+
+        if (role == 'worker') {
+          try {
+            print('Initiating assignment for worker $userID');
+            final assignResponse = await http.post(
+              Uri.parse('$apiBaseUrl/worker/group-and-assign-reports'),
+              headers: {
+                'Authorization': 'Bearer $token',
+                'Content-Type': 'application/json',
+              },
+              body: jsonEncode({
+                'workerId': userID,
+                'maxDistance': 30,
+                'maxReportsPerWorker': 3,
+                'urgencyWindow': '24 hours',
+              }),
+            );
+            print('Assignment Response Status: ${assignResponse.statusCode}');
+            print('Assignment Response Body: ${assignResponse.body}');
+            if (assignResponse.statusCode != 200) {
+              throw Exception('Assignment failed: ${assignResponse.body}');
+            }
+          } catch (e) {
+            print('🔥 Critical Assignment Error: $e');
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Task assignment failed: $e')),
+            );
+          }
+        }
+
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => MainPage(userID: userID, role: role),
+          ),
+        );
+      } else {
+        final errorMessage =
+            jsonDecode(response.body)['message'] ?? 'Login failed';
+        print('Login failed: $errorMessage');
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(errorMessage)));
+      }
+    } catch (e) {
+      print('Login error caught: $e');
+      ScaffoldMessenger.of(
         context,
-        MaterialPageRoute(builder: (context) => MainPage(userID: userID, role: role)),
-      );
-    } else {
-      final errorMessage = jsonDecode(response.body)['message'] ?? 'Login failed';
-      print('Login failed: $errorMessage');
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(errorMessage)));
+      ).showSnackBar(SnackBar(content: Text('Network error: $e')));
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+      print('Login process completed');
     }
-  } catch (e) {
-    print('Login error: $e');
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Network error: $e')));
-  } finally {
-    if (mounted) setState(() => _isLoading = false);
   }
-}
 
   @override
   Widget build(BuildContext context) {

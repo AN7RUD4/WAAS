@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'dart:math' show sin, cos, sqrt, asin, pi;
+import 'dart:math' show asin, atan2, cos, pi, sin, sqrt;
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
@@ -47,6 +47,51 @@ class _MapScreenState extends State<MapScreen> {
     _getWorkerLocation();
     _fetchCollectionRequestData();
   }
+
+  // Add these constants at the top of your class
+ Map<int, String> _directionSymbols = {
+  0: '🛣️', // Continue straight
+  1: '⬅️', // Sharp left
+  2: '↖️', // Left
+  3: '↪️', // Slight left
+  4: '➡️', // Sharp right
+  5: '↗️', // Right
+  6: '↩️', // Slight right
+  7: '↗️', // Merge right
+  8: '↖️', // Merge left
+  9: '🔄', // Roundabout
+  10: '🏁', // Destination reached
+};
+
+String _getDirectionSymbol(double bearing) {
+  if (bearing < 0) bearing += 360;
+  
+  if (bearing >= 337.5 || bearing < 22.5) return '🛣️'; // Straight
+  if (bearing >= 22.5 && bearing < 67.5) return '↗️'; // Right
+  if (bearing >= 67.5 && bearing < 112.5) return '➡️'; // Sharp right
+  if (bearing >= 112.5 && bearing < 157.5) return '↘️'; // Slight right
+  if (bearing >= 157.5 && bearing < 202.5) return '🛣️'; // Straight (reverse)
+  if (bearing >= 202.5 && bearing < 247.5) return '↙️'; // Slight left
+  if (bearing >= 247.5 && bearing < 292.5) return '⬅️'; // Left
+  if (bearing >= 292.5 && bearing < 337.5) return '↖️'; // Sharp left
+  
+  return '🛣️';
+}
+
+double _calculateBearing(LatLng start, LatLng end) {
+  final startLat = _degreesToRadians(start.latitude);
+  final startLng = _degreesToRadians(start.longitude);
+  final endLat = _degreesToRadians(end.latitude);
+  final endLng = _degreesToRadians(end.longitude);
+
+  final y = sin(endLng - startLng) * cos(endLat);
+  final x = cos(startLat) * sin(endLat) -
+      sin(startLat) * cos(endLat) * cos(endLng - startLng);
+  final bearing = atan2(y, x);
+  return (_radiansToDegrees(bearing) + 360) % 360;
+}
+
+double _radiansToDegrees(double radians) => radians * (180.0 / pi);
 
   void _getWorkerLocation() async {
     try {
@@ -191,32 +236,105 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   Future<List<LatLng>> _fetchRouteFromOSRM() async {
-    if (_workerLocation == null || _locations.isEmpty) return [];
+  if (_workerLocation == null || _locations.isEmpty) return [];
 
-    List<LatLng> waypoints = [_workerLocation!, ..._locations];
-    final String osrmBaseUrl = 'http://router.project-osrm.org/route/v1/driving/';
-    String coordinates = waypoints
-        .map((point) => '${point.longitude},${point.latitude}')
-        .join(';');
-    final String osrmUrl = '$osrmBaseUrl$coordinates?overview=full&geometries=geojson&steps=true';
+  List<LatLng> waypoints = [_workerLocation!, ..._locations];
+  final String osrmBaseUrl = 'http://router.project-osrm.org/route/v1/driving/';
+  String coordinates = waypoints
+      .map((point) => '${point.longitude},${point.latitude}')
+      .join(';');
+  final String osrmUrl = '$osrmBaseUrl$coordinates?overview=full&geometries=geojson&steps=true';
 
-    try {
-      final response = await http.get(Uri.parse(osrmUrl));
+  try {
+    final response = await http.get(Uri.parse(osrmUrl));
 
-      if (response.statusCode == 200) {
-        final Map<String, dynamic> data = jsonDecode(response.body);
-        if (data['code'] == 'Ok' && data['routes'].isNotEmpty) {
-          final routeGeometry = data['routes'][0]['geometry']['coordinates'];
-          return routeGeometry
-              .map<LatLng>((coord) => LatLng(coord[1], coord[0]))
-              .toList();
+    if (response.statusCode == 200) {
+      final Map<String, dynamic> data = jsonDecode(response.body);
+      if (data['code'] == 'Ok' && data['routes'].isNotEmpty) {
+        // Parse steps for turn-by-turn directions
+        _directionSteps = [];
+        final steps = data['routes'][0]['legs'][0]['steps'];
+        for (var step in steps) {
+          _directionSteps.add({
+            'distance': step['distance'],
+            'instruction': step['maneuver']['instruction'],
+            'type': step['maneuver']['type'],
+            'modifier': step['maneuver']['modifier'],
+            'location': LatLng(
+              step['maneuver']['location'][1],
+              step['maneuver']['location'][0],
+            ),
+          });
         }
+
+        final routeGeometry = data['routes'][0]['geometry']['coordinates'];
+        return routeGeometry
+            .map<LatLng>((coord) => LatLng(coord[1], coord[0]))
+            .toList();
       }
-    } catch (e) {
-      print('Error fetching route from OSRM: $e');
     }
-    return _locations;
+  } catch (e) {
+    print('Error fetching route from OSRM: $e');
   }
+  return _locations;
+}
+
+
+String _getCurrentInstruction() {
+  if (_workerLocation == null || _directionSteps.isEmpty) return 'Calculating route...';
+
+  // Find the closest step
+  int closestStepIndex = 0;
+  double minDistance = double.infinity;
+  
+  for (int i = 0; i < _directionSteps.length; i++) {
+    final stepLocation = _directionSteps[i]['location'] as LatLng;
+    final distance = _haversineDistance(_workerLocation!, stepLocation);
+    if (distance < minDistance) {
+      minDistance = distance;
+      closestStepIndex = i;
+    }
+  }
+
+  // Get the next instruction
+  final nextStepIndex = closestStepIndex < _directionSteps.length - 1 
+      ? closestStepIndex + 1 
+      : closestStepIndex;
+      
+  final nextStep = _directionSteps[nextStepIndex];
+  final distanceToNext = _haversineDistance(
+    _workerLocation!,
+    nextStep['location'] as LatLng,
+  );
+
+  String instruction = nextStep['instruction'];
+  String symbol = '🛣️';
+  
+  switch (nextStep['type']) {
+    case 'turn':
+      switch (nextStep['modifier']) {
+        case 'left': symbol = '⬅️'; break;
+        case 'right': symbol = '➡️'; break;
+        case 'sharp left': symbol = '↖️'; break;
+        case 'sharp right': symbol = '↗️'; break;
+        case 'slight left': symbol = '↩️'; break;
+        case 'slight right': symbol = '↪️'; break;
+      }
+      break;
+    case 'arrive':
+      symbol = '🏁';
+      instruction = 'Destination reached';
+      break;
+    case 'roundabout':
+      symbol = '🔄';
+      break;
+    case 'depart':
+      symbol = '🚦';
+      break;
+  }
+
+  return '$symbol ${nextStep['instruction']} (${distanceToNext.toStringAsFixed(2)} km)';
+}
 
   void _updateCompleteRoute() {
     if (_workerLocation == null || _route.isEmpty) {
@@ -256,18 +374,66 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   void _updateDirectionsBasedOnLocation() {
-    if (_workerLocation == null || _completeRoute.isEmpty) return;
+  if (_workerLocation == null || _completeRoute.isEmpty) return;
 
-    double minDistance = double.infinity;
-    for (final point in _completeRoute) {
-      final distance = _haversineDistance(_workerLocation!, point);
-      if (distance < minDistance) minDistance = distance;
+  // Find the nearest point on the route
+  int nearestIndex = 0;
+  double minDistance = double.infinity;
+  
+  for (int i = 0; i < _completeRoute.length; i++) {
+    final distance = _haversineDistance(_workerLocation!, _completeRoute[i]);
+    if (distance < minDistance) {
+      minDistance = distance;
+      nearestIndex = i;
     }
-
-    setState(() {
-      _directions = 'Distance to nearest point: ${minDistance.toStringAsFixed(2)} km';
-    });
   }
+
+  // Get the next significant point (skip very close points)
+  int nextPointIndex = nearestIndex + 1;
+  while (nextPointIndex < _completeRoute.length - 1 && 
+         _haversineDistance(_completeRoute[nearestIndex], _completeRoute[nextPointIndex]) < 0.05) {
+    nextPointIndex++;
+  }
+
+  if (nextPointIndex >= _completeRoute.length) {
+    setState(() => _directions = '🏁 Destination reached');
+    return;
+  }
+
+  final nextPoint = _completeRoute[nextPointIndex];
+  final distanceToNext = _haversineDistance(_workerLocation!, nextPoint);
+  final bearing = _calculateBearing(_workerLocation!, nextPoint);
+  final directionSymbol = _getDirectionSymbol(bearing);
+
+  String instruction;
+  if (distanceToNext < 0.1) {
+    instruction = 'Approaching next point';
+  } else {
+    instruction = '$directionSymbol In ${distanceToNext.toStringAsFixed(2)} km';
+    
+    // Add more specific instructions based on bearing
+    if (bearing >= 22.5 && bearing < 67.5) {
+      instruction += ' (Turn slight right)';
+    } else if (bearing >= 67.5 && bearing < 112.5) {
+      instruction += ' (Turn right)';
+    } else if (bearing >= 112.5 && bearing < 157.5) {
+      instruction += ' (Turn sharp right)';
+    } else if (bearing >= 157.5 && bearing < 202.5) {
+      instruction += ' (Continue straight)';
+    } else if (bearing >= 202.5 && bearing < 247.5) {
+      instruction += ' (Turn slight left)';
+    } else if (bearing >= 247.5 && bearing < 292.5) {
+      instruction += ' (Turn left)';
+    } else if (bearing >= 292.5 && bearing < 337.5) {
+      instruction += ' (Turn sharp left)';
+    }
+  }
+
+  setState(() => _directions = instruction);
+
+  if (_workerLocation == null || _completeRoute.isEmpty) return;
+  setState(() => _directions = _getCurrentInstruction());
+}
 
   void _startCollection() async {
     setState(() => _isLoading = true);
@@ -477,14 +643,14 @@ class _MapScreenState extends State<MapScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    _directions,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
-                    ),
-                  ),
+                 Text(
+  _directions,
+  style: const TextStyle(
+    fontSize: 18, // Slightly larger for better visibility
+    fontWeight: FontWeight.w600,
+    color: Colors.white,
+  ),
+),
                   const SizedBox(height: 8),
                   Text(
                     'Total Distance: ${_totalDistance.toStringAsFixed(2)} km',

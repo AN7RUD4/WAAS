@@ -218,7 +218,6 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
                                 return WorkListItem(
                                   taskId: work['taskId'],
                                   title: work['title'],
-                                  distance: work['distance'],
                                   startTime: work['time'],
                                   onTap: () {
                                     Navigator.pushNamed(
@@ -255,7 +254,6 @@ class _WorkerHomePageState extends State<WorkerHomePage> {
 class WorkListItem extends StatelessWidget {
   final String taskId;
   final String title;
-  final String distance;
   final String? startTime;
   final String? endTime;
   final VoidCallback onTap;
@@ -264,7 +262,6 @@ class WorkListItem extends StatelessWidget {
     super.key,
     required this.taskId,
     required this.title,
-    required this.distance,
     this.startTime,
     this.endTime,
     required this.onTap,
@@ -295,11 +292,6 @@ class WorkListItem extends StatelessWidget {
                       fontWeight: FontWeight.w600,
                       color: Colors.white,
                     ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    "Distance: $distance",
-                    style: TextStyle(fontSize: 14, color: Colors.white70),
                   ),
                 ],
               ),
@@ -411,7 +403,6 @@ class _PastWorkDetailsPageState extends State<PastWorkDetailsPage> {
                         return WorkListItem(
                           taskId: work['taskId'],
                           title: work['title'],
-                          distance: 'N/A',
                           startTime: null,
                           endTime: work['endTime'],
                           onTap: () {

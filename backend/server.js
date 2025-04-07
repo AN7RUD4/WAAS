@@ -30,35 +30,37 @@ app.use('/api/profile', profileRouter);
 app.use('/api/user', userRouter);
 app.use('/api/worker', workerRouter); 
 
-async function getAdminToken() {
-  try {
-    // If you have a stored token that's still valid, use it
-    if (process.env.ADMIN_JWT_TOKEN) {
-      try {
-        jwt.verify(process.env.ADMIN_JWT_TOKEN, process.env.JWT_SECRET || 'passwordKey');
-        return process.env.ADMIN_JWT_TOKEN;
-      } catch (e) {
-        // Token expired, need to get a new one
-      }
-    }
 
-    // Get new token by logging in
-    const response = await axios.post(
-      `${process.env.API_BASE_URL}/admin-login`,
-      {
-        username: process.env.ADMIN_USERNAME,
-        password: process.env.ADMIN_PASSWORD
-      }
-    );
 
-    // Store the new token in memory (or in a secure storage for production)
-    process.env.ADMIN_JWT_TOKEN = response.data.token;
-    return response.data.token;
-  } catch (error) {
-    console.error('Failed to get admin token:', error.message);
-    return null;
-  }
-}
+// async function getAdminToken() {
+//   try {
+//     // If you have a stored token that's still valid, use it
+//     if (process.env.ADMIN_JWT_TOKEN) {
+//       try {
+//         jwt.verify(process.env.ADMIN_JWT_TOKEN, process.env.JWT_SECRET || 'passwordKey');
+//         return process.env.ADMIN_JWT_TOKEN;
+//       } catch (e) {
+//         // Token expired, need to get a new one
+//       }
+//     }
+
+//     // Get new token by logging in
+//     const response = await axios.post(
+//       `${process.env.API_BASE_URL}/admin-login`,
+//       {
+//         username: process.env.ADMIN_USERNAME,
+//         password: process.env.ADMIN_PASSWORD
+//       }
+//     );
+
+//     // Store the new token in memory (or in a secure storage for production)
+//     process.env.ADMIN_JWT_TOKEN = response.data.token;
+//     return response.data.token;
+//   } catch (error) {
+//     console.error('Failed to get admin token:', error.message);
+//     return null;
+//   }
+// }
 
 // In worker mobile app (Flutter/React Native)
 // async function sendLocationUpdate() {

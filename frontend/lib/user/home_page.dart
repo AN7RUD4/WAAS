@@ -11,6 +11,19 @@ import 'package:waas/assets/constants.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 // Main user dashboard page
+import 'package:flutter/material.dart';
+import 'package:http_parser/http_parser.dart';
+import 'package:image_picker/image_picker.dart';
+import 'dart:io';
+import 'package:geolocator/geolocator.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../colors/colors.dart';
+import 'package:waas/assets/constants.dart';
+import 'package:google_fonts/google_fonts.dart';
+
+// Main user dashboard page (unchanged)
 class UserApp extends StatelessWidget {
   const UserApp({super.key});
 
@@ -167,8 +180,7 @@ class UserApp extends StatelessWidget {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder:
-                                    (context) => const CollectionRequestsPage(),
+                                builder: (context) => const CollectionRequestsPage(),
                               ),
                             );
                           },
@@ -433,24 +445,6 @@ class _ReportPageState extends State<ReportPage> {
       return;
     }
 
-    if (_hasWaste == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Please wait for waste detection to complete"),
-        ),
-      );
-      return;
-    }
-
-    if (!_hasWaste!) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Cannot submit report: No waste detected in the image"),
-        ),
-      );
-      return;
-    }
-
     setState(() {
       _isLoading = true;
       _errorMessage = null;
@@ -586,112 +580,116 @@ class _ReportPageState extends State<ReportPage> {
           _isLoading
               ? const Center(child: CircularProgressIndicator())
               : SafeArea(
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: SingleChildScrollView(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          "Report Public Waste",
-                          style: GoogleFonts.poppins(
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.black87,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          "Help keep your community clean",
-                          style: GoogleFonts.poppins(
-                            fontSize: 16,
-                            color: Colors.black54,
-                          ),
-                        ),
-                        const SizedBox(height: 24),
-                        Text(
-                          "Select a Picture",
-                          style: GoogleFonts.poppins(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.black87,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Center(
-                          child: Column(
-                            children: [
-                              _buildImagePreview(),
-                              const SizedBox(height: 16),
-                              Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceEvenly,
-                                children: [
-                                  Expanded(
-                                    child: ElevatedButton.icon(
-                                      icon: const Icon(Icons.camera_alt),
-                                      label: const Text("Open Camera"),
-                                      onPressed: _takePicture,
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: Colors.green.shade700,
-                                        foregroundColor: Colors.white,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 16),
-                                  Expanded(
-                                    child: ElevatedButton.icon(
-                                      icon: const Icon(Icons.photo_library),
-                                      label: const Text("Pick from Gallery"),
-                                      onPressed: _pickImageFromGallery,
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: Colors.green.shade700,
-                                        foregroundColor: Colors.white,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        TextFormField(
-                          controller: locationController,
-                          readOnly: true,
-                          decoration: const InputDecoration(
-                            labelText: "Location",
-                            prefixIcon: Icon(Icons.location_on_outlined),
-                          ),
-                        ),
-                        if (_errorMessage != null) ...[
-                          const SizedBox(height: 16),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
                           Text(
-                            _errorMessage!,
+                            "Report Public Waste",
                             style: GoogleFonts.poppins(
-                              color: Colors.red,
-                              fontSize: 14,
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.black87,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            "Help keep your community clean",
+                            style: GoogleFonts.poppins(
+                              fontSize: 16,
+                              color: Colors.black54,
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+                          Text(
+                            "Select a Picture",
+                            style: GoogleFonts.poppins(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.black87,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Center(
+                            child: Column(
+                              children: [
+                                _buildImagePreview(),
+                                const SizedBox(height: 16),
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceEvenly,
+                                  children: [
+                                    Expanded(
+                                      child: ElevatedButton.icon(
+                                        icon: const Icon(Icons.camera_alt),
+                                        label: const Text("Open Camera"),
+                                        onPressed: _takePicture,
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: Colors.green.shade700,
+                                          foregroundColor: Colors.white,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 16),
+                                    Expanded(
+                                      child: ElevatedButton.icon(
+                                        icon: const Icon(Icons.photo_library),
+                                        label: const Text("Pick from Gallery"),
+                                        onPressed: _pickImageFromGallery,
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: Colors.green.shade700,
+                                          foregroundColor: Colors.white,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          TextFormField(
+                            controller: locationController,
+                            readOnly: true,
+                            decoration: const InputDecoration(
+                              labelText: "Location",
+                              prefixIcon: Icon(Icons.location_on_outlined),
+                            ),
+                          ),
+                          if (_errorMessage != null) ...[
+                            const SizedBox(height: 16),
+                            Text(
+                              _errorMessage!,
+                              style: GoogleFonts.poppins(
+                                color: Colors.red,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ],
+                          const SizedBox(height: 24),
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton(
+                              onPressed: _hasWaste == true && _image != null && locationController.text.isNotEmpty
+                                  ? _submitReport
+                                  : null, // Disable button if no waste or missing fields
+                              child: const Text("Submit Report"),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.green.shade700,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(vertical: 16),
+                                disabledBackgroundColor: Colors.grey, // Visual cue for disabled state
+                                disabledForegroundColor: Colors.white70,
+                              ),
                             ),
                           ),
                         ],
-                        const SizedBox(height: 24),
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            onPressed: _submitReport,
-                            child: const Text("Submit Report"),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.green.shade700,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                            ),
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
                   ),
                 ),
-              ),
     );
   }
 }
