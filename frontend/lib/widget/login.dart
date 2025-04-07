@@ -78,10 +78,25 @@ class _LoginPageState extends State<LoginPage> {
         if (token != null) {
           await storage.write(key: 'jwt_token', value: token);
           print('Token stored: $token');
-          await _updateStatus(
-            token,
-            'available',
-          ); // Set status to "available" on login
+          // Wait for status update to complete
+          final statusResponse = await http.put(
+            Uri.parse('$apiBaseUrl/profile/update-status'),
+            headers: {
+              'Authorization': 'Bearer $token',
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode({'status': 'available'}),
+          );
+          if (statusResponse.statusCode != 200) {
+            print('Failed to update status: ${statusResponse.body}');
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Failed to set status: ${statusResponse.body}'),
+              ),
+            );
+            return;
+          }
+          print('Status updated to: available');
         } else {
           throw Exception('No token received from server');
         }
