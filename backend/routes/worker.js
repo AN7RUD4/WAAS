@@ -395,10 +395,9 @@ router.post('/group-and-assign-reports', authenticateToken, async (req, res) => 
                 `SELECT userid, ST_AsText(location) AS location
                  FROM users
                  WHERE role = 'worker'
-                 AND status = 'available'
-                 AND last_location_update > NOW() - INTERVAL '1 hour'`
+                 AND status = 'available'`
             );
-            
+            // 'AND last_location_update > NOW() - INTERVAL '1 hour'`
             let workers = workerResult.rows.map(row => {
                 const locMatch = row.location ? row.location.match(/POINT\(([^ ]+) ([^)]+)\)/) : null;
                 return {
