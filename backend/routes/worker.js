@@ -116,16 +116,6 @@ function kmeansClustering(points, k) {
 async function assignWorkersToClusters(clusters, workers) {
     if (!clusters.length || !workers.length) return [];
 
-    // Get worker skills from database
-    const skillsResult = await pool.query(
-        'SELECT userid, skills FROM users WHERE userid = ANY($1)',
-        [workers.map(w => w.userid)]
-    );
-    const workerSkills = skillsResult.rows.reduce((acc, row) => {
-        acc[row.userid] = row.skills || [];
-        return acc;
-    }, {});
-
     const costMatrix = clusters.map(cluster => {
         const centroid = {
             lat: cluster.reduce((sum, p) => sum + p.lat, 0) / cluster.length,
@@ -133,16 +123,7 @@ async function assignWorkersToClusters(clusters, workers) {
         };
 
         return workers.map(worker => {
-            // Base distance cost
-            let cost = haversineDistance(worker.lat, worker.lng, centroid.lat, centroid.lng);
-            
-            // Add penalty if worker lacks required skills
-            const hazardousInCluster = cluster.some(p => p.wastetype === 'hazardous');
-            if (hazardousInCluster && !workerSkills[worker.userid]?.includes('hazardous')) {
-                cost += 100; // Large penalty
-            }
-            
-            return cost;
+            return haversineDistance(worker.lat, worker.lng, centroid.lat, centroid.lng);
         });
     });
 
@@ -309,7 +290,6 @@ router.post('/group-and-assign-reports', authenticateToken, async (req, res) => 
                 u.userid,
                 ST_X(u.location::geometry) AS lng,
                 ST_Y(u.location::geometry) AS lat,
-                u.skills,
                 COUNT(tr.taskid) FILTER (WHERE tr.status = 'assigned') AS current_tasks
             FROM users u
             LEFT JOIN taskrequests tr ON tr.assignedworkerid = u.userid
@@ -318,19 +298,18 @@ router.post('/group-and-assign-reports', authenticateToken, async (req, res) => 
             GROUP BY u.userid
             HAVING COUNT(tr.taskid) < $1
         `, [maxReportsPerWorker]);
-
-        if (workersResult.rows.length === 0) {
-            return res.status(400).json({ error: 'No available workers with capacity' });
-        }
-
+        
         const workers = workersResult.rows.map(w => ({
             userid: w.userid,
             lat: w.lat,
             lng: w.lng,
-            skills: w.skills || [],
             capacity: maxReportsPerWorker - w.current_tasks
         }));
 
+        if (workersResult.rows.length === 0) {
+            return res.status(400).json({ error: 'No available workers with capacity' });
+        }
+        
         // 3. Cluster reports
         const clusterCount = Math.ceil(reports.length / maxReportsPerWorker);
         const clusters = kmeansClustering(reports, clusterCount);
