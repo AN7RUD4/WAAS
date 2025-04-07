@@ -61,61 +61,61 @@ async function getAdminToken() {
 }
 
 // In worker mobile app (Flutter/React Native)
-async function sendLocationUpdate() {
-  // Get current location
-  const location = await getCurrentPosition(); 
+// async function sendLocationUpdate() {
+//   // Get current location
+//   const location = await getCurrentPosition(); 
   
-  // Send to server
-  await axios.post(`${API_URL}/update-worker-location`, {
-    userId: currentUser.id,
-    lat: location.latitude,
-    lng: location.longitude
-  });
-}
+//   // Send to server
+//   await axios.post(`${API_URL}/update-worker-location`, {
+//     userId: currentUser.id,
+//     lat: location.latitude,
+//     lng: location.longitude
+//   });
+// }
 
-// Run every 15 minutes when app is active
-setInterval(sendLocationUpdate, 15 * 60 * 1000);
+// // Run every 15 minutes when app is active
+// setInterval(sendLocationUpdate, 15 * 60 * 1000);
 
-// Schedule to run every 2 hours
-cron.schedule('0 */2 * * *', async () => {
-  try {
-    const adminJwtToken = await getAdminToken();
-    sendLocationUpdate();
+// // Schedule to run every 2 hours
+// cron.schedule('0 */2 * * *', async () => {
+//   try {
+//     const adminJwtToken = await getAdminToken();
+//     sendLocationUpdate();
     
-    if (!adminJwtToken) {
-      throw new Error('Admin JWT token not available');
-    }
+//     if (!adminJwtToken) {
+//       throw new Error('Admin JWT token not available');
+//     }
 
-    const response = await axios.post(
-      `${process.env.API_BASE_URL_WORKER}/worker/group-and-assign-reports`,
-      {}, // Empty request body
-      {
-        headers: { 
-          Authorization: `Bearer ${adminJwtToken}`,
-          'Content-Type': 'application/json'
-        },
-        timeout: 30000 // 30-second timeout
-      }
-    );
+//     const response = await axios.post(
+//       `${process.env.API_BASE_URL_WORKER}/worker/group-and-assign-reports`,
+//       {}, // Empty request body
+//       {
+//         headers: { 
+//           Authorization: `Bearer ${adminJwtToken}`,
+//           'Content-Type': 'application/json'
+//         },
+//         timeout: 30000 // 30-second timeout
+//       }
+//     );
 
-    console.log('Scheduled assignment completed:', {
-      status: response.status,
-      data: response.data
-    });
+//     console.log('Scheduled assignment completed:', {
+//       status: response.status,
+//       data: response.data
+//     });
     
-  } catch (error) {
-    console.error('Scheduled assignment failed:', {
-      time: new Date().toISOString(),
-      error: error.response?.data || error.message,
-      stack: error.stack
-    });
-  }
-}, {
-  scheduled: true,
-  timezone: "Asia/Kolkata" // Using IANA timezone for India
-});
+//   } catch (error) {
+//     console.error('Scheduled assignment failed:', {
+//       time: new Date().toISOString(),
+//       error: error.response?.data || error.message,
+//       stack: error.stack
+//     });
+//   }
+// }, {
+//   scheduled: true,
+//   timezone: "Asia/Kolkata" // Using IANA timezone for India
+// });
 
-console.log('Cron job scheduled to run every 2 hours for report assignments');
+// console.log('Cron job scheduled to run every 2 hours for report assignments');
 
 // Error handling middleware
 app.use((err, req, res, next) => {

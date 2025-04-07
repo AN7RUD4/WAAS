@@ -70,9 +70,6 @@ function haversineDistance(lat1, lon1, lat2, lon2) {
     return R * c;
 }
 
-// Enhanced K-Means clustering with priority handling
-// ... (Previous code remains unchanged until kmeansClustering) ...
-
 // Enhanced and fixed K-Means clustering
 function kmeansClustering(points, k) {
     if (!points || !Array.isArray(points) || points.length === 0) {
@@ -290,10 +287,9 @@ router.post('/update-worker-location', authenticateToken, async (req, res) => {
 });
 
 // Group and assign reports endpoint
-
 router.post('/group-and-assign-reports', authenticateToken, async (req, res) => {
     try {
-        const { maxDistance = 5, maxReportsPerWorker = 10, urgencyWindow = '24 hours' } = req.body;
+        const { maxDistance = 5, maxReportsPerWorker = 3, urgencyWindow = '24 hours' } = req.body;
 
         const reportsResult = await pool.query(`
             SELECT 
@@ -320,6 +316,10 @@ router.post('/group-and-assign-reports', authenticateToken, async (req, res) => 
                 severity DESC,
                 datetime ASC
         `);
+
+        console.log('=== Debug: Reports Retrieved ===');
+        console.log(`Number of reports found: ${reportsResult.rows.length}`);
+        console.log('Reports:', reportsResult.rows);
 
         if (reportsResult.rows.length === 0) {
             return res.status(200).json({ message: 'No unassigned reports found' });
@@ -363,12 +363,21 @@ router.post('/group-and-assign-reports', authenticateToken, async (req, res) => 
         });
 
         const clusterCount = Math.ceil(reports.length / maxReportsPerWorker);
+        console.log('=== Debug: Clustering Setup ===');
+        console.log(`Cluster count calculated: ${clusterCount}`);
+
         const clusters = kmeansClustering(reports, clusterCount);
 
         const validClusters = clusters.filter(c => 
             c.length <= maxReportsPerWorker && 
             calculateClusterDiameter(c) <= maxDistance
         );
+
+        console.log('=== Debug: Valid Clusters ===');
+        console.log(`Number of valid clusters: ${validClusters.length}`);
+        validClusters.forEach((cluster, index) => {
+            console.log(`Valid Cluster ${index + 1}: ${cluster.length} points`);
+        });
 
         const assignments = await assignWorkersToClusters(validClusters, workers);
 
@@ -439,7 +448,6 @@ router.post('/group-and-assign-reports', authenticateToken, async (req, res) => 
         res.status(500).json({ error: 'Internal server error', details: error.message });
     }
 });
-
 // Helper functions
 function calculateClusterDiameter(cluster) {
     let maxDistance = 0;
