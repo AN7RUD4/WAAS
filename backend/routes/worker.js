@@ -222,6 +222,28 @@ async function sendSMS(phoneNumber, messageBody) {
     }
 }
 
+// Update worker location endpoint
+router.post('/update-worker-location', authenticateToken, async (req, res) => {
+    try {
+        const { userId, lat, lng } = req.body;
+        
+        await pool.query(
+            `UPDATE users 
+             SET location = ST_SetSRID(ST_MakePoint($1, $2), 4326),
+                 last_location_update = NOW(),
+                 status = 'available'
+             WHERE userid = $3 AND role = 'worker'`,
+            [lng, lat, userId]
+        );
+        
+        res.status(200).json({ message: 'Location updated successfully' });
+    } catch (error) {
+        console.error('Error updating worker location:', error);
+        res.status(500).json({ error: 'Failed to update location' });
+    }
+});
+
+
 // Group and assign reports endpoint
 router.post('/group-and-assign-reports', authenticateToken, async (req, res) => {
     console.log('Reached /group-and-assign-reports endpoint');
