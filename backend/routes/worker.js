@@ -221,6 +221,42 @@ async function notifyUsers(cluster, taskId) {
     }
 }
 
+const checkWorkerOrAdminRole = (req, res, next) => {
+    console.log('Checking role for user:', req.user);
+    if (!req.user || (req.user.role.toLowerCase() !== 'worker' && req.user.role.toLowerCase() !== 'official')) {
+        console.log('Access denied: role not worker or admin');
+        return res.status(403).json({ message: 'Access denied: Only workers or admins can access this endpoint' });
+    }
+    next();
+};
+
+// Helper function to calculate cluster diameter
+function calculateClusterDiameter(cluster) {
+    let maxDistance = 0;
+    for (let i = 0; i < cluster.length; i++) {
+        for (let j = i + 1; j < cluster.length; j++) {
+            const dist = haversineDistance(cluster[i].lat, cluster[i].lng, cluster[j].lat, cluster[j].lng);
+            maxDistance = Math.max(maxDistance, dist);
+        }
+    }
+    return maxDistance;
+}
+
+// Helper function to calculate cluster diameter
+function calculateClusterDiameter(cluster) {
+    let maxDistance = 0;
+    for (let i = 0; i < cluster.length; i++) {
+        for (let j = i + 1; j < cluster.length; j++) {
+            const dist = haversineDistance(
+                cluster[i].lat, cluster[i].lng,
+                cluster[j].lat, cluster[j].lng
+            );
+            if (dist > maxDistance) maxDistance = dist;
+        }
+    }
+    return maxDistance;
+}
+
 // Group and assign reports endpoint
 router.post('/group-and-assign-reports', authenticateToken, async (req, res) => {
     console.log('Reached /group-and-assign-reports endpoint');
@@ -344,32 +380,6 @@ router.post('/group-and-assign-reports', authenticateToken, async (req, res) => 
     }
 });
 
-// Helper function to calculate cluster diameter
-function calculateClusterDiameter(cluster) {
-    let maxDistance = 0;
-    for (let i = 0; i < cluster.length; i++) {
-        for (let j = i + 1; j < cluster.length; j++) {
-            const dist = haversineDistance(cluster[i].lat, cluster[i].lng, cluster[j].lat, cluster[j].lng);
-            maxDistance = Math.max(maxDistance, dist);
-        }
-    }
-    return maxDistance;
-}
-
-// Helper function to calculate cluster diameter
-function calculateClusterDiameter(cluster) {
-    let maxDistance = 0;
-    for (let i = 0; i < cluster.length; i++) {
-        for (let j = i + 1; j < cluster.length; j++) {
-            const dist = haversineDistance(
-                cluster[i].lat, cluster[i].lng,
-                cluster[j].lat, cluster[j].lng
-            );
-            if (dist > maxDistance) maxDistance = dist;
-        }
-    }
-    return maxDistance;
-}
 
 // Helper function to notify users
 async function notifyUsers(cluster, taskId) {
