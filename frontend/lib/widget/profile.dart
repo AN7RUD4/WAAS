@@ -660,7 +660,7 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Future<void> _logout() async {
-    await apiService.updateStatus('unavailable'); // Set status to unavailable
+    await apiService.updateStatus('busy'); // Set status to unavailable
     await ApiService.storage.delete(key: 'jwt_token');
     Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
   }
@@ -775,17 +775,17 @@ class _ProfilePageState extends State<ProfilePage> {
               ),
             ),
             const SizedBox(height: 8),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                icon: const Icon(Icons.history),
-                label: const Text('View Report History'),
-                onPressed: () {
-                  // Navigator.push(context, MaterialPageRoute(builder: (context) => const CollectionRequestsPage()));
-                },
-              ),
-            ),
-            const SizedBox(height: 8),
+            // SizedBox(
+            //   width: double.infinity,
+            //   child: ElevatedButton.icon(
+            //     icon: const Icon(Icons.history),
+            //     label: const Text('View Report History'),
+            //     onPressed: () {
+            //       // Navigator.push(context, MaterialPageRoute(builder: (context) => const CollectionRequestsPage()));
+            //     },
+            //   ),
+            // ),
+            // const SizedBox(height: 8),
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
@@ -1009,19 +1009,19 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
   }
 }
 
-class ReportHistoryPage extends StatelessWidget {
-  const ReportHistoryPage({super.key});
+// class ReportHistoryPage extends StatelessWidget {
+//   const ReportHistoryPage({super.key});
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text("Report History")),
-      body: const Center(
-        child: Text(
-          "Report History Page",
-          style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-        ),
-      ),
-    );
-  }
-}
+//   @override
+//   Widget build(BuildContext context) {
+//     return Scaffold(
+//       appBar: AppBar(title: const Text("Report History")),
+//       body: const Center(
+//         child: Text(
+//           "Report History Page",
+//           style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+//         ),
+//       ),
+//     );
+//   }
+// }

@@ -186,4 +186,20 @@ profileRouter.put('/change-password', authenticateToken, async (req, res) => {
   }
 });
 
+app.put('/update-status', authenticateToken, async (req, res) => {
+  const { status } = req.body; // Expecting { "status": "available" } or { "status": "unavailable" }
+  const userId = req.user.userid; // From JWT middleware
+  try {
+    const { rows } = await db.query(
+      'UPDATE users SET status = $1 WHERE userid = $2 RETURNING *',
+      [status, userId]
+    );
+    if (rows.length === 0) return res.status(404).json({ error: 'User not found' });
+    res.status(200).json({ user: rows[0] });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to update status'});
+}
+});
+
 module.exports = profileRouter;

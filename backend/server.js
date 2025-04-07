@@ -14,7 +14,6 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cors());
 
-// Create uploads directory if it doesn't exist
 const fs = require('fs');
 if (!fs.existsSync('uploads')) {
   fs.mkdirSync('uploads');
@@ -61,10 +60,27 @@ async function getAdminToken() {
   }
 }
 
+// In worker mobile app (Flutter/React Native)
+async function sendLocationUpdate() {
+  // Get current location
+  const location = await getCurrentPosition(); 
+  
+  // Send to server
+  await axios.post(`${API_URL}/update-worker-location`, {
+    userId: currentUser.id,
+    lat: location.latitude,
+    lng: location.longitude
+  });
+}
+
+// Run every 15 minutes when app is active
+setInterval(sendLocationUpdate, 15 * 60 * 1000);
+
 // Schedule to run every 2 hours
 cron.schedule('0 */2 * * *', async () => {
   try {
     const adminJwtToken = await getAdminToken();
+    sendLocationUpdate();
     
     if (!adminJwtToken) {
       throw new Error('Admin JWT token not available');

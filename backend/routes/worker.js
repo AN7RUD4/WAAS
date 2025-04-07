@@ -292,10 +292,47 @@ async function sendSMS(phoneNumber, messageBody) {
     }
 }
 
-// Group and assign reports endpoint with SMS notification
-router.post('/group-and-assign-reports', authenticateToken, checkWorkerOrAdminRole, async (req, res) => {
+// Update worker location endpoint
+router.post('/update-worker-location', authenticateToken, async (req, res) => {
+    try {
+        const { userId, lat, lng } = req.body;
+        
+        await pool.query(
+            `UPDATE users 
+             SET location = ST_SetSRID(ST_MakePoint($1, $2), 4326),
+                 last_location_update = NOW(),
+                 status = 'available'
+             WHERE userid = $3 AND role = 'worker'`,
+            [lng, lat, userId]
+        );
+        
+        res.status(200).json({ message: 'Location updated successfully' });
+    } catch (error) {
+        console.error('Error updating worker location:', error);
+        res.status(500).json({ error: 'Failed to update location' });
+    }
+});
+
+// Group and assign reports endpoint with enhanced worker location checks
+router.post('/group-and-assign-reports', authenticateToken, async (req, res) => {
     console.log('Reached /group-and-assign-reports endpoint');
     try {
+        // First check if we have workers with fresh location data
+        const locationCheck = await pool.query(
+            `SELECT COUNT(*) as fresh_workers
+             FROM users
+             WHERE role = 'worker'
+             AND status = 'available'
+             AND last_location_update > NOW() - INTERVAL '1 hour'`
+        );
+        
+        if (locationCheck.rows[0].fresh_workers === 0) {
+            console.log('No workers with fresh location data available');
+            return res.status(400).json({ 
+                error: 'Cannot assign reports - no workers with recent location data' 
+            });
+        }
+
         console.log('Starting /group-and-assign-reports execution');
         const { startDate } = req.body;
         const k = 3;
@@ -328,10 +365,9 @@ router.post('/group-and-assign-reports', authenticateToken, checkWorkerOrAdminRo
             console.log('No unassigned reports found, exiting endpoint');
             return res.status(200).json({ message: 'No unassigned reports found' });
         }
-        console.log('Reports with user IDs:', reports);
 
         reports = reports.filter(r => r.lat !== null && r.lng !== null);
-        console.log('Filtered reports with valid locations:', reports);
+        console.log('Filtered reports with valid locations:', reports.length);
 
         const processedReports = new Set();
         const assignments = [];
@@ -341,12 +377,10 @@ router.post('/group-and-assign-reports', authenticateToken, checkWorkerOrAdminRo
             const T0 = startDate ? new Date(startDate) : reports[0].created_at;
             const T0Plus2Days = new Date(T0);
             T0Plus2Days.setDate(T0.getDate() + 2);
-            console.log('Temporal window - T0:', T0, 'T0Plus2Days:', T0Plus2Days);
 
             const timeFilteredReports = reports.filter(
                 report => report.created_at >= T0 && report.created_at <= T0Plus2Days && !processedReports.has(report.reportid)
             );
-            console.log('Time-filtered reports:', timeFilteredReports);
 
             if (timeFilteredReports.length === 0) {
                 console.log('No reports within temporal window, breaking loop');
@@ -355,43 +389,34 @@ router.post('/group-and-assign-reports', authenticateToken, checkWorkerOrAdminRo
 
             console.log('Performing K-Means clustering...');
             const clusters = kmeansClustering(timeFilteredReports, Math.min(k, timeFilteredReports.length));
-            console.log('Clusters formed:', clusters);
 
-            console.log('Fetching available workers...');
+            console.log('Fetching available workers with recent locations...');
             let workerResult = await pool.query(
-                // `SELECT userid, ST_AsText(location) AS location
-                //  FROM users
-                //  WHERE role = 'worker'
-                //  AND userid NOT IN (
-                //    SELECT assignedworkerid
-                //    FROM taskrequests
-                //    WHERE status != 'completed'
-                //    GROUP BY assignedworkerid
-                //    HAVING COUNT(*) >= 5
-                //  )`
                 `SELECT userid, ST_AsText(location) AS location
                  FROM users
                  WHERE role = 'worker'
-                 AND status='available`
+                 AND status = 'available'
+                 AND last_location_update > NOW() - INTERVAL '1 hour'`
             );
+            
             let workers = workerResult.rows.map(row => {
                 const locMatch = row.location ? row.location.match(/POINT\(([^ ]+) ([^)]+)\)/) : null;
                 return {
                     userid: row.userid,
-                    lat: locMatch ? parseFloat(locMatch[2]) : 10.235865,
-                    lng: locMatch ? parseFloat(locMatch[1]) : 76.405676,
+                    lat: locMatch ? parseFloat(locMatch[2]) : null,
+                    lng: locMatch ? parseFloat(locMatch[1]) : null,
                 };
-            });
-            console.log('Available workers:', workers);
+            }).filter(worker => worker.lat !== null && worker.lng !== null);
 
+            console.log('Available workers with valid locations:', workers.length);
+            
             if (workers.length === 0) {
-                console.log('No workers available, breaking loop');
+                console.log('No workers with valid locations available, breaking loop');
                 break;
             }
 
             console.log('Assigning workers to clusters...');
             const clusterAssignments = assignWorkersToClusters(clusters, workers);
-            console.log('Cluster assignments:', clusterAssignments);
 
             if (clusterAssignments.length === 0) {
                 console.log('No assignments made, skipping insertion');
@@ -399,14 +424,9 @@ router.post('/group-and-assign-reports', authenticateToken, checkWorkerOrAdminRo
             }
 
             for (const { cluster, worker } of clusterAssignments) {
-                console.log(`Processing cluster for worker ${worker.userid}, reports:`, cluster);
                 const route = solveTSP(cluster, worker);
-                console.log('TSP Route:', route);
-
                 const reportIds = cluster.map(report => report.reportid);
-                console.log('Report IDs for task:', reportIds);
 
-                console.log('Inserting task into taskrequests...');
                 let taskResult = await pool.query(
                     `INSERT INTO taskrequests (reportids, assignedworkerid, status, starttime, route)
                      VALUES ($1, $2, 'assigned', NOW(), $3)
@@ -414,8 +434,14 @@ router.post('/group-and-assign-reports', authenticateToken, checkWorkerOrAdminRo
                     [reportIds, worker.userid, route]
                 );
                 const taskId = taskResult.rows[0].taskid;
-                console.log(`Task inserted successfully with taskId: ${taskId}`);
 
+                // Update worker status to 'busy'
+                await pool.query(
+                    `UPDATE users SET status = 'busy' WHERE userid = $1`,
+                    [worker.userid]
+                );
+
+                // Send SMS notifications
                 const uniqueUserIds = [...new Set(cluster.map(report => report.userid))];
                 for (const userId of uniqueUserIds) {
                     try {
@@ -427,8 +453,6 @@ router.post('/group-and-assign-reports', authenticateToken, checkWorkerOrAdminRo
                             const phoneNumber = userResult.rows[0].phone;
                             const messageBody = `Your garbage report has been assigned to a worker (Task ID: ${taskId}).`;
                             await sendSMS(phoneNumber, messageBody);
-                        } else {
-                            console.warn(`No phone number found for user ${userId}`);
                         }
                     } catch (error) {
                         console.error(`Failed to send SMS for user ${userId}:`, error.message);
@@ -447,16 +471,22 @@ router.post('/group-and-assign-reports', authenticateToken, checkWorkerOrAdminRo
             reports = reports.filter(r => !processedReports.has(r.reportid));
         }
 
-        console.log('Endpoint completed successfully, assignments:', assignments);
+        console.log('Endpoint completed successfully');
         res.status(200).json({
-            message: 'Reports grouped and assigned successfully, SMS notifications sent where possible',
-            assignments,
+            message: 'Reports grouped and assigned successfully',
+            assignments: assignments,
+            workersUsed: assignments.map(a => a.assignedWorkerId)
         });
     } catch (error) {
-        console.error('Error in group-and-align-reports:', error.message, error.stack);
-        res.status(500).json({ error: 'Internal Server Error', details: error.message });
+        console.error('Error in group-and-assign-reports:', error);
+        res.status(500).json({ 
+            error: 'Internal Server Error', 
+            details: error.message 
+        });
     }
 });
+
+module.exports = router;
 
 // Fetch Assigned Tasks for Worker
 router.get('/assigned-tasks', authenticateToken, checkWorkerOrAdminRole, async (req, res) => {
