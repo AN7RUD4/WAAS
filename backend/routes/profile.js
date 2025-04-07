@@ -190,7 +190,7 @@ profileRouter.put('/update-status', authenticateToken, async (req, res) => {
   const { status } = req.body; 
   const userId = req.user.userid; 
   try {
-    const { rows } = await db.query(
+    const { rows } = await pool.query(
       'UPDATE users SET status = $1 WHERE userid = $2 RETURNING *',
       [status, userId]
     );

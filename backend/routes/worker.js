@@ -68,41 +68,6 @@ const checkWorkerOrAdminRole = (req, res, next) => {
     next();
 };
 
-// Haversine distance function
-function haversineDistance(lat1, lon1, lat2, lon2) {
-    const R = 6371;
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLon = (lon2 - lon1) * Math.PI / 180;
-    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-        Math.sin(dLon / 2) * Math.sin(dLon / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return R * c;
-}
-
-// Distance calculation for clustering
-function calculateDistance(point1, point2) {
-    const latDiff = point1[0] - point2[0];
-    const lngDiff = point1[1] - point2[1];
-    return Math.sqrt(latDiff * latDiff + lngDiff * lngDiff);
-}
-
-// Ensure unique centroids
-function uniqueCentroids(centroids) {
-    const unique = [];
-    const seen = new Set();
-
-    centroids.forEach((centroid) => {
-        const key = centroid.join(",");
-        if (!seen.has(key)) {
-            seen.add(key);
-            unique.push(centroid);
-        }
-    });
-
-    return unique;
-}
-
 function geographicalKMeans(points, k, maxIterations = 100) {
     if (points.length === 0 || k <= 0) return [];
     
