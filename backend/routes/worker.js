@@ -802,7 +802,7 @@ router.get('/garbagereports/status', authenticateToken, checkWorkerOrAdminRole, 
     }
 });
 
-
+module.exports=router
 // router.post('/group-and-assign-reports', authenticateToken, async (req, res) => {
 //     console.log('Reached /group-and-assign-reports endpoint');
 //     try {
