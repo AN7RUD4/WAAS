@@ -180,7 +180,8 @@ class UserApp extends StatelessWidget {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (context) => const CollectionRequestsPage(),
+                                builder:
+                                    (context) => const CollectionRequestsPage(),
                               ),
                             );
                           },
@@ -580,116 +581,120 @@ class _ReportPageState extends State<ReportPage> {
           _isLoading
               ? const Center(child: CircularProgressIndicator())
               : SafeArea(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: SingleChildScrollView(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            "Report Public Waste",
-                            style: GoogleFonts.poppins(
-                              fontSize: 24,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.black87,
-                            ),
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          "Report Public Waste",
+                          style: GoogleFonts.poppins(
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black87,
                           ),
-                          const SizedBox(height: 8),
-                          Text(
-                            "Help keep your community clean",
-                            style: GoogleFonts.poppins(
-                              fontSize: 16,
-                              color: Colors.black54,
-                            ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          "Help keep your community clean",
+                          style: GoogleFonts.poppins(
+                            fontSize: 16,
+                            color: Colors.black54,
                           ),
-                          const SizedBox(height: 24),
-                          Text(
-                            "Select a Picture",
-                            style: GoogleFonts.poppins(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.black87,
-                            ),
+                        ),
+                        const SizedBox(height: 24),
+                        Text(
+                          "Select a Picture",
+                          style: GoogleFonts.poppins(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.black87,
                           ),
-                          const SizedBox(height: 8),
-                          Center(
-                            child: Column(
-                              children: [
-                                _buildImagePreview(),
-                                const SizedBox(height: 16),
-                                Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceEvenly,
-                                  children: [
-                                    Expanded(
-                                      child: ElevatedButton.icon(
-                                        icon: const Icon(Icons.camera_alt),
-                                        label: const Text("Open Camera"),
-                                        onPressed: _takePicture,
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor: Colors.green.shade700,
-                                          foregroundColor: Colors.white,
-                                        ),
+                        ),
+                        const SizedBox(height: 8),
+                        Center(
+                          child: Column(
+                            children: [
+                              _buildImagePreview(),
+                              const SizedBox(height: 16),
+                              Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceEvenly,
+                                children: [
+                                  Expanded(
+                                    child: ElevatedButton.icon(
+                                      icon: const Icon(Icons.camera_alt),
+                                      label: const Text("Open Camera"),
+                                      onPressed: _takePicture,
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.green.shade700,
+                                        foregroundColor: Colors.white,
                                       ),
                                     ),
-                                    const SizedBox(width: 16),
-                                    Expanded(
-                                      child: ElevatedButton.icon(
-                                        icon: const Icon(Icons.photo_library),
-                                        label: const Text("Pick from Gallery"),
-                                        onPressed: _pickImageFromGallery,
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor: Colors.green.shade700,
-                                          foregroundColor: Colors.white,
-                                        ),
+                                  ),
+                                  const SizedBox(width: 16),
+                                  Expanded(
+                                    child: ElevatedButton.icon(
+                                      icon: const Icon(Icons.photo_library),
+                                      label: const Text("Pick from Gallery"),
+                                      onPressed: _pickImageFromGallery,
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.green.shade700,
+                                        foregroundColor: Colors.white,
                                       ),
                                     ),
-                                  ],
-                                ),
-                              ],
-                            ),
+                                  ),
+                                ],
+                              ),
+                            ],
                           ),
+                        ),
+                        const SizedBox(height: 16),
+                        TextFormField(
+                          controller: locationController,
+                          readOnly: true,
+                          decoration: const InputDecoration(
+                            labelText: "Location",
+                            prefixIcon: Icon(Icons.location_on_outlined),
+                          ),
+                        ),
+                        if (_errorMessage != null) ...[
                           const SizedBox(height: 16),
-                          TextFormField(
-                            controller: locationController,
-                            readOnly: true,
-                            decoration: const InputDecoration(
-                              labelText: "Location",
-                              prefixIcon: Icon(Icons.location_on_outlined),
-                            ),
-                          ),
-                          if (_errorMessage != null) ...[
-                            const SizedBox(height: 16),
-                            Text(
-                              _errorMessage!,
-                              style: GoogleFonts.poppins(
-                                color: Colors.red,
-                                fontSize: 14,
-                              ),
-                            ),
-                          ],
-                          const SizedBox(height: 24),
-                          SizedBox(
-                            width: double.infinity,
-                            child: ElevatedButton(
-                              onPressed: _hasWaste == true && _image != null && locationController.text.isNotEmpty
-                                  ? _submitReport
-                                  : null, // Disable button if no waste or missing fields
-                              child: const Text("Submit Report"),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.green.shade700,
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(vertical: 16),
-                                disabledBackgroundColor: Colors.grey, // Visual cue for disabled state
-                                disabledForegroundColor: Colors.white70,
-                              ),
+                          Text(
+                            _errorMessage!,
+                            style: GoogleFonts.poppins(
+                              color: Colors.red,
+                              fontSize: 14,
                             ),
                           ),
                         ],
-                      ),
+                        const SizedBox(height: 24),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed:
+                                _hasWaste == true &&
+                                        _image != null &&
+                                        locationController.text.isNotEmpty
+                                    ? _submitReport
+                                    : null, // Disable button if no waste or missing fields
+                            child: const Text("Submit Report"),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.green.shade700,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              disabledBackgroundColor:
+                                  Colors.grey, // Visual cue for disabled state
+                              disabledForegroundColor: Colors.white70,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
+              ),
     );
   }
 }
@@ -1039,42 +1044,6 @@ class _CollectionRequestsPageState extends State<CollectionRequestsPage> {
                                                       color: Colors.black87,
                                                     ),
                                                   ),
-                                                  Container(
-                                                    padding:
-                                                        const EdgeInsets.symmetric(
-                                                          horizontal: 8,
-                                                          vertical: 4,
-                                                        ),
-                                                    decoration: BoxDecoration(
-                                                      color:
-                                                          report['status'] ==
-                                                                  'Pending'
-                                                              ? Colors
-                                                                  .orange
-                                                                  .shade700
-                                                              : report['status'] ==
-                                                                  'Completed'
-                                                              ? Colors
-                                                                  .green
-                                                                  .shade700
-                                                              : Colors
-                                                                  .red
-                                                                  .shade700,
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                            12,
-                                                          ),
-                                                    ),
-                                                    child: Text(
-                                                      report['status'] ??
-                                                          'Unknown',
-                                                      style:
-                                                          GoogleFonts.poppins(
-                                                            fontSize: 12,
-                                                            color: Colors.white,
-                                                          ),
-                                                    ),
-                                                  ),
                                                 ],
                                               ),
                                               const SizedBox(height: 8),
@@ -1156,4 +1125,3 @@ class _CollectionRequestsPageState extends State<CollectionRequestsPage> {
     );
   }
 }
-
