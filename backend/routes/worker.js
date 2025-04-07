@@ -103,71 +103,118 @@ function uniqueCentroids(centroids) {
     return unique;
 }
 
-// K-Means clustering function
-function kmeansClustering(points, k) {
-    if (!Array.isArray(points) || points.length === 0) {
-        console.log('kmeansClustering: Invalid or empty points array, returning empty clusters');
-        return [];
+function geographicalKMeans(points, k, maxIterations = 100) {
+    if (points.length === 0 || k <= 0) return [];
+    
+    // Initialize centroids using spread-out points
+    const centroids = [];
+    const step = Math.max(1, Math.floor(points.length / k));
+    for (let i = 0; i < k && i * step < points.length; i++) {
+        centroids.push({
+            lat: points[i * step].lat,
+            lng: points[i * step].lng
+        });
     }
-    if (points.length < k) {
-        console.log(`kmeansClustering: Fewer points (${points.length}) than clusters (${k}), returning single-point clusters`);
-        return points.map(point => [point]);
-    }
 
-    console.log('kmeansClustering: Starting with points:', points);
-    const kmeans = new KMeans();
-    const data = points.map(p => [p.lat, p.lng]);
-    console.log('kmeansClustering: Data for clustering:', data);
+    let clusters = [];
+    let changed;
+    let iterations = 0;
 
-    try {
-        let centroids;
-        let attempts = 0;
-        const maxAttempts = 5;
+    do {
+        changed = false;
+        clusters = Array(k).fill().map(() => ({ points: [], centroid: null }));
 
-        do {
-            centroids = kmeans.cluster(data, k, "kmeans++");
-            centroids = uniqueCentroids(centroids);
-            attempts++;
-            console.log(`kmeansClustering: Attempt ${attempts}, Centroids:`, centroids);
-        } while (centroids.length < k && attempts < maxAttempts);
+        // Assign points to nearest centroid using haversine distance
+        for (const point of points) {
+            let minDistance = Infinity;
+            let clusterIndex = 0;
 
-        k = Math.min(k, centroids.length);
-        console.log('kmeansClustering: Final centroids after unique filtering:', centroids);
-
-        if (!Array.isArray(centroids) || centroids.length === 0) {
-            console.log('kmeansClustering: No valid centroids, returning single-point clusters');
-            return points.map(point => [point]);
-        }
-
-        const clusters = Array.from({ length: k }, () => []);
-        points.forEach((point) => {
-            const pointCoords = [point.lat, p.lng];
-            let closestCentroidIdx = 0;
-            let minDistance = calculateDistance(pointCoords, centroids[0]);
-
-            for (let i = 1; i < centroids.length; i++) {
-                const distance = calculateDistance(pointCoords, centroids[i]);
+            for (let i = 0; i < centroids.length; i++) {
+                const distance = haversineDistance(
+                    point.lat, point.lng,
+                    centroids[i].lat, centroids[i].lng
+                );
                 if (distance < minDistance) {
                     minDistance = distance;
-                    closestCentroidIdx = i;
+                    clusterIndex = i;
                 }
             }
 
-            if (closestCentroidIdx >= clusters.length) {
-                console.error(`⚠️ Invalid centroid index ${closestCentroidIdx} for point ${point.reportid}`);
-                return;
+            clusters[clusterIndex].points.push(point);
+        }
+
+        // Recalculate centroids
+        for (let i = 0; i < k; i++) {
+            if (clusters[i].points.length === 0) continue;
+
+            const newCentroid = calculateGeographicalCentroid(clusters[i].points);
+            const distanceMoved = haversineDistance(
+                centroids[i].lat, centroids[i].lng,
+                newCentroid.lat, newCentroid.lng
+            );
+
+            if (distanceMoved > 0.1) { // If centroid moved more than 0.1 km
+                changed = true;
+                centroids[i] = newCentroid;
             }
+            clusters[i].centroid = centroids[i];
+        }
 
-            clusters[closestCentroidIdx].push(point);
-        });
+        iterations++;
+    } while (changed && iterations < maxIterations);
 
-        const validClusters = clusters.filter(cluster => cluster.length > 0);
-        console.log('kmeansClustering: Resulting clusters:', validClusters);
-        return validClusters;
-    } catch (error) {
-        console.error('kmeansClustering: Clustering failed:', error.message);
-        return points.map(point => [point]);
+    // Filter out empty clusters
+    return clusters.filter(cluster => cluster.points.length > 0);
+}
+
+// Haversine distance calculation (in kilometers)
+function haversineDistance(lat1, lon1, lat2, lon2) {
+    const R = 6371; // Earth radius in km
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = 
+        Math.sin(dLat/2) * Math.sin(dLat/2) +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+        Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
+}
+
+// Calculate geographical centroid (mean of coordinates)
+function calculateGeographicalCentroid(points) {
+    if (points.length === 0) return null;
+    
+    let sumLat = 0;
+    let sumLng = 0;
+    
+    for (const point of points) {
+        sumLat += point.lat;
+        sumLng += point.lng;
     }
+    
+    return {
+        lat: sumLat / points.length,
+        lng: sumLng / points.length
+    };
+}
+
+// Calculate approximate cluster area in square km
+function calculateClusterArea(points) {
+    if (points.length < 2) return 0;
+    
+    const lats = points.map(p => p.lat);
+    const lngs = points.map(p => p.lng);
+    
+    const minLat = Math.min(...lats);
+    const maxLat = Math.max(...lats);
+    const minLng = Math.min(...lngs);
+    const maxLng = Math.max(...lngs);
+    
+    // Approximate area calculation
+    const height = haversineDistance(minLat, minLng, maxLat, minLng);
+    const width = haversineDistance(minLat, minLng, minLat, maxLng);
+    
+    return height * width;
 }
 
 // Updated assignWorkersToClusters function (using munkres)
@@ -313,11 +360,7 @@ router.post('/update-worker-location', authenticateToken, async (req, res) => {
     }
 });
 
-// Group and assign reports endpoint with enhanced worker location checks
-router.post('/group-and-assign-reports', authenticateToken, async (req, res) => {
-    console.log('Reached /group-and-assign-reports endpoint');
-    try {
-        // First check if we have workers with fresh location data
+ // First check if we have workers with fresh location data
         // const locationCheck = await pool.query(
         //     `SELECT COUNT(*) as fresh_workers
         //      FROM users
@@ -333,9 +376,13 @@ router.post('/group-and-assign-reports', authenticateToken, async (req, res) => 
         //     });
         // }
 
+// Group and assign reports endpoint with enhanced worker location checks
+router.post('/group-and-assign-reports', authenticateToken, async (req, res) => {
+    console.log('Reached /group-and-assign-reports endpoint');
+    try {
         console.log('Starting /group-and-assign-reports execution');
         const { startDate } = req.body;
-        const k = 3;
+        const baseK = 3; // Base number of clusters, will adjust dynamically
         console.log('Request body:', req.body);
 
         console.log('Fetching unassigned reports from garbagereports...');
@@ -347,27 +394,34 @@ router.post('/group-and-assign-reports', authenticateToken, async (req, res) => 
              )
              ORDER BY datetime ASC`
         );
-        console.log('Fetched reports:', result.rows);
 
+        // Improved location parsing with validation
         let reports = result.rows.map(row => {
+            if (!row.location) {
+                console.warn(`Report ${row.reportid} has null location`);
+                return null;
+            }
             const locationMatch = row.location.match(/POINT\(([^ ]+) ([^)]+)\)/);
+            if (!locationMatch) {
+                console.warn(`Invalid location format for report ${row.reportid}: ${row.location}`);
+                return null;
+            }
             return {
                 reportid: row.reportid,
                 wastetype: row.wastetype,
-                lat: locationMatch ? parseFloat(locationMatch[2]) : null,
-                lng: locationMatch ? parseFloat(locationMatch[1]) : null,
+                lat: parseFloat(locationMatch[2]),
+                lng: parseFloat(locationMatch[1]),
                 created_at: new Date(row.datetime),
                 userid: row.userid,
             };
-        });
+        }).filter(report => report !== null);
 
         if (!reports.length) {
             console.log('No unassigned reports found, exiting endpoint');
             return res.status(200).json({ message: 'No unassigned reports found' });
         }
 
-        reports = reports.filter(r => r.lat !== null && r.lng !== null);
-        console.log('Filtered reports with valid locations:', reports.length);
+        console.log(`Filtered reports with valid locations: ${reports.length}`);
 
         const processedReports = new Set();
         const assignments = [];
@@ -387,8 +441,18 @@ router.post('/group-and-assign-reports', authenticateToken, async (req, res) => 
                 break;
             }
 
-            console.log('Performing K-Means clustering...');
-            const clusters = kmeansClustering(timeFilteredReports, Math.min(k, timeFilteredReports.length));
+            // Dynamic k based on report density
+            const k = Math.min(baseK, Math.max(1, Math.floor(timeFilteredReports.length / 5)));
+            console.log(`Performing K-Means clustering with k=${k}...`);
+            
+            // Implement proper geographical clustering
+            const clusters = geographicalKMeans(timeFilteredReports, k);
+            
+            console.log('Cluster details:', clusters.map(c => ({
+                centroid: c.centroid,
+                pointCount: c.points.length,
+                area: c.points.length > 1 ? calculateClusterArea(c.points) : 0
+            })));
 
             console.log('Fetching available workers with recent locations...');
             let workerResult = await pool.query(
@@ -397,15 +461,23 @@ router.post('/group-and-assign-reports', authenticateToken, async (req, res) => 
                  WHERE role = 'worker'
                  AND status = 'available'`
             );
-            // 'AND last_location_update > NOW() - INTERVAL '1 hour'`
+            
             let workers = workerResult.rows.map(row => {
-                const locMatch = row.location ? row.location.match(/POINT\(([^ ]+) ([^)]+)\)/) : null;
+                if (!row.location) {
+                    console.warn(`Worker ${row.userid} has null location`);
+                    return null;
+                }
+                const locMatch = row.location.match(/POINT\(([^ ]+) ([^)]+)\)/);
+                if (!locMatch) {
+                    console.warn(`Invalid location format for worker ${row.userid}: ${row.location}`);
+                    return null;
+                }
                 return {
                     userid: row.userid,
-                    lat: locMatch ? parseFloat(locMatch[2]) : null,
-                    lng: locMatch ? parseFloat(locMatch[1]) : null,
+                    lat: parseFloat(locMatch[2]),
+                    lng: parseFloat(locMatch[1]),
                 };
-            }).filter(worker => worker.lat !== null && worker.lng !== null);
+            }).filter(worker => worker !== null);
 
             console.log('Available workers with valid locations:', workers.length);
             
@@ -422,6 +494,7 @@ router.post('/group-and-assign-reports', authenticateToken, async (req, res) => 
                 break;
             }
 
+            // Rest of your assignment logic remains the same...
             for (const { cluster, worker } of clusterAssignments) {
                 const route = solveTSP(cluster, worker);
                 const reportIds = cluster.map(report => report.reportid);
@@ -434,13 +507,12 @@ router.post('/group-and-assign-reports', authenticateToken, async (req, res) => 
                 );
                 const taskId = taskResult.rows[0].taskid;
 
-                // Update worker status to 'busy'
                 await pool.query(
                     `UPDATE users SET status = 'busy' WHERE userid = $1`,
                     [worker.userid]
                 );
 
-                // Send SMS notifications
+                // SMS notifications...
                 const uniqueUserIds = [...new Set(cluster.map(report => report.userid))];
                 for (const userId of uniqueUserIds) {
                     try {
@@ -485,7 +557,8 @@ router.post('/group-and-assign-reports', authenticateToken, async (req, res) => 
     }
 });
 
-module.exports = router;
+// New geographical K-Means implementation
+
 
 // Fetch Assigned Tasks for Worker
 router.get('/assigned-tasks', authenticateToken, checkWorkerOrAdminRole, async (req, res) => {
