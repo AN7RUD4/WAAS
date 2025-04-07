@@ -1,4 +1,74 @@
-// Add these at the top of your file (after imports)
+require('dotenv').config();
+const express = require('express');
+const { Pool } = require('pg');
+const cors = require('cors');
+const jwt = require('jsonwebtoken');
+const KMeans = require('kmeans-js');
+const munkres = require('munkres').default;
+const twilio = require('twilio');
+
+const router = express.Router();
+router.use(cors());
+router.use(express.json());
+
+// Initialize Twilio client
+const twilioClient = new twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+
+const pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: { rejectUnauthorized: false },
+});
+
+// Database connection check
+pool.connect((err, client, release) => {
+    if (err) {
+        console.error('Database connection error:', err.stack);
+        process.exit(1);
+    } else {
+        console.log('Worker service connected to database');
+        release();
+    }
+});
+
+// Authentication middleware
+const authenticateToken = (req, res, next) => {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader?.split(' ')[1];
+    if (!token) return res.status(401).json({ message: 'Authentication token required' });
+
+    try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'passwordKey');
+        if (!decoded.userid || !decoded.role) {
+            return res.status(403).json({ message: 'Invalid token: Missing userid or role' });
+        }
+        req.user = decoded;
+        next();
+    } catch (err) {
+        console.error('Token verification error:', err.message);
+        return res.status(403).json({ message: 'Invalid or expired token' });
+    }
+};
+
+// Middleware to check if user is a worker or admin
+const checkWorkerOrAdminRole = (req, res, next) => {
+    const { role } = req.user; // Assuming req.user is set by authenticateToken middleware
+    if (role === 'worker' || role === 'admin') {
+        return next();
+    }
+    return res.status(403).json({ error: 'Access denied: Worker or Admin role required' });
+};
+
+// Haversine distance function
+function haversineDistance(lat1, lon1, lat2, lon2) {
+    const R = 6371; // Earth radius in km
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+}
 const DEBUG = process.env.NODE_ENV !== 'production';
 
 function debugLog(message, data = null) {
