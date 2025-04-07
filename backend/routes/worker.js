@@ -262,14 +262,14 @@ router.post('/group-and-assign-reports', authenticateToken, async (req, res) => 
         console.log('Fetching unassigned reports...');
         const reportsResult = await pool.query(`
             SELECT reportid, wastetype, ST_X(location::geometry) AS lng, ST_Y(location::geometry) AS lat, 
-                   datetime, userid, severity
+                   datetime, userid
             FROM garbagereports
             WHERE reportid NOT IN (
                 SELECT unnest(reportids) FROM taskrequests
                 WHERE status NOT IN ('completed', 'rejected')
             )
             AND datetime >= COALESCE($1, NOW() - INTERVAL '7 days')
-            ORDER BY severity DESC, datetime ASC
+            ORDER BY  datetime ASC
         `, [startDate]);
         console.log('Fetched reports count:', reportsResult.rows.length);
 
@@ -287,7 +287,6 @@ router.post('/group-and-assign-reports', authenticateToken, async (req, res) => 
                 lng: r.lng,
                 created_at: new Date(r.datetime),
                 userid: r.userid,
-                severity: r.severity
             }));
         console.log('Filtered reports:', reports.length);
 
