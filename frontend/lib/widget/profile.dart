@@ -607,7 +607,7 @@ class ApiService {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
         },
-        body: json.encode({'status': status}),
+        body: jsonEncode({'status': status}),
       );
       if (response.statusCode != 200) {
         print('Failed to update status: ${response.body}');

@@ -187,8 +187,8 @@ profileRouter.put('/change-password', authenticateToken, async (req, res) => {
 });
 
 profileRouter.put('/update-status', authenticateToken, async (req, res) => {
-  const { status } = req.body; // Expecting { "status": "available" } or { "status": "unavailable" }
-  const userId = req.user.userid; // From JWT middleware
+  const { status } = req.body; 
+  const userId = req.user.userid; 
   try {
     const { rows } = await db.query(
       'UPDATE users SET status = $1 WHERE userid = $2 RETURNING *',

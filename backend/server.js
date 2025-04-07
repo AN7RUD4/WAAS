@@ -77,7 +77,7 @@ async function sendLocationUpdate() {
 setInterval(sendLocationUpdate, 15 * 60 * 1000);
 
 // Schedule to run every 2 hours
-cron.schedule('0 */2 * * *', async () => {
+// cron.schedule('0 */2 * * *', async () => {
   try {
     const adminJwtToken = await getAdminToken();
     sendLocationUpdate();
@@ -110,10 +110,10 @@ cron.schedule('0 */2 * * *', async () => {
       stack: error.stack
     });
   }
-}, {
-  scheduled: true,
-  timezone: "Asia/Kolkata" // Using IANA timezone for India
-});
+// }, {
+//   scheduled: true,
+//   timezone: "Asia/Kolkata" // Using IANA timezone for India
+// });
 
 console.log('Cron job scheduled to run every 2 hours for report assignments');
 
