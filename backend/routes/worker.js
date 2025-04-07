@@ -49,6 +49,15 @@ const authenticateToken = (req, res, next) => {
     }
 };
 
+// Middleware to check if user is a worker or admin
+const checkWorkerOrAdminRole = (req, res, next) => {
+    const { role } = req.user; // Assuming req.user is set by authenticateToken middleware
+    if (role === 'worker' || role === 'admin') {
+        return next();
+    }
+    return res.status(403).json({ error: 'Access denied: Worker or Admin role required' });
+};
+
 // Haversine distance function
 function haversineDistance(lat1, lon1, lat2, lon2) {
     const R = 6371; // Earth radius in km
