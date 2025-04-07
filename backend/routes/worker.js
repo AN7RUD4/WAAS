@@ -230,32 +230,26 @@ const checkWorkerOrAdminRole = (req, res, next) => {
     next();
 };
 
-// Helper function to calculate cluster diameter
-function calculateClusterDiameter(cluster) {
-    let maxDistance = 0;
-    for (let i = 0; i < cluster.length; i++) {
-        for (let j = i + 1; j < cluster.length; j++) {
-            const dist = haversineDistance(cluster[i].lat, cluster[i].lng, cluster[j].lat, cluster[j].lng);
-            maxDistance = Math.max(maxDistance, dist);
-        }
-    }
-    return maxDistance;
-}
 
-// Helper function to calculate cluster diameter
-function calculateClusterDiameter(cluster) {
-    let maxDistance = 0;
-    for (let i = 0; i < cluster.length; i++) {
-        for (let j = i + 1; j < cluster.length; j++) {
-            const dist = haversineDistance(
-                cluster[i].lat, cluster[i].lng,
-                cluster[j].lat, cluster[j].lng
-            );
-            if (dist > maxDistance) maxDistance = dist;
-        }
+// Update worker location endpoint
+router.post('/update-worker-location', authenticateToken, async (req, res) => {
+    try {
+        const { userId, lat, lng } = req.body;
+        
+        await pool.query(
+            `UPDATE users 
+             SET location = ST_SetSRID(ST_MakePoint($1, $2), 4326),
+                 status = 'available'
+             WHERE userid = $3 AND role = 'worker'`,
+            [lng, lat, userId]
+        );
+        
+        res.status(200).json({ message: 'Location updated successfully' });
+    } catch (error) {
+        console.error('Error updating worker location:', error);
+        res.status(500).json({ error: 'Failed to update location' });
     }
-    return maxDistance;
-}
+});
 
 // Group and assign reports endpoint
 router.post('/group-and-assign-reports', authenticateToken, async (req, res) => {
@@ -267,7 +261,7 @@ router.post('/group-and-assign-reports', authenticateToken, async (req, res) => 
         // Fetch unassigned reports
         console.log('Fetching unassigned reports...');
         const reportsResult = await pool.query(`
-            SELECT reportid, wastetype, ST_X(location) AS lng, ST_Y(location) AS lat, 
+            SELECT reportid, wastetype, ST_X(location::geometry) AS lng, ST_Y(location::geometry) AS lat, 
                    datetime, userid, severity
             FROM garbagereports
             WHERE reportid NOT IN (
@@ -300,7 +294,7 @@ router.post('/group-and-assign-reports', authenticateToken, async (req, res) => 
         // Fetch available workers
         console.log('Fetching available workers...');
         const workersResult = await pool.query(`
-            SELECT u.userid, ST_X(u.location) AS lng, ST_Y(u.location) AS lat,
+            SELECT u.userid, ST_X(u.location::geometry) AS lng, ST_Y(u.location::geometry) AS lat,
                    COUNT(tr.taskid) FILTER (WHERE tr.status = 'assigned') AS current_tasks
             FROM users u
             LEFT JOIN taskrequests tr ON tr.assignedworkerid = u.userid
@@ -379,6 +373,18 @@ router.post('/group-and-assign-reports', authenticateToken, async (req, res) => 
         res.status(500).json({ error: 'Internal Server Error', details: error.message });
     }
 });
+
+// Helper function to calculate cluster diameter
+function calculateClusterDiameter(cluster) {
+    let maxDistance = 0;
+    for (let i = 0; i < cluster.length; i++) {
+        for (let j = i + 1; j < cluster.length; j++) {
+            const dist = haversineDistance(cluster[i].lat, cluster[i].lng, cluster[j].lat, cluster[j].lng);
+            maxDistance = Math.max(maxDistance, dist);
+        }
+    }
+    return maxDistance;
+}
 
 
 // Helper function to notify users
