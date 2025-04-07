@@ -195,7 +195,7 @@ profileRouter.put('/update-status', authenticateToken, async (req, res) => {
           return res.status(400).json({ error: 'Invalid status value' });
       }
       const result = await pool.query(
-          `UPDATE users SET status = $1, last_updated = NOW() WHERE userid = $2 RETURNING status`,
+          `UPDATE users SET status = $1 WHERE userid = $2 RETURNING status`,
           [status, userid]
       );
       if (result.rowCount === 0) {
