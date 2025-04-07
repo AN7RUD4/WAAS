@@ -318,20 +318,20 @@ router.post('/group-and-assign-reports', authenticateToken, async (req, res) => 
     console.log('Reached /group-and-assign-reports endpoint');
     try {
         // First check if we have workers with fresh location data
-        const locationCheck = await pool.query(
-            `SELECT COUNT(*) as fresh_workers
-             FROM users
-             WHERE role = 'worker'
-             AND status = 'available'
-             AND last_location_update > NOW() - INTERVAL '1 hour'`
-        );
+        // const locationCheck = await pool.query(
+        //     `SELECT COUNT(*) as fresh_workers
+        //      FROM users
+        //      WHERE role = 'worker'
+        //      AND status = 'available'
+        //      AND last_location_update > NOW() - INTERVAL '1 hour'`
+        // );
         
-        if (locationCheck.rows[0].fresh_workers === 0) {
-            console.log('No workers with fresh location data available');
-            return res.status(400).json({ 
-                error: 'Cannot assign reports - no workers with recent location data' 
-            });
-        }
+        // if (locationCheck.rows[0].fresh_workers === 0) {
+        //     console.log('No workers with fresh location data available');
+        //     return res.status(400).json({ 
+        //         error: 'Cannot assign reports - no workers with recent location data' 
+        //     });
+        // }
 
         console.log('Starting /group-and-assign-reports execution');
         const { startDate } = req.body;
