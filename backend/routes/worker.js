@@ -248,7 +248,7 @@ router.post('/group-and-assign-reports', authenticateToken, async (req, res) => 
     try {
         const { maxDistance = 5, maxReportsPerWorker = 10, urgencyWindow = '24 hours' } = req.body;
 
-        // 1. Fetch unassigned reports with priority
+        // Fetch unassigned reports
         const reportsResult = await pool.query(`
             SELECT 
                 r.reportid, 
@@ -284,7 +284,7 @@ router.post('/group-and-assign-reports', authenticateToken, async (req, res) => 
             created_at: new Date(r.datetime)
         }));
 
-        // 2. Fetch available workers with capacity and skills
+        // Fetch available workers
         const workersResult = await pool.query(`
             SELECT 
                 u.userid,
@@ -298,7 +298,11 @@ router.post('/group-and-assign-reports', authenticateToken, async (req, res) => 
             GROUP BY u.userid
             HAVING COUNT(tr.taskid) < $1
         `, [maxReportsPerWorker]);
-        
+
+        if (workersResult.rows.length === 0) {
+            return res.status(400).json({ error: 'No available workers with capacity' });
+        }
+
         const workers = workersResult.rows.map(w => ({
             userid: w.userid,
             lat: w.lat,
@@ -306,28 +310,21 @@ router.post('/group-and-assign-reports', authenticateToken, async (req, res) => 
             capacity: maxReportsPerWorker - w.current_tasks
         }));
 
-        if (workersResult.rows.length === 0) {
-            return res.status(400).json({ error: 'No available workers with capacity' });
-        }
-        // 3. Cluster reports
+        // Cluster reports (Line 314)
         const clusterCount = Math.ceil(reports.length / maxReportsPerWorker);
         const clusters = kmeansClustering(reports, clusterCount);
 
-        // Filter valid clusters
         const validClusters = clusters.filter(c => 
             c.length <= maxReportsPerWorker && 
             calculateClusterDiameter(c) <= maxDistance
         );
 
-        // 4. Assign workers to clusters
         const assignments = await assignWorkersToClusters(validClusters, workers);
 
-        // 5. Create tasks and update database
         const results = [];
         for (const { cluster, worker } of assignments) {
             const route = solveTSP(cluster, worker);
 
-            // Create task
             const taskResult = await pool.query(`
                 INSERT INTO taskrequests (
                     reportids,
@@ -347,8 +344,6 @@ router.post('/group-and-assign-reports', authenticateToken, async (req, res) => 
                 route.totalDistance
             ]);
 
-
-            // Update worker status if at capacity
             if (cluster.length >= worker.capacity) {
                 await pool.query(`
                     UPDATE users
@@ -357,15 +352,13 @@ router.post('/group-and-assign-reports', authenticateToken, async (req, res) => 
                 `, [worker.userid]);
             }
 
-            // Notify users
-            await notifyUsers(cluster, taskResult.rows[0].taskid);
+            await notifyUsers(cluster, taskResult.rows[0].taskid); // Line 361
 
             results.push({
                 taskId: taskResult.rows[0].taskid,
                 workerId: worker.userid,
                 reportCount: cluster.length,
-                estimatedDistance: route.totalDistance,
-                hazardous: cluster.some(r => r.wastetype === 'public') // Adjusted for public/home
+                estimatedDistance: route.totalDistance
             });
         }
 
