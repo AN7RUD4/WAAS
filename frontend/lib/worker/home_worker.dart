@@ -43,8 +43,6 @@ class WorkerApp extends StatelessWidget {
   }
 }
 
-// [Rest of WorkerHomePage, WorkListItem, and PastWorkDetailsPage remain unchanged]
-
 class WorkerHomePage extends StatefulWidget {
   final String workerName;
   final String workerId;

@@ -264,43 +264,81 @@ function solveTSP(points, worker) {
     };
 }
 
+router.get('/location', authenticateToken, async (req, res) => {
+    try {
+      const userId = req.query.userId || req.user.userid;
+      
+      const result = await pool.query(`
+        SELECT 
+          userid,
+          ST_X(location::geometry) AS lng,
+          ST_Y(location::geometry) AS lat,
+          last_updated
+        FROM users
+        WHERE userid = $1
+      `, [userId]);
+  
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+  
+      res.json(result.rows[0]);
+    } catch (error) {
+      console.error('Location query error:', error);
+      res.status(500).json({ error: 'Database error' });
+    }
+  });
+  
 // Update worker location
 router.post('/update-worker-location', authenticateToken, async (req, res) => {
     try {
-        const { userId, lat, lng } = req.body;
-
-        // Ensure the user is a worker
-        const userCheck = await pool.query(
-            `SELECT role FROM users WHERE userid = $1`,
-            [userId]
-        );
-
-        if (userCheck.rows.length === 0 || userCheck.rows[0].role !== 'worker') {
-            return res.status(403).json({ error: 'Only workers can update their location' });
-        }
-
-        const result = await pool.query(`
-            UPDATE users 
-            SET location = ST_SetSRID(ST_MakePoint($1, $2), 4326),
-                status = 'available'
-            WHERE userid = $3 AND role = 'worker'
-            RETURNING userid, ST_AsText(location) AS location
-        `, [lng, lat, userId]);
-
-        if (result.rows.length === 0) {
-            return res.status(404).json({ error: 'Worker not found' });
-        }
-
-        console.log(`Location updated for worker ${userId}: ${result.rows[0].location}`);
-        res.status(200).json({ 
-            message: 'Location updated successfully',
-            location: result.rows[0].location 
-        });
+      const { userId, lat, lng } = req.body;
+      
+      console.log(`Updating location for worker ${userId} to (${lat},${lng})`);
+  
+      // Validate coordinates
+      if (!isValidCoordinate(lat, lng)) {
+        return res.status(400).json({ error: 'Invalid coordinates' });
+      }
+  
+      // Force update regardless of role (since middleware already verified)
+      const result = await pool.query(`
+        UPDATE users 
+        SET 
+          location = ST_SetSRID(ST_MakePoint($1, $2), 4326),
+          last_updated = NOW()
+        WHERE userid = $3
+        RETURNING 
+          userid, 
+          ST_X(location::geometry) AS lng,
+          ST_Y(location::geometry) AS lat
+      `, [lng, lat, userId]);
+  
+      if (result.rows.length === 0) {
+        console.error('Worker not found:', userId);
+        return res.status(404).json({ error: 'Worker not found' });
+      }
+  
+      const updated = result.rows[0];
+      console.log(`✅ Updated worker ${userId} location to (${updated.lat},${updated.lng})`);
+      
+      res.status(200).json({
+        message: 'Location updated',
+        location: { lat: updated.lat, lng: updated.lng }
+      });
     } catch (error) {
-        console.error('Location update error:', error);
-        res.status(500).json({ error: 'Failed to update location' });
+      console.error('Update error:', error);
+      res.status(500).json({ 
+        error: 'Database update failed',
+        details: error.message 
+      });
     }
-});
+  });
+  
+  // Helper function
+  function isValidCoordinate(lat, lng) {
+    return Math.abs(lat) <= 90 && Math.abs(lng) <= 180;
+  }
 
 router.get('/available-workers-locations', authenticateToken, async (req, res) => {
     try {
@@ -335,8 +373,19 @@ router.get('/available-workers-locations', authenticateToken, async (req, res) =
 // Group and assign reports endpoint
 router.post('/group-and-assign-reports', authenticateToken, async (req, res) => {
     try {
-        const { maxDistance = 10, maxReportsPerWorker = 3, urgencyWindow = '24 hours' } = req.body;
+        // 1. First verify worker location exists
+        const workerCheck = await pool.query(
+            `SELECT ST_X(location::geometry) as lng, ST_Y(location::geometry) as lat 
+             FROM users WHERE userid = $1`,
+            [req.user.userid]
+        );
+        
+        if (workerCheck.rows.length === 0 || !workerCheck.rows[0].lat) {
+            return res.status(400).json({ error: 'Worker location not set' });
+        }
 
+        // 2. Get all not-collected reports within reasonable distance
+        const maxDistance = req.body.maxDistance || 50; // km
         const reportsResult = await pool.query(`
             SELECT 
                 r.reportid, 
@@ -344,111 +393,56 @@ router.post('/group-and-assign-reports', authenticateToken, async (req, res) => 
                 ST_X(r.location::geometry) AS lng,
                 ST_Y(r.location::geometry) AS lat,
                 r.datetime,
-                r.userid,
-                CASE
-                    WHEN r.wastetype = 'public' THEN 'high'
-                    WHEN r.wastetype = 'home' THEN 'low'
-                    ELSE 'low'
-                END as severity,
-                CASE
-                    WHEN NOW() - r.datetime > INTERVAL '${urgencyWindow}' THEN true
-                    ELSE false
-                END as is_urgent
+                ST_Distance(
+                    r.location::geography, 
+                    (SELECT location FROM users WHERE userid = $1)::geography
+                ) / 1000 AS distance_km
             FROM garbagereports r
             WHERE r.status = 'not-collected'
-            AND r.wastetype IN ('public', 'home')
+            AND ST_DWithin(
+                r.location::geography, 
+                (SELECT location FROM users WHERE userid = $1)::geography,
+                $2 * 1000
+            )
             ORDER BY 
-                is_urgent DESC,
-                severity DESC,
-                datetime ASC
-        `);
-
-        console.log('=== Debug: Reports Retrieved ===');
-        console.log(`Number of reports found: ${reportsResult.rows.length}`);
-        console.log('Reports:', reportsResult.rows);
-
-        if (reportsResult.rows.length === 0) {
-            return res.status(200).json({ message: 'No unassigned reports found' });
-        }
-
-        const reports = reportsResult.rows.map(r => ({
-            ...r,
-            created_at: new Date(r.datetime)
-        }));
-
-        const workersResult = await pool.query(`
-            SELECT 
-                u.userid,
-                u.status,
-                ST_X(u.location::geometry) AS lng,
-                ST_Y(u.location::geometry) AS lat,
-                COUNT(tr.taskid) FILTER (WHERE tr.status = 'assigned') AS current_tasks
-            FROM users u
-            LEFT JOIN taskrequests tr ON tr.assignedworkerid = u.userid
-            WHERE u.role = 'worker'
-            GROUP BY u.userid, u.status
-            HAVING COUNT(tr.taskid) < $1
-        `, [maxReportsPerWorker]);
-
-        console.log('=== Debug: Workers Queried ===');
-        console.log(`Number of workers queried: ${workersResult.rows.length}`);
-        console.log('Workers:', workersResult.rows);
-
-        if (workersResult.rows.length === 0) {
-            return res.status(400).json({ error: 'No available workers with capacity' });
-        }
-
-        const workers = workersResult.rows
-            .filter(w => w.status === 'available')
-            .map(w => ({
-                userid: w.userid,
-                lat: w.lat,
-                lng: w.lng,
-                capacity: maxReportsPerWorker - w.current_tasks
-            }));
-
-        console.log('=== Available Workers ===');
-        console.log(`Total workers found: ${workers.length}`);
-        workers.forEach(worker => {
-            console.log(`Worker ${worker.userid}: Capacity=${worker.capacity}, Location=(${worker.lat}, ${worker.lng})`);
-        });
-
-        const clusterCount = Math.ceil(reports.length / maxReportsPerWorker);
-        console.log('=== Debug: Clustering Setup ===');
-        console.log(`Cluster count calculated: ${clusterCount}`);
-
-        const clusters = kmeansClustering(reports, clusterCount);
-
-        const validClusters = clusters.filter(c => 
-            c.length <= maxReportsPerWorker && 
-            calculateClusterDiameter(c) <= maxDistance
+                CASE WHEN r.wastetype = 'hazardous' THEN 0 ELSE 1 END,
+                distance_km ASC
+            LIMIT 100`, 
+            [req.user.userid, maxDistance]
         );
 
-        console.log('=== Debug: Valid Clusters ===');
-        console.log(`Number of valid clusters: ${validClusters.length}`);
-        validClusters.forEach((cluster, index) => {
-            console.log(`Valid Cluster ${index + 1}: ${cluster.length} points`);
-        });
+        // 3. Cluster reports
+        const reports = reportsResult.rows;
+        if (reports.length === 0) {
+            return res.json({ message: 'No reports to cluster' });
+        }
 
-        const assignments = await assignWorkersToClusters(validClusters, workers);
+        // Calculate optimal cluster count (max 3 reports per cluster)
+        const clusterCount = Math.min(
+            Math.ceil(reports.length / 3),
+            5 // Max 5 clusters per worker
+        );
 
-        console.log('=== Worker Assignments ===');
-        console.log(`Total assignments made: ${assignments.length}`);
-        assignments.forEach((assignment, index) => {
-            console.log(`Assignment ${index + 1}:`);
-            console.log(`Worker: ${assignment.worker.userid}`);
-            console.log(`Distance to cluster: ${assignment.distance.toFixed(2)} km`);
-            console.log(`Cluster size: ${assignment.cluster.length} reports`);
-            console.log('Reports:', assignment.cluster.map(r => ({
-                reportid: r.reportid,
-                wastetype: r.wastetype,
-                severity: r.severity
-            })));
-        });
+        const clusters = kmeansClustering(reports, clusterCount);
+        
+        // 4. Assign to current worker (since this is triggered on login)
+        const assignments = clusters.map(cluster => ({
+            cluster,
+            worker: {
+                userid: req.user.userid,
+                lat: workerCheck.rows[0].lat,
+                lng: workerCheck.rows[0].lng
+            },
+            distance: 0 // Since we're assigning to current worker
+        }));
 
+        // 5. Create tasks
         const results = [];
-        for (const { cluster, worker } of assignments) {
-            const route = solveTSP(cluster, worker);
+        for (const { cluster } of assignments) {
+            const route = solveTSP(cluster, { 
+                lat: workerCheck.rows[0].lat, 
+                lng: workerCheck.rows[0].lng 
+            });
 
             const taskResult = await pool.query(`
                 INSERT INTO taskrequests (
@@ -457,45 +451,29 @@ router.post('/group-and-assign-reports', authenticateToken, async (req, res) => 
                     status,
                     starttime,
                     route,
-                    estimated_distance,
-                    progress
+                    estimated_distance
                 ) VALUES (
-                    $1, $2, 'assigned', NOW(), $3, $4, 0
-                ) RETURNING taskid
-            `, [
-                cluster.map(r => r.reportid),
-                worker.userid,
-                route,
-                route.totalDistance
-            ]);
-
-            if (cluster.length >= worker.capacity) {
-                await pool.query(`
-                    UPDATE users
-                    SET status = 'busy'
-                    WHERE userid = $1
-                `, [worker.userid]);
-            }
-
-            await notifyUsers(cluster, taskResult.rows[0].taskid);
+                    $1, $2, 'assigned', NOW(), $3, $4
+                ) RETURNING taskid`,
+                [
+                    cluster.map(r => r.reportid),
+                    req.user.userid,
+                    route,
+                    route.totalDistance
+                ]
+            );
 
             results.push({
                 taskId: taskResult.rows[0].taskid,
-                workerId: worker.userid,
                 reportCount: cluster.length,
-                estimatedDistance: route.totalDistance
+                distance: route.totalDistance
             });
         }
 
-        res.status(200).json({
-            success: true,
-            tasksCreated: results.length,
-            assignments: results,
-            unassignedReports: reports.length - results.reduce((sum, r) => sum + r.reportCount, 0)
-        });
+        res.json({ success: true, assignments: results });
     } catch (error) {
         console.error('Assignment error:', error);
-        res.status(500).json({ error: 'Internal server error', details: error.message });
+        res.status(500).json({ error: error.message });
     }
 });
 

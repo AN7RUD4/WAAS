@@ -74,37 +74,46 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   // New method to update worker location
-  Future<void> _updateWorkerLocation(String token, int userId) async {
-    try {
-      final position = await _determinePosition();
-      final response = await http.post(
-        Uri.parse('$apiBaseUrl/worker/update-worker-location'),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode({
-          'userId': userId,
-          'lat': position.latitude,
-          'lng': position.longitude,
-        }),
-      );
+// Enhanced with better error handling
+Future<void> _updateWorkerLocation(String token, int userId) async {
+  try {
+    final position = await _determinePosition();
+    print('📍 Obtained device location: ${position.latitude},${position.longitude}');
 
-      if (response.statusCode == 200) {
-        print('Worker location updated: ${response.body}');
-      } else {
-        print('Failed to update worker location: ${response.body}');
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to update location: ${response.body}')),
-        );
-      }
-    } catch (e) {
-      print('Error updating worker location: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Location error: $e')),
-      );
+    final response = await http.post(
+      Uri.parse('$apiBaseUrl/worker/update-worker-location'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({
+        'userId': userId,
+        'lat': position.latitude,    // Y coordinate
+        'lng': position.longitude,   // X coordinate
+      }),
+    );
+
+    print('🔁 Update response: ${response.statusCode} - ${response.body}');
+    
+    if (response.statusCode != 200) {
+      throw Exception('Failed to update: ${response.body}');
     }
+
+    // Verify update by querying new location
+    final verifyResponse = await http.get(
+      Uri.parse('$apiBaseUrl/worker/location?userId=$userId'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+    
+    print('✅ Verified location: ${verifyResponse.body}');
+  } catch (e) {
+    print('❌ Location update failed: $e');
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Location update failed: ${e.toString()}')),
+    );
+    rethrow;
   }
+}
 
   Future<void> login() async {
     if (usernameController.text.trim().isEmpty ||
