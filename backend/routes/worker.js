@@ -282,7 +282,6 @@ router.post('/update-worker-location', authenticateToken, async (req, res) => {
         const result = await pool.query(`
             UPDATE users 
             SET location = ST_SetSRID(ST_MakePoint($1, $2), 4326),
-                last_updated = NOW(),
                 status = 'available'
             WHERE userid = $3 AND role = 'worker'
             RETURNING userid, ST_AsText(location) AS location
@@ -314,8 +313,7 @@ router.get('/available-workers-locations', authenticateToken, async (req, res) =
             SELECT 
                 userid,
                 ST_X(location::geometry) AS lng,
-                ST_Y(location::geometry) AS lat,
-                last_updated
+                ST_Y(location::geometry) AS lat
             FROM users
             WHERE role = 'worker' AND status = 'available'
         `);
