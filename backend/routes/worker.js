@@ -335,7 +335,7 @@ router.get('/available-workers-locations', authenticateToken, async (req, res) =
 // Group and assign reports endpoint
 router.post('/group-and-assign-reports', authenticateToken, async (req, res) => {
     try {
-        const { maxDistance = 5, maxReportsPerWorker = 3, urgencyWindow = '24 hours' } = req.body;
+        const { maxDistance = 10, maxReportsPerWorker = 3, urgencyWindow = '24 hours' } = req.body;
 
         const reportsResult = await pool.query(`
             SELECT 
