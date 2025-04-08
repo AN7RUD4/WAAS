@@ -52,12 +52,26 @@ class ApiService {
     }
   }
 
-  Future<Map<String, dynamic>> updateProfile(String name, String email) async {
-    if (name.trim().isEmpty || email.trim().isEmpty) {
-      throw Exception('Name and email are required');
+  Future<Map<String, dynamic>> updateProfile(
+    String name,
+    String email,
+    String address,
+    String phone,
+  ) async {
+    if (name.trim().isEmpty ||
+        email.trim().isEmpty ||
+        address.trim().isEmpty ||
+        phone.trim().isEmpty) {
+      throw Exception('Name, email, address, and phone are required');
     }
     if (!RegExp(r'\S+@\S+\.\S+').hasMatch(email)) {
       throw Exception('Invalid email format');
+    }
+    // Basic phone validation (e.g., 10 digits)
+    if (!RegExp(r'^\+?[\d]{10,12}$').hasMatch(phone)) {
+      throw Exception(
+        'Invalid phone number format (e.g., +1234567890 or 1234567890)',
+      );
     }
 
     final token = await getToken();
@@ -69,11 +83,16 @@ class ApiService {
         'Authorization': 'Bearer $token',
         'Content-Type': 'application/json',
       },
-      body: json.encode({'name': name, 'email': email}),
+      body: jsonEncode({
+        'name': name,
+        'email': email,
+        'address': address,
+        'phone': phone,
+      }),
     );
 
     if (response.statusCode == 200) {
-      final responseData = json.decode(response.body);
+      final responseData = jsonDecode(response.body);
       final newToken = responseData['token'];
       if (newToken != null) {
         await storage.write(key: 'jwt_token', value: newToken);
@@ -106,11 +125,11 @@ class ApiService {
         'Authorization': 'Bearer $token',
         'Content-Type': 'application/json',
       },
-      body: json.encode({'newPassword': newPassword}),
+      body: jsonEncode({'newPassword': newPassword}),
     );
 
     if (response.statusCode == 200) {
-      final responseData = json.decode(response.body);
+      final responseData = jsonDecode(response.body);
       final newToken = responseData['token'];
       if (newToken != null) {
         await storage.write(key: 'jwt_token', value: newToken);
@@ -136,6 +155,8 @@ class ProfilePage extends StatefulWidget {
 class _ProfilePageState extends State<ProfilePage> {
   String name = "Loading...";
   String email = "Loading...";
+  String address = "Loading...";
+  String phone = "Loading...";
   final apiService = ApiService();
 
   @override
@@ -150,6 +171,8 @@ class _ProfilePageState extends State<ProfilePage> {
       setState(() {
         name = profile['user']['name'] ?? 'Unknown';
         email = profile['user']['email'] ?? 'Unknown';
+        address = profile['user']['address'] ?? 'Not provided';
+        phone = profile['user']['phone'] ?? 'Not provided';
       });
     } catch (e) {
       if (e.toString().contains('Session expired')) {
@@ -159,6 +182,8 @@ class _ProfilePageState extends State<ProfilePage> {
         setState(() {
           name = 'Error';
           email = 'Error';
+          address = 'Error';
+          phone = 'Error';
         });
         ScaffoldMessenger.of(
           context,
@@ -249,6 +274,27 @@ class _ProfilePageState extends State<ProfilePage> {
                         style: const TextStyle(fontSize: 16),
                       ),
                     ),
+                    const Divider(),
+                    ListTile(
+                      leading: const Icon(
+                        Icons.location_on,
+                        color: Colors.black54,
+                      ),
+                      title: const Text("Address"),
+                      subtitle: Text(
+                        address,
+                        style: const TextStyle(fontSize: 16),
+                      ),
+                    ),
+                    const Divider(),
+                    ListTile(
+                      leading: const Icon(Icons.phone, color: Colors.black54),
+                      title: const Text("Phone"),
+                      subtitle: Text(
+                        phone,
+                        style: const TextStyle(fontSize: 16),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -278,8 +324,12 @@ class _ProfilePageState extends State<ProfilePage> {
       context,
       MaterialPageRoute(
         builder:
-            (context) =>
-                EditProfilePage(currentName: name, currentEmail: email),
+            (context) => EditProfilePage(
+              currentName: name,
+              currentEmail: email,
+              currentAddress: address,
+              currentPhone: phone,
+            ),
       ),
     ).then((_) => _loadProfile());
   }
@@ -288,10 +338,14 @@ class _ProfilePageState extends State<ProfilePage> {
 class EditProfilePage extends StatefulWidget {
   final String currentName;
   final String currentEmail;
+  final String currentAddress;
+  final String currentPhone;
 
   const EditProfilePage({
     required this.currentName,
     required this.currentEmail,
+    required this.currentAddress,
+    required this.currentPhone,
     super.key,
   });
 
@@ -302,6 +356,8 @@ class EditProfilePage extends StatefulWidget {
 class _EditProfilePageState extends State<EditProfilePage> {
   late TextEditingController nameController;
   late TextEditingController emailController;
+  late TextEditingController addressController;
+  late TextEditingController phoneController;
   final _formKey = GlobalKey<FormState>();
   final apiService = ApiService();
 
@@ -310,12 +366,16 @@ class _EditProfilePageState extends State<EditProfilePage> {
     super.initState();
     nameController = TextEditingController(text: widget.currentName);
     emailController = TextEditingController(text: widget.currentEmail);
+    addressController = TextEditingController(text: widget.currentAddress);
+    phoneController = TextEditingController(text: widget.currentPhone);
   }
 
   @override
   void dispose() {
     nameController.dispose();
     emailController.dispose();
+    addressController.dispose();
+    phoneController.dispose();
     super.dispose();
   }
 
@@ -368,6 +428,38 @@ class _EditProfilePageState extends State<EditProfilePage> {
                   return null;
                 },
               ),
+              const SizedBox(height: 20),
+              TextFormField(
+                controller: addressController,
+                decoration: const InputDecoration(
+                  labelText: "Address",
+                  prefixIcon: Icon(Icons.location_on),
+                ),
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Please enter your address';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 20),
+              TextFormField(
+                controller: phoneController,
+                decoration: const InputDecoration(
+                  labelText: "Phone",
+                  prefixIcon: Icon(Icons.phone),
+                ),
+                keyboardType: TextInputType.phone,
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Please enter your phone number';
+                  }
+                  if (!RegExp(r'^\+?[\d]{10,12}$').hasMatch(value)) {
+                    return 'Invalid phone number format (e.g., +1234567890 or 1234567890)';
+                  }
+                  return null;
+                },
+              ),
               const SizedBox(height: 30),
               Divider(color: Colors.grey[300]),
               ListTile(
@@ -411,6 +503,8 @@ class _EditProfilePageState extends State<EditProfilePage> {
         await apiService.updateProfile(
           nameController.text.trim(),
           emailController.text.trim(),
+          addressController.text.trim(),
+          phoneController.text.trim(),
         );
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("Profile updated successfully")),

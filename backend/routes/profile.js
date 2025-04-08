@@ -35,7 +35,7 @@ profileRouter.get('/profile', authenticateToken, async (req, res) => {
   try {
     await client.query('BEGIN');
     const user = await client.query(
-      'SELECT userid, name, email,role FROM users WHERE userid = $1',
+      'SELECT userid, name, email, address, phone, role FROM users WHERE userid = $1',
       [req.user.userid]
     );
     if (user.rows.length === 0) {
@@ -47,6 +47,8 @@ profileRouter.get('/profile', authenticateToken, async (req, res) => {
         userid: user.rows[0].userid,
         name: user.rows[0].name,
         email: user.rows[0].email,
+        address: user.rows[0].address || 'Not provided',
+        phone: user.rows[0].phone || 'Not provided',
         role: user.rows[0].role
       },
     });
@@ -59,20 +61,24 @@ profileRouter.get('/profile', authenticateToken, async (req, res) => {
   }
 });
 
-// Update user profile (name and email)
+// Update user profile (name, email, address, phone)
 profileRouter.put('/profile', authenticateToken, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
 
-    const { name, email } = req.body;
+    const { name, email, address, phone } = req.body;
 
     // Input validation
-    if (!name || !email) {
-      throw new Error('Name and email are required');
+    if (!name || !email || !address || !phone) {
+      throw new Error('Name, email, address, and phone are required');
     }
     if (!/\S+@\S+\.\S+/.test(email)) {
       throw new Error('Invalid email format');
+    }
+    // Basic phone validation (e.g., 10-12 digits with optional country code)
+    if (!/^\+?[\d]{10,12}$/.test(phone)) {
+      throw new Error('Invalid phone number format (e.g., +1234567890 or 1234567890)');
     }
 
     // Check if the email is already in use by another user
@@ -84,10 +90,10 @@ profileRouter.put('/profile', authenticateToken, async (req, res) => {
       throw new Error('Email already in use by another user');
     }
 
-    // Update the user's name and email
+    // Update the user's name, email, address, and phone
     const updatedUser = await client.query(
-      'UPDATE users SET name = $1, email = $2 WHERE userid = $3 RETURNING userid, name, email',
-      [name, email, req.user.userid]
+      'UPDATE users SET name = $1, email = $2, address = $3, phone = $4 WHERE userid = $5 RETURNING userid, name, email, address, phone, role',
+      [name, email, address, phone, req.user.userid]
     );
 
     if (updatedUser.rows.length === 0) {
@@ -100,6 +106,8 @@ profileRouter.put('/profile', authenticateToken, async (req, res) => {
         userid: updatedUser.rows[0].userid,
         name: updatedUser.rows[0].name,
         email: updatedUser.rows[0].email,
+        address: updatedUser.rows[0].address,
+        phone: updatedUser.rows[0].phone,
         role: updatedUser.rows[0].role,
       },
       process.env.JWT_SECRET || 'passwordKey',
@@ -113,6 +121,8 @@ profileRouter.put('/profile', authenticateToken, async (req, res) => {
         userid: updatedUser.rows[0].userid,
         name: updatedUser.rows[0].name,
         email: updatedUser.rows[0].email,
+        address: updatedUser.rows[0].address,
+        phone: updatedUser.rows[0].phone,
         role: updatedUser.rows[0].role,
       },
       token: newToken,
@@ -157,7 +167,7 @@ profileRouter.put('/change-password', authenticateToken, async (req, res) => {
 
     // Fetch the updated user data to include in the new token
     const userData = await client.query(
-      'SELECT userid, name, email FROM users WHERE userid = $1',
+      'SELECT userid, name, email, address, phone FROM users WHERE userid = $1',
       [req.user.userid]
     );
 
@@ -167,6 +177,8 @@ profileRouter.put('/change-password', authenticateToken, async (req, res) => {
         userid: userData.rows[0].userid,
         name: userData.rows[0].name,
         email: userData.rows[0].email,
+        address: userData.rows[0].address,
+        phone: userData.rows[0].phone,
       },
       process.env.JWT_SECRET || 'passwordKey',
       { expiresIn: '1h' }
