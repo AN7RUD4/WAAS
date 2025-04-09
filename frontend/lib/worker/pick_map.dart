@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'dart:math' show sin, cos, sqrt, asin, pi;
+import 'dart:math' show asin, atan2, cos, pi, sin, sqrt;
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
@@ -48,6 +48,52 @@ class _MapScreenState extends State<MapScreen> {
     _fetchCollectionRequestData();
   }
 
+  // Add these constants at the top of your class
+  Map<int, String> _directionSymbols = {
+    0: '🛣️', // Continue straight
+    1: '⬅️', // Sharp left
+    2: '↖️', // Left
+    3: '↪️', // Slight left
+    4: '➡️', // Sharp right
+    5: '↗️', // Right
+    6: '↩️', // Slight right
+    7: '↗️', // Merge right
+    8: '↖️', // Merge left
+    9: '🔄', // Roundabout
+    10: '🏁', // Destination reached
+  };
+
+  String _getDirectionSymbol(double bearing) {
+    if (bearing < 0) bearing += 360;
+
+    if (bearing >= 337.5 || bearing < 22.5) return '🛣️'; // Straight
+    if (bearing >= 22.5 && bearing < 67.5) return '↗️'; // Right
+    if (bearing >= 67.5 && bearing < 112.5) return '➡️'; // Sharp right
+    if (bearing >= 112.5 && bearing < 157.5) return '↘️'; // Slight right
+    if (bearing >= 157.5 && bearing < 202.5) return '🛣️'; // Straight (reverse)
+    if (bearing >= 202.5 && bearing < 247.5) return '↙️'; // Slight left
+    if (bearing >= 247.5 && bearing < 292.5) return '⬅️'; // Left
+    if (bearing >= 292.5 && bearing < 337.5) return '↖️'; // Sharp left
+
+    return '🛣️';
+  }
+
+  double _calculateBearing(LatLng start, LatLng end) {
+    final startLat = _degreesToRadians(start.latitude);
+    final startLng = _degreesToRadians(start.longitude);
+    final endLat = _degreesToRadians(end.latitude);
+    final endLng = _degreesToRadians(end.longitude);
+
+    final y = sin(endLng - startLng) * cos(endLat);
+    final x =
+        cos(startLat) * sin(endLat) -
+        sin(startLat) * cos(endLat) * cos(endLng - startLng);
+    final bearing = atan2(y, x);
+    return (_radiansToDegrees(bearing) + 360) % 360;
+  }
+
+  double _radiansToDegrees(double radians) => radians * (180.0 / pi);
+
   void _getWorkerLocation() async {
     try {
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
@@ -66,7 +112,9 @@ class _MapScreenState extends State<MapScreen> {
       }
 
       if (permission == LocationPermission.deniedForever) {
-        setState(() => _errorMessage = 'Location permissions are permanently denied');
+        setState(
+          () => _errorMessage = 'Location permissions are permanently denied',
+        );
         return;
       }
 
@@ -132,7 +180,22 @@ class _MapScreenState extends State<MapScreen> {
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = jsonDecode(response.body);
         _parseRouteFromJson(data);
-        
+
+        // Set _collectionStarted based on task status
+        if (data['status'] == 'in-progress') {
+          setState(() {
+            _collectionStarted = true; // Automatically continue if in-progress
+          });
+        } else if (data['status'] == 'assigned') {
+          setState(() {
+            _collectionStarted = false; // Require start for assigned tasks
+          });
+        } else {
+          setState(() {
+            _collectionStarted = false; // Default to false for other statuses
+          });
+        }
+
         if (_workerLocation == null && data['workerLocation'] != null) {
           _workerLocation = LatLng(
             data['workerLocation']['lat'],
@@ -171,7 +234,9 @@ class _MapScreenState extends State<MapScreen> {
 
     if (data['locations'] != null && data['locations'] is List) {
       for (var item in data['locations']) {
-        if (item['lat'] != null && item['lng'] != null && item['reportid'] != null) {
+        if (item['lat'] != null &&
+            item['lng'] != null &&
+            item['reportid'] != null) {
           try {
             final LatLng latLng = LatLng(
               double.parse(item['lat'].toString()),
@@ -194,28 +259,145 @@ class _MapScreenState extends State<MapScreen> {
     if (_workerLocation == null || _locations.isEmpty) return [];
 
     List<LatLng> waypoints = [_workerLocation!, ..._locations];
-    final String osrmBaseUrl = 'http://router.project-osrm.org/route/v1/driving/';
+    final String osrmBaseUrl =
+        'http://router.project-osrm.org/route/v1/driving/';
     String coordinates = waypoints
         .map((point) => '${point.longitude},${point.latitude}')
         .join(';');
-    final String osrmUrl = '$osrmBaseUrl$coordinates?overview=full&geometries=geojson&steps=true';
+    final String osrmUrl =
+        '$osrmBaseUrl$coordinates?overview=full&geometries=geojson&steps=true';
 
     try {
       final response = await http.get(Uri.parse(osrmUrl));
 
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = jsonDecode(response.body);
-        if (data['code'] == 'Ok' && data['routes'].isNotEmpty) {
-          final routeGeometry = data['routes'][0]['geometry']['coordinates'];
-          return routeGeometry
-              .map<LatLng>((coord) => LatLng(coord[1], coord[0]))
-              .toList();
+        if (data['code'] == 'Ok' &&
+            data['routes'] != null &&
+            data['routes'].isNotEmpty &&
+            data['routes'][0]['legs'] != null &&
+            data['routes'][0]['legs'].isNotEmpty) {
+          _directionSteps = [];
+          final steps = data['routes'][0]['legs'][0]['steps'] ?? [];
+          for (var step in steps) {
+            if (step['maneuver'] != null &&
+                step['maneuver']['location'] != null &&
+                step['maneuver']['location'].length >= 2) {
+              _directionSteps.add({
+                'distance': step['distance'] ?? 0,
+                'instruction': step['maneuver']['instruction'] ?? 'Continue',
+                'type': step['maneuver']['type'] ?? 'turn',
+                'modifier': step['maneuver']['modifier'] ?? 'straight',
+                'location': LatLng(
+                  step['maneuver']['location'][1],
+                  step['maneuver']['location'][0],
+                ),
+              });
+            }
+          }
+
+          if (data['routes'][0]['geometry'] != null &&
+              data['routes'][0]['geometry']['coordinates'] != null) {
+            final routeGeometry = data['routes'][0]['geometry']['coordinates'];
+            return routeGeometry
+                .map<LatLng>((coord) => LatLng(coord[1], coord[0]))
+                .toList();
+          }
         }
       }
+      return _locations;
     } catch (e) {
-      print('Error fetching route from OSRM: $e');
+      debugPrint('Error fetching route from OSRM: $e');
+      return _locations;
     }
-    return _locations;
+  }
+
+  String _getCurrentInstruction() {
+    if (_workerLocation == null || _directionSteps.isEmpty) {
+      return 'Calculating route...';
+    }
+
+    // Find the closest step
+    int closestStepIndex = 0;
+    double minDistance = double.infinity;
+
+    for (int i = 0; i < _directionSteps.length; i++) {
+      final stepLocation = _directionSteps[i]['location'] as LatLng?;
+      if (stepLocation == null) continue;
+
+      final distance = _haversineDistance(_workerLocation!, stepLocation);
+      if (distance < minDistance) {
+        minDistance = distance;
+        closestStepIndex = i;
+      }
+    }
+
+    // Get the next instruction
+    final nextStepIndex =
+        closestStepIndex < _directionSteps.length - 1
+            ? closestStepIndex + 1
+            : closestStepIndex;
+
+    final nextStep = _directionSteps[nextStepIndex];
+    final stepLocation = nextStep['location'] as LatLng?;
+
+    if (stepLocation == null) {
+      return 'Continue on current route';
+    }
+
+    final distanceToNext = _haversineDistance(_workerLocation!, stepLocation);
+
+    String instruction = nextStep['instruction']?.toString() ?? 'Continue';
+    String symbol = '🛣️';
+
+    final maneuverType = nextStep['type']?.toString();
+    final modifier = nextStep['modifier']?.toString();
+
+    if (maneuverType != null) {
+      switch (maneuverType) {
+        case 'turn':
+          if (modifier != null) {
+            switch (modifier) {
+              case 'left':
+                symbol = '⬅️';
+                break;
+              case 'right':
+                symbol = '➡️';
+                break;
+              case 'sharp left':
+                symbol = '↖️';
+                break;
+              case 'sharp right':
+                symbol = '↗️';
+                break;
+              case 'slight left':
+                symbol = '↩️';
+                break;
+              case 'slight right':
+                symbol = '↪️';
+                break;
+              default:
+                symbol = '🛣️';
+                break;
+            }
+          }
+          break;
+        case 'arrive':
+          symbol = '🏁';
+          instruction = 'Destination reached';
+          break;
+        case 'roundabout':
+          symbol = '🔄';
+          break;
+        case 'depart':
+          symbol = '🚦';
+          break;
+        default:
+          symbol = '🛣️';
+      }
+    }
+
+    return '$symbol $instruction (${distanceToNext.toStringAsFixed(2)} km)';
   }
 
   void _updateCompleteRoute() {
@@ -250,7 +432,10 @@ class _MapScreenState extends State<MapScreen> {
 
     _totalDistance = 0.0;
     for (int i = 0; i < _completeRoute.length - 1; i++) {
-      _totalDistance += _haversineDistance(_completeRoute[i], _completeRoute[i + 1]);
+      _totalDistance += _haversineDistance(
+        _completeRoute[i],
+        _completeRoute[i + 1],
+      );
     }
     setState(() {});
   }
@@ -258,15 +443,68 @@ class _MapScreenState extends State<MapScreen> {
   void _updateDirectionsBasedOnLocation() {
     if (_workerLocation == null || _completeRoute.isEmpty) return;
 
+    // Find the nearest point on the route
+    int nearestIndex = 0;
     double minDistance = double.infinity;
-    for (final point in _completeRoute) {
-      final distance = _haversineDistance(_workerLocation!, point);
-      if (distance < minDistance) minDistance = distance;
+
+    for (int i = 0; i < _completeRoute.length; i++) {
+      final distance = _haversineDistance(_workerLocation!, _completeRoute[i]);
+      if (distance < minDistance) {
+        minDistance = distance;
+        nearestIndex = i;
+      }
     }
 
-    setState(() {
-      _directions = 'Distance to nearest point: ${minDistance.toStringAsFixed(2)} km';
-    });
+    // Get the next significant point (skip very close points)
+    int nextPointIndex = nearestIndex + 1;
+    while (nextPointIndex < _completeRoute.length - 1 &&
+        _haversineDistance(
+              _completeRoute[nearestIndex],
+              _completeRoute[nextPointIndex],
+            ) <
+            0.05) {
+      nextPointIndex++;
+    }
+
+    if (nextPointIndex >= _completeRoute.length) {
+      setState(() => _directions = '🏁 Destination reached');
+      return;
+    }
+
+    final nextPoint = _completeRoute[nextPointIndex];
+    final distanceToNext = _haversineDistance(_workerLocation!, nextPoint);
+    final bearing = _calculateBearing(_workerLocation!, nextPoint);
+    final directionSymbol = _getDirectionSymbol(bearing);
+
+    String instruction;
+    if (distanceToNext < 0.1) {
+      instruction = 'Approaching next point';
+    } else {
+      instruction =
+          '$directionSymbol In ${distanceToNext.toStringAsFixed(2)} km';
+
+      // Add more specific instructions based on bearing
+      if (bearing >= 22.5 && bearing < 67.5) {
+        instruction += ' (Turn slight right)';
+      } else if (bearing >= 67.5 && bearing < 112.5) {
+        instruction += ' (Turn right)';
+      } else if (bearing >= 112.5 && bearing < 157.5) {
+        instruction += ' (Turn sharp right)';
+      } else if (bearing >= 157.5 && bearing < 202.5) {
+        instruction += ' (Continue straight)';
+      } else if (bearing >= 202.5 && bearing < 247.5) {
+        instruction += ' (Turn slight left)';
+      } else if (bearing >= 247.5 && bearing < 292.5) {
+        instruction += ' (Turn left)';
+      } else if (bearing >= 292.5 && bearing < 337.5) {
+        instruction += ' (Turn sharp left)';
+      }
+    }
+
+    setState(() => _directions = instruction);
+
+    if (_workerLocation == null || _completeRoute.isEmpty) return;
+    setState(() => _directions = _getCurrentInstruction());
   }
 
   void _startCollection() async {
@@ -297,69 +535,69 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   Future<void> _markAsCollected() async {
-  if (_selectedLocation == null || _selectedReportId == null) return;
+    if (_selectedLocation == null || _selectedReportId == null) return;
 
-  setState(() => _isLoading = true);
-  try {
-    final token = await storage.read(key: 'jwt_token');
-    if (token == null) throw Exception('No authentication token found');
+    setState(() => _isLoading = true);
+    try {
+      final token = await storage.read(key: 'jwt_token');
+      if (token == null) throw Exception('No authentication token found');
 
-    final response = await http.post(
-      Uri.parse('$apiBaseUrl/worker/mark-collected'),
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-      },
-      body: jsonEncode({
-        'taskId': widget.taskid,
-        'reportId': _selectedReportId,
-      }),
-    );
+      final response = await http.post(
+        Uri.parse('$apiBaseUrl/worker/mark-collected'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'taskId': widget.taskid,
+          'reportId': _selectedReportId,
+        }),
+      );
 
-    final responseData = jsonDecode(response.body);
+      final responseData = jsonDecode(response.body);
 
-    if (response.statusCode == 200) {
-      // Immediately update the UI
-      setState(() {
-        _collectedReports.add(_selectedReportId!);
-        _locations.removeWhere((loc) => loc == _selectedLocation);
-        _reportIds.remove(_selectedReportId);
-        _wasteTypes.remove(_selectedWasteType);
-        _selectedLocation = null;
-        _selectedReportId = null;
-        _selectedWasteType = null;
-      });
+      if (response.statusCode == 200) {
+        // Immediately update the UI
+        setState(() {
+          _collectedReports.add(_selectedReportId!);
+          _locations.removeWhere((loc) => loc == _selectedLocation);
+          _reportIds.remove(_selectedReportId);
+          _wasteTypes.remove(_selectedWasteType);
+          _selectedLocation = null;
+          _selectedReportId = null;
+          _selectedWasteType = null;
+        });
 
-      // Refresh the route
-      if (_workerLocation != null && _locations.isNotEmpty) {
-        _route = await _fetchRouteFromOSRM();
-        _updateCompleteRoute();
-        _calculateDistances();
+        // Refresh the route
+        if (_workerLocation != null && _locations.isNotEmpty) {
+          _route = await _fetchRouteFromOSRM();
+          _updateCompleteRoute();
+          _calculateDistances();
+        }
+
+        if (responseData['taskStatus'] == 'completed') {
+          // Show success message and navigate back
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Task completed successfully!')),
+          );
+          Navigator.pop(context, true); // Pass true to indicate completion
+        }
+      } else {
+        throw Exception('Failed to mark collected: ${response.body}');
       }
-
-      if (responseData['taskStatus'] == 'completed') {
-        // Show success message and navigate back
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Task completed successfully!')),
-        );
-        Navigator.pop(context, true); // Pass true to indicate completion
-      }
-    } else {
-      throw Exception('Failed to mark collected: ${response.body}');
+    } catch (e) {
+      setState(() => _errorMessage = 'Error marking collected: $e');
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: $e')));
+    } finally {
+      setState(() => _isLoading = false);
     }
-  } catch (e) {
-    setState(() => _errorMessage = 'Error marking collected: $e');
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Error: $e')),
-    );
-  } finally {
-    setState(() => _isLoading = false);
   }
-}
 
   void _selectLocation(int index) {
     if (index >= _locations.length) return;
-    
+
     setState(() {
       _selectedLocation = _locations[index];
       _selectedReportId = _reportIds[index];
@@ -412,7 +650,8 @@ class _MapScreenState extends State<MapScreen> {
             ),
             children: [
               TileLayer(
-                urlTemplate: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+                urlTemplate:
+                    "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
                 subdomains: ['a', 'b', 'c'],
               ),
               if (_completeRoute.isNotEmpty)
@@ -441,7 +680,9 @@ class _MapScreenState extends State<MapScreen> {
                   ..._locations.asMap().entries.map((entry) {
                     final index = entry.key;
                     final loc = entry.value;
-                    final isCollected = _collectedReports.contains(_reportIds[index]);
+                    final isCollected = _collectedReports.contains(
+                      _reportIds[index],
+                    );
 
                     return Marker(
                       point: loc,
@@ -451,9 +692,12 @@ class _MapScreenState extends State<MapScreen> {
                         onTap: () => _selectLocation(index),
                         child: Icon(
                           isCollected ? Icons.check_circle : Icons.location_pin,
-                          color: isCollected
-                              ? Colors.green
-                              : (_collectionStarted ? Colors.orange : Colors.red),
+                          color:
+                              isCollected
+                                  ? Colors.green
+                                  : (_collectionStarted
+                                      ? Colors.orange
+                                      : Colors.red),
                           size: 40,
                         ),
                       ),
@@ -480,7 +724,7 @@ class _MapScreenState extends State<MapScreen> {
                   Text(
                     _directions,
                     style: const TextStyle(
-                      fontSize: 14,
+                      fontSize: 18,
                       fontWeight: FontWeight.w600,
                       color: Colors.white,
                     ),
@@ -508,7 +752,8 @@ class _MapScreenState extends State<MapScreen> {
                           '${_selectedLocation!.longitude.toStringAsFixed(6)}',
                           style: TextStyle(fontSize: 14, color: Colors.white70),
                         ),
-                        if (_collectionStarted && !_collectedReports.contains(_selectedReportId))
+                        if (_collectionStarted &&
+                            !_collectedReports.contains(_selectedReportId))
                           ElevatedButton(
                             onPressed: _markAsCollected,
                             style: ElevatedButton.styleFrom(

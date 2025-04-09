@@ -14,7 +14,6 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cors());
 
-// Create uploads directory if it doesn't exist
 const fs = require('fs');
 if (!fs.existsSync('uploads')) {
   fs.mkdirSync('uploads');
@@ -30,76 +29,6 @@ app.use('/api', authRouter);
 app.use('/api/profile', profileRouter);
 app.use('/api/user', userRouter);
 app.use('/api/worker', workerRouter); 
-
-async function getAdminToken() {
-  try {
-    // If you have a stored token that's still valid, use it
-    if (process.env.ADMIN_JWT_TOKEN) {
-      try {
-        jwt.verify(process.env.ADMIN_JWT_TOKEN, process.env.JWT_SECRET || 'passwordKey');
-        return process.env.ADMIN_JWT_TOKEN;
-      } catch (e) {
-        // Token expired, need to get a new one
-      }
-    }
-
-    // Get new token by logging in
-    const response = await axios.post(
-      `${process.env.API_BASE_URL}/admin-login`,
-      {
-        username: process.env.ADMIN_USERNAME,
-        password: process.env.ADMIN_PASSWORD
-      }
-    );
-
-    // Store the new token in memory (or in a secure storage for production)
-    process.env.ADMIN_JWT_TOKEN = response.data.token;
-    return response.data.token;
-  } catch (error) {
-    console.error('Failed to get admin token:', error.message);
-    return null;
-  }
-}
-
-// Schedule to run every 2 hours
-cron.schedule('0 */2 * * *', async () => {
-  try {
-    const adminJwtToken = await getAdminToken();
-    
-    if (!adminJwtToken) {
-      throw new Error('Admin JWT token not available');
-    }
-
-    const response = await axios.post(
-      `${process.env.API_BASE_URL_WORKER}/worker/group-and-assign-reports`,
-      {}, // Empty request body
-      {
-        headers: { 
-          Authorization: `Bearer ${adminJwtToken}`,
-          'Content-Type': 'application/json'
-        },
-        timeout: 30000 // 30-second timeout
-      }
-    );
-
-    console.log('Scheduled assignment completed:', {
-      status: response.status,
-      data: response.data
-    });
-    
-  } catch (error) {
-    console.error('Scheduled assignment failed:', {
-      time: new Date().toISOString(),
-      error: error.response?.data || error.message,
-      stack: error.stack
-    });
-  }
-}, {
-  scheduled: true,
-  timezone: "Asia/Kolkata" // Using IANA timezone for India
-});
-
-console.log('Cron job scheduled to run every 2 hours for report assignments');
 
 // Error handling middleware
 app.use((err, req, res, next) => {

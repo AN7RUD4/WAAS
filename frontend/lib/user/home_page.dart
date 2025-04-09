@@ -11,6 +11,19 @@ import 'package:waas/assets/constants.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 // Main user dashboard page
+import 'package:flutter/material.dart';
+import 'package:http_parser/http_parser.dart';
+import 'package:image_picker/image_picker.dart';
+import 'dart:io';
+import 'package:geolocator/geolocator.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../colors/colors.dart';
+import 'package:waas/assets/constants.dart';
+import 'package:google_fonts/google_fonts.dart';
+
+// Main user dashboard page (unchanged)
 class UserApp extends StatelessWidget {
   const UserApp({super.key});
 
@@ -433,24 +446,6 @@ class _ReportPageState extends State<ReportPage> {
       return;
     }
 
-    if (_hasWaste == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Please wait for waste detection to complete"),
-        ),
-      );
-      return;
-    }
-
-    if (!_hasWaste!) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Cannot submit report: No waste detected in the image"),
-        ),
-      );
-      return;
-    }
-
     setState(() {
       _isLoading = true;
       _errorMessage = null;
@@ -678,12 +673,20 @@ class _ReportPageState extends State<ReportPage> {
                         SizedBox(
                           width: double.infinity,
                           child: ElevatedButton(
-                            onPressed: _submitReport,
+                            onPressed:
+                                _hasWaste == true &&
+                                        _image != null &&
+                                        locationController.text.isNotEmpty
+                                    ? _submitReport
+                                    : null, // Disable button if no waste or missing fields
                             child: const Text("Submit Report"),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.green.shade700,
                               foregroundColor: Colors.white,
                               padding: const EdgeInsets.symmetric(vertical: 16),
+                              disabledBackgroundColor:
+                                  Colors.grey, // Visual cue for disabled state
+                              disabledForegroundColor: Colors.white70,
                             ),
                           ),
                         ),
@@ -1041,42 +1044,6 @@ class _CollectionRequestsPageState extends State<CollectionRequestsPage> {
                                                       color: Colors.black87,
                                                     ),
                                                   ),
-                                                  Container(
-                                                    padding:
-                                                        const EdgeInsets.symmetric(
-                                                          horizontal: 8,
-                                                          vertical: 4,
-                                                        ),
-                                                    decoration: BoxDecoration(
-                                                      color:
-                                                          report['status'] ==
-                                                                  'Pending'
-                                                              ? Colors
-                                                                  .orange
-                                                                  .shade700
-                                                              : report['status'] ==
-                                                                  'Completed'
-                                                              ? Colors
-                                                                  .green
-                                                                  .shade700
-                                                              : Colors
-                                                                  .red
-                                                                  .shade700,
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                            12,
-                                                          ),
-                                                    ),
-                                                    child: Text(
-                                                      report['status'] ??
-                                                          'Unknown',
-                                                      style:
-                                                          GoogleFonts.poppins(
-                                                            fontSize: 12,
-                                                            color: Colors.white,
-                                                          ),
-                                                    ),
-                                                  ),
                                                 ],
                                               ),
                                               const SizedBox(height: 8),
@@ -1158,4 +1125,3 @@ class _CollectionRequestsPageState extends State<CollectionRequestsPage> {
     );
   }
 }
-
