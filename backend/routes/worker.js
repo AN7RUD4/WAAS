@@ -714,12 +714,13 @@ router.post('/group-and-assign-reports', authenticateToken, async (req, res) => 
             return res.status(400).json({ error: 'Worker location not set' });
         }
 
-        // 2. Get all not-collected reports within reasonable distance
+        // 2. Get all not-collected reports within 20km radius
         const maxDistance = 20; // km
         const reportsResult = await pool.query(`
             SELECT 
                 r.reportid, 
                 r.wastetype,
+                r.userid,
                 ST_X(r.location::geometry) AS lng,
                 ST_Y(r.location::geometry) AS lat,
                 r.datetime,
@@ -734,9 +735,7 @@ router.post('/group-and-assign-reports', authenticateToken, async (req, res) => 
                 (SELECT location FROM users WHERE userid = $1)::geography,
                 $2 * 1000
             )
-            ORDER BY 
-                CASE WHEN r.wastetype = 'hazardous' THEN 0 ELSE 1 END,
-                distance_km ASC
+            ORDER BY distance_km ASC
             LIMIT 100`, 
             [req.user.userid, maxDistance]
         );
@@ -744,7 +743,7 @@ router.post('/group-and-assign-reports', authenticateToken, async (req, res) => 
         // 3. Cluster reports
         const reports = reportsResult.rows;
         if (reports.length === 0) {
-            return res.json({ message: 'No reports to cluster' });
+            return res.json({ message: 'No reports within 20km radius to cluster' });
         }
 
         // Calculate optimal cluster count (max 3 reports per cluster)
@@ -755,7 +754,7 @@ router.post('/group-and-assign-reports', authenticateToken, async (req, res) => 
 
         const clusters = kmeansClustering(reports, clusterCount);
         
-        // 4. Assign to current worker (since this is triggered on login)
+        // 4. Assign to current worker
         const assignments = clusters.map(cluster => ({
             cluster,
             worker: {
@@ -766,7 +765,7 @@ router.post('/group-and-assign-reports', authenticateToken, async (req, res) => 
             distance: 0 // Since we're assigning to current worker
         }));
 
-        // 5. Create tasks
+        // 5. Create tasks and send notifications
         const results = [];
         for (const { cluster } of assignments) {
             const route = solveTSP(cluster, { 
@@ -793,58 +792,64 @@ router.post('/group-and-assign-reports', authenticateToken, async (req, res) => 
                 ]
             );
 
+            const taskId = taskResult.rows[0].taskid;
             results.push({
-                taskId: taskResult.rows[0].taskid,
+                taskId: taskId,
                 reportCount: cluster.length,
                 distance: route.totalDistance
             });
-            await notifyUsers(cluster,taskId);
+
+            // Send notifications for this cluster
+            await notifyUsers(cluster, taskId);
         }
+
         res.json({ success: true, assignments: results });
-        
     } catch (error) {
         console.error('Assignment error:', error);
         res.status(500).json({ error: error.message });
     }
 });
 
-// Helper functions
-function calculateClusterDiameter(cluster) {
-    let maxDistance = 0;
-    for (let i = 0; i < cluster.length; i++) {
-        for (let j = i + 1; j < cluster.length; j++) {
-            const dist = haversineDistance(
-                cluster[i].lat, cluster[i].lng,
-                cluster[j].lat, cluster[j].lng
-            );
-            maxDistance = Math.max(maxDistance, dist);
-        }
-    }
-    return maxDistance;
-}
-
+// Improved notification function with better error handling
 async function notifyUsers(cluster, taskId) {
-    const uniqueUserIds = [...new Set(cluster.map(r => r.userid))];
-    
-    for (const userId of uniqueUserIds) {
-        try {
-            const user = await pool.query(`
-                SELECT phone FROM users WHERE userid = $1
-            `, [userId]);
-            
-            if (user.rows[0]?.phone) {
-                const reports = cluster.filter(r => r.userid === userId);
-                const message = `Your reports (${reports.map(r => r.wastetype).join(', ')}) have been assigned. ID: ${taskId}`;
+    try {
+        const uniqueUserIds = [...new Set(cluster.map(r => r.userid))];
+        
+        for (const userId of uniqueUserIds) {
+            try {
+                // Get user's phone number
+                const userResult = await pool.query(
+                    'SELECT phone FROM users WHERE userid = $1', 
+                    [userId]
+                );
                 
-                await twilioClient.messages.create({
-                    body: message,
-                    from: process.env.TWILIO_PHONE_NUMBER,
-                    to: user.rows[0].phone
-                });
+                if (userResult.rows.length > 0 && userResult.rows[0].phone) {
+                    const phoneNumber = userResult.rows[0].phone;
+                    const userReports = cluster.filter(r => r.userid === userId);
+                    
+                    // Prepare message
+                    const reportTypes = [...new Set(userReports.map(r => r.wastetype))];
+                    const message = `Your garbage report${reportTypes.length > 1 ? 's' : ''} ` +
+                                   `(${reportTypes.join(', ')}) ` +
+                                   `has been assigned for collection. Task ID: ${taskId}`;
+
+                    // Send SMS
+                    await twilioClient.messages.create({
+                        body: message,
+                        from: process.env.TWILIO_PHONE_NUMBER,
+                        to: phoneNumber
+                    });
+                    
+                    console.log(`Notification sent to user ${userId} at ${phoneNumber}`);
+                }
+            } catch (userError) {
+                console.error(`Failed to notify user ${userId}:`, userError);
+                // Continue with other users even if one fails
             }
-        } catch (error) {
-            console.error(`Notification failed for user ${userId}:`, error);
         }
+    } catch (error) {
+        console.error('Error in notification system:', error);
+        // Don't fail the whole request because of notification issues
     }
 }
 
