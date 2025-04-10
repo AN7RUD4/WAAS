@@ -3,6 +3,7 @@ const { Pool } = require('pg');
 const bcryptjs = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const router = express.Router();
+const bcrypt = require('bcrypt');
 
 const pool = new Pool({
   connectionString: 'postgresql://postgres.hrzroqrgkvzhomsosqzl:7H.6k2wS*F$q2zY@aws-0-ap-south-1.pooler.supabase.com:6543/postgres',
