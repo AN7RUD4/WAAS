@@ -64,7 +64,7 @@ router.post('/signup', validateSignup, async (req, res) => {
     const { name, email, password, phone, address } = req.body;
 
     // Validate phone number format (+91 followed by 10 digits)
-    if (!/^\+91 [6-9]\d{9}$/.test(phone)) {
+    if (!/^\+91[6-9]\d{9}$/.test(phone)) {
       throw new Error('Invalid phone number format. Must be +91 followed by 10 digit Indian number');
     }
 
