@@ -16,7 +16,8 @@ class _SignUpPageState extends State<SignUpPage> {
   final _formKey = GlobalKey<FormState>();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-  final TextEditingController _confirmPasswordController = TextEditingController();
+  final TextEditingController _confirmPasswordController =
+      TextEditingController();
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _addressController = TextEditingController();
@@ -55,9 +56,9 @@ class _SignUpPageState extends State<SignUpPage> {
         throw Exception(responseData['message'] ?? 'Signup failed');
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Signup failed: ${e.toString()}')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Signup failed: ${e.toString()}')));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -70,7 +71,10 @@ class _SignUpPageState extends State<SignUpPage> {
         children: [
           SafeArea(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 30.0),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 20.0,
+                vertical: 30.0,
+              ),
               child: Form(
                 key: _formKey,
                 child: Column(
@@ -99,7 +103,8 @@ class _SignUpPageState extends State<SignUpPage> {
                         labelText: 'Full Name',
                         prefixIcon: Icon(Icons.person),
                       ),
-                      validator: (value) => value!.isEmpty ? 'Name is required' : null,
+                      validator:
+                          (value) => value!.isEmpty ? 'Name is required' : null,
                     ),
                     const SizedBox(height: 20),
                     TextFormField(
@@ -128,7 +133,7 @@ class _SignUpPageState extends State<SignUpPage> {
                       keyboardType: TextInputType.phone,
                       validator: (value) {
                         if (value!.isEmpty) return 'Phone number is required';
-                        if (!RegExp(r'^\+91 [6-9]\d{9}$').hasMatch(value)) {
+                        if (!RegExp(r'^\+91[6-9]\d{9}$').hasMatch(value)) {
                           return 'Enter valid Indian phone number (e.g., +91 9876543210)';
                         }
                         return null;
@@ -142,7 +147,9 @@ class _SignUpPageState extends State<SignUpPage> {
                         prefixIcon: Icon(Icons.location_on),
                       ),
                       maxLines: 2,
-                      validator: (value) => value!.isEmpty ? 'Address is required' : null,
+                      validator:
+                          (value) =>
+                              value!.isEmpty ? 'Address is required' : null,
                     ),
                     const SizedBox(height: 20),
                     TextFormField(
@@ -152,7 +159,9 @@ class _SignUpPageState extends State<SignUpPage> {
                         labelText: 'Password',
                         prefixIcon: Icon(Icons.lock),
                       ),
-                      validator: (value) => value!.isEmpty ? 'Password is required' : null,
+                      validator:
+                          (value) =>
+                              value!.isEmpty ? 'Password is required' : null,
                     ),
                     const SizedBox(height: 20),
                     TextFormField(
@@ -175,16 +184,17 @@ class _SignUpPageState extends State<SignUpPage> {
                       width: double.infinity,
                       child: ElevatedButton(
                         onPressed: _isLoading ? null : _signUp,
-                        child: _isLoading
-                            ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  color: Colors.white,
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Text('Sign Up'),
+                        child:
+                            _isLoading
+                                ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    color: Colors.white,
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                                : const Text('Sign Up'),
                       ),
                     ),
                     const SizedBox(height: 20),

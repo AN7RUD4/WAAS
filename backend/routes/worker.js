@@ -266,92 +266,257 @@ function kmeansClustering(points, k) {
     }
 }
 
-// Updated assignWorkersToClusters with report limit
-async function assignWorkersToClusters(clusters, workers) {
-    if (!clusters.length || !workers.length) return [];
-
-    const costMatrix = clusters.map(cluster => {
-        const centroid = {
-            lat: cluster.reduce((sum, p) => sum + p.lat, 0) / cluster.length,
-            lng: cluster.reduce((sum, p) => sum + p.lng, 0) / cluster.length
-        };
-        return workers.map(worker => haversineDistance(worker.lat, worker.lng, centroid.lat, centroid.lng));
-    });
-
-    const assignments = munkres(costMatrix);
-    const results = [];
-    const assignedWorkers = new Set();
-    const workerReportCount = new Map();
-
-    assignments.forEach(([clusterIdx, workerIdx]) => {
-        if (clusterIdx < clusters.length && workerIdx < workers.length && !assignedWorkers.has(workerIdx)) {
-            const currentCount = workerReportCount.get(workerIdx) || 0;
-            const newCount = currentCount + clusters[clusterIdx].length;
-            if (newCount <= 15) { // Max 15 reports
-                results.push({
-                    cluster: clusters[clusterIdx],
-                    worker: workers[workerIdx],
-                    distance: costMatrix[clusterIdx][workerIdx]
-                });
-                assignedWorkers.add(workerIdx);
-                workerReportCount.set(workerIdx, newCount);
-            }
-        }
-    });
-
-    return results.sort((a, b) => a.distance - b.distance);
-}
-
-// Updated group-and-assign-reports
+// Updated group-and-assign-reports endpoint with 20km radius constraint
 router.post('/group-and-assign-reports', authenticateToken, async (req, res) => {
     try {
-        const maxDistance = req.body.maxDistance || 50; // km
+        // 1. Verify worker location exists
+        const workerCheck = await pool.query(
+            `SELECT ST_X(location::geometry) as lng, ST_Y(location::geometry) as lat 
+             FROM users WHERE userid = $1`,
+            [req.user.userid]
+        );
+        
+        if (workerCheck.rows.length === 0 || !workerCheck.rows[0].lat) {
+            return res.status(400).json({ error: 'Worker location not set' });
+        }
+
+        const workerLocation = {
+            lat: workerCheck.rows[0].lat,
+            lng: workerCheck.rows[0].lng
+        };
+
+        // 2. Get all not-collected reports within strict 20km radius
+        const maxDistance = 20; // Hard-coded 20km radius
         const reportsResult = await pool.query(`
-            SELECT r.reportid, r.wastetype, ST_X(r.location::geometry) AS lng, ST_Y(r.location::geometry) AS lat, r.userid
+            SELECT 
+                r.reportid, 
+                r.wastetype,
+                ST_X(r.location::geometry) AS lng,
+                ST_Y(r.location::geometry) AS lat,
+                ST_Distance(
+                    r.location::geography, 
+                    (SELECT location FROM users WHERE userid = $1)::geography
+                ) / 1000 AS distance_km
             FROM garbagereports r
             WHERE r.status = 'not-collected'
-            AND ST_DWithin(r.location::geography, (SELECT location FROM users WHERE userid = $1)::geography, $2 * 1000)
-            ORDER BY CASE WHEN r.wastetype = 'hazardous' THEN 0 ELSE 1 END
-            LIMIT 100`, [req.user.userid, maxDistance]);
+            AND ST_DWithin(
+                r.location::geography, 
+                (SELECT location FROM users WHERE userid = $1)::geography,
+                $2 * 1000  -- 20km in meters
+            )
+            ORDER BY distance_km ASC
+            LIMIT 100`, 
+            [req.user.userid, maxDistance]
+        );
 
-        const reports = reportsResult.rows.filter(r => isValidCoordinate(r.lat, r.lng));
-        if (!reports.length) return res.json({ message: 'No valid reports to cluster' });
+        // 3. Filter and validate reports
+        const reports = reportsResult.rows.filter(report => 
+            report.distance_km <= maxDistance && 
+            isValidCoordinate(report.lat, report.lng)
+        );
 
-        const workersResult = await pool.query(`
-            SELECT userid, ST_X(location::geometry) AS lng, ST_Y(location::geometry) AS lat
-            FROM users WHERE role = 'worker' AND status = 'available'`);
-        const workers = workersResult.rows.filter(w => isValidCoordinate(w.lat, w.lng));
-        if (!workers.length) return res.status(400).json({ error: 'No available workers' });
+        if (reports.length === 0) {
+            return res.json({ message: 'No reports within 20km radius to cluster' });
+        }
 
-        // Dynamic k based on workers and report count, aiming for ~15 reports max per cluster
-        const clusterCount = Math.min(workers.length, Math.ceil(reports.length / 15));
-        const clusters = kmeansClustering(reports, clusterCount);
-        const assignments = await assignWorkersToClusters(clusters, workers);
+        // 4. Cluster reports with distance constraints
+        const clusterCount = Math.min(
+            Math.ceil(reports.length / 3), // Max 3 reports per cluster
+            5 // Max 5 clusters per worker
+        );
 
+        const clusters = kmeansClustering(reports, clusterCount, {
+            maxDistanceFromWorker: maxDistance,
+            workerLocation: workerLocation
+        });
+
+        // 5. Filter clusters to ensure all points are within 20km
+        const validClusters = clusters.filter(cluster => 
+            cluster.every(report => report.distance_km <= maxDistance)
+        );
+
+        if (validClusters.length === 0) {
+            return res.json({ message: 'No valid clusters within 20km radius' });
+        }
+
+        // 6. Assign clusters to current worker
+        const assignments = validClusters.map(cluster => ({
+            cluster,
+            worker: {
+                userid: req.user.userid,
+                ...workerLocation
+            },
+            distance: 0 // Since we're assigning to current worker
+        }));
+
+        // 7. Create tasks with optimized routes
         const results = [];
-        for (const assignment of assignments) {
-            const route = solveTSP(assignment.cluster, assignment.worker);
+        for (const { cluster } of assignments) {
+            const route = solveTSP(cluster, workerLocation);
+
+            // Final validation - ensure all points in route are within 20km
+            if (route.waypoints.some(point => 
+                haversineDistance(
+                    workerLocation.lat, workerLocation.lng,
+                    point.lat, point.lng
+                ) > maxDistance
+            )) {
+                continue; // Skip this cluster if any point is beyond 20km
+            }
+
             const taskResult = await pool.query(`
-                INSERT INTO taskrequests (reportids, assignedworkerid, status, starttime, route, estimated_distance)
-                VALUES ($1, $2, 'assigned', NOW(), $3, $4) RETURNING taskid`,
-                [assignment.cluster.map(r => r.reportid), assignment.worker.userid, route, route.totalDistance]);
-            await pool.query(`UPDATE users SET status = 'busy' WHERE userid = $1, [assignment.worker.userid]`);
-            await notifyUsers(assignment.cluster, taskResult.rows[0].taskid);
+                INSERT INTO taskrequests (
+                    reportids,
+                    assignedworkerid,
+                    status,
+                    starttime,
+                    route,
+                    estimated_distance
+                ) VALUES (
+                    $1, $2, 'assigned', NOW(), $3, $4
+                ) RETURNING taskid`,
+                [
+                    cluster.map(r => r.reportid),
+                    req.user.userid,
+                    route,
+                    route.totalDistance
+                ]
+            );
+
             results.push({
                 taskId: taskResult.rows[0].taskid,
-                reportCount: assignment.cluster.length,
+                reportCount: cluster.length,
                 distance: route.totalDistance,
-                estimatedTime: route.estimatedTime
+                maxDistanceInCluster: Math.max(...cluster.map(r => r.distance_km))
             });
         }
 
-        res.json({ success: true, assignments: results });
+        if (results.length === 0) {
+            return res.json({ message: 'No valid tasks created within 20km radius' });
+        }
+
+        res.json({ 
+            success: true, 
+            assignments: results,
+            workerLocation: workerLocation,
+            maxDistance: maxDistance
+        });
     } catch (error) {
         console.error('Assignment error:', error);
         res.status(500).json({ error: error.message });
     }
 });
 
+// Updated K-Means clustering without hazardous priority
+function kmeansClustering(points, k, options = {}) {
+    if (!points || !Array.isArray(points) || points.length === 0) {
+        return [];
+    }
+
+    k = Math.min(Math.max(1, k), points.length);
+    if (k <= 1) return [points];
+
+    const clusters = Array.from({ length: k }, () => []);
+    
+    try {
+        const data = points.map(p => [p.lat, p.lng]);
+        const centroids = [];
+        
+        // Initialize centroids within max distance if constraint exists
+        if (options.maxDistanceFromWorker && options.workerLocation) {
+            const validPoints = points.filter(p => 
+                haversineDistance(
+                    options.workerLocation.lat, options.workerLocation.lng,
+                    p.lat, p.lng
+                ) <= options.maxDistanceFromWorker
+            );
+            
+            for (let i = 0; i < k; i++) {
+                centroids.push(validPoints[i % validPoints.length] 
+                    ? [validPoints[i % validPoints.length].lat, validPoints[i % validPoints.length].lng]
+                    : data[i % data.length]
+                );
+            }
+        } else {
+            for (let i = 0; i < k; i++) {
+                centroids.push(data[i % data.length]);
+            }
+        }
+
+        let changed = true;
+        let iterations = 0;
+        const maxIterations = 100;
+
+        while (changed && iterations < maxIterations) {
+            iterations++;
+            changed = false;
+            clusters.forEach(cluster => cluster.length = 0);
+
+            points.forEach(point => {
+                const pointCoords = [point.lat, point.lng];
+                let minDistance = Infinity;
+                let closestIdx = 0;
+
+                centroids.forEach((centroid, i) => {
+                    // Skip if this would exceed distance constraint
+                    if (options.maxDistanceFromWorker && options.workerLocation) {
+                        const clusterDistance = haversineDistance(
+                            options.workerLocation.lat, options.workerLocation.lng,
+                            centroid[0], centroid[1]
+                        );
+                        if (clusterDistance > options.maxDistanceFromWorker) return;
+                    }
+
+                    const dist = haversineDistance(
+                        pointCoords[0], pointCoords[1],
+                        centroid[0], centroid[1]
+                    );
+                    if (dist < minDistance) {
+                        minDistance = dist;
+                        closestIdx = i;
+                    }
+                });
+
+                clusters[closestIdx].push(point);
+            });
+
+            // Update centroids
+            centroids.forEach((centroid, i) => {
+                if (clusters[i].length > 0) {
+                    const newLat = clusters[i].reduce((sum, p) => sum + p.lat, 0) / clusters[i].length;
+                    const newLng = clusters[i].reduce((sum, p) => sum + p.lng, 0) / clusters[i].length;
+                    
+                    if (haversineDistance(centroid[0], centroid[1], newLat, newLng) > 0.01) {
+                        changed = true;
+                    }
+                    
+                    // Ensure new centroid is within max distance
+                    if (!options.maxDistanceFromWorker || !options.workerLocation || 
+                        haversineDistance(
+                            options.workerLocation.lat, options.workerLocation.lng,
+                            newLat, newLng
+                        ) <= options.maxDistanceFromWorker) {
+                        centroid[0] = newLat;
+                        centroid[1] = newLng;
+                    }
+                }
+            });
+        }
+
+        return clusters.filter(c => c.length > 0);
+    } catch (error) {
+        console.error('Clustering error:', error);
+        return [points]; // Fallback to single cluster
+    }
+}
+
+// Helper function to validate coordinates
+function isValidCoordinate(lat, lng) {
+    return lat !== null && lng !== null && 
+           !isNaN(lat) && !isNaN(lng) &&
+           lat >= -90 && lat <= 90 &&
+           lng >= -180 && lng <= 180;
+}
 
 // Enhanced TSP solver with priority stops
 function solveTSP(points, worker) {
@@ -364,7 +529,12 @@ function solveTSP(points, worker) {
         };
     }
 
-
+    // Sort hazardous waste first
+    const sortedPoints = [...points].sort((a, b) => {
+        if (a.wastetype === 'hazardous' && b.wastetype !== 'hazardous') return -1;
+        if (b.wastetype === 'hazardous' && a.wastetype !== 'hazardous') return 1;
+        return 0;
+    });
 
     const allPoints = [{ lat: worker.lat, lng: worker.lng }, ...sortedPoints];
     const n = allPoints.length;
@@ -544,12 +714,7 @@ router.post('/group-and-assign-reports', authenticateToken, async (req, res) => 
             return res.status(400).json({ error: 'Worker location not set' });
         }
 
-        const workerLocation = {
-            lat: workerCheck.rows[0].lat,
-            lng: workerCheck.rows[0].lng
-        };
-
-        // 2. Get all not-collected reports within 20km radius
+        // 2. Get all not-collected reports within reasonable distance
         const maxDistance = 20; // km
         const reportsResult = await pool.query(`
             SELECT 
@@ -569,15 +734,17 @@ router.post('/group-and-assign-reports', authenticateToken, async (req, res) => 
                 (SELECT location FROM users WHERE userid = $1)::geography,
                 $2 * 1000
             )
-            ORDER BY distance_km ASC
+            ORDER BY 
+                CASE WHEN r.wastetype = 'hazardous' THEN 0 ELSE 1 END,
+                distance_km ASC
             LIMIT 100`, 
             [req.user.userid, maxDistance]
         );
 
-        // 3. Cluster reports ensuring all points in cluster are within 20km of worker
+        // 3. Cluster reports
         const reports = reportsResult.rows;
         if (reports.length === 0) {
-            return res.json({ message: 'No reports within 20km radius to cluster' });
+            return res.json({ message: 'No reports to cluster' });
         }
 
         // Calculate optimal cluster count (max 3 reports per cluster)
@@ -586,27 +753,15 @@ router.post('/group-and-assign-reports', authenticateToken, async (req, res) => 
             5 // Max 5 clusters per worker
         );
 
-        // Modified clustering function that respects distance constraints
-        const clusters = kmeansClustering(reports, clusterCount, {
-            maxDistanceFromWorker: maxDistance,
-            workerLocation: workerLocation
-        });
-
-        // Filter out any clusters that might have points beyond 20km (safety check)
-        const validClusters = clusters.filter(cluster => 
-            cluster.every(report => report.distance_km <= maxDistance)
-        );
-
-        if (validClusters.length === 0) {
-            return res.json({ message: 'No valid clusters within 20km radius' });
-        }
-
-        // 4. Assign to current worker
-        const assignments = validClusters.map(cluster => ({
+        const clusters = kmeansClustering(reports, clusterCount);
+        
+        // 4. Assign to current worker (since this is triggered on login)
+        const assignments = clusters.map(cluster => ({
             cluster,
             worker: {
                 userid: req.user.userid,
-                ...workerLocation
+                lat: workerCheck.rows[0].lat,
+                lng: workerCheck.rows[0].lng
             },
             distance: 0 // Since we're assigning to current worker
         }));
@@ -614,12 +769,10 @@ router.post('/group-and-assign-reports', authenticateToken, async (req, res) => 
         // 5. Create tasks
         const results = [];
         for (const { cluster } of assignments) {
-            const route = solveTSP(cluster, workerLocation);
-
-            // Additional check that all points in route are within 20km
-            if (route.points.some(point => point.distance > maxDistance)) {
-                continue; // Skip this cluster if any point is beyond 20km
-            }
+            const route = solveTSP(cluster, { 
+                lat: workerCheck.rows[0].lat, 
+                lng: workerCheck.rows[0].lng 
+            });
 
             const taskResult = await pool.query(`
                 INSERT INTO taskrequests (
@@ -643,21 +796,11 @@ router.post('/group-and-assign-reports', authenticateToken, async (req, res) => 
             results.push({
                 taskId: taskResult.rows[0].taskid,
                 reportCount: cluster.length,
-                distance: route.totalDistance,
-                maxDistanceInCluster: Math.max(...cluster.map(r => r.distance_km))
+                distance: route.totalDistance
             });
         }
 
-        if (results.length === 0) {
-            return res.json({ message: 'No valid tasks created within 20km radius' });
-        }
-
-        res.json({ 
-            success: true, 
-            assignments: results,
-            workerLocation: workerLocation,
-            maxDistance: maxDistance
-        });
+        res.json({ success: true, assignments: results });
     } catch (error) {
         console.error('Assignment error:', error);
         res.status(500).json({ error: error.message });

@@ -54,7 +54,6 @@ const upload = multer({
 });
 
 // Waste detection endpoint 
-// Waste detection endpoint 
 userRouter.post('/detect-waste', authenticateToken, upload.single('image'), async (req, res) => {
   let filePath;
   try {
