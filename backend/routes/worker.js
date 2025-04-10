@@ -385,7 +385,7 @@ router.post('/group-and-assign-reports', authenticateToken, async (req, res) => 
         }
 
         // 2. Get all not-collected reports within reasonable distance
-        const maxDistance = req.body.maxDistance || 50; // km
+        const maxDistance = 20; // km
         const reportsResult = await pool.query(`
             SELECT 
                 r.reportid, 
