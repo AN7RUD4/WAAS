@@ -390,7 +390,7 @@ router.post('/group-and-assign-reports', authenticateToken, async (req, res) => 
                 maxDistanceInCluster: Math.max(...cluster.map(r => r.distance_km))
             });
             const taskId = taskResult.rows[0].taskid; 
-            notifyUsers(cluster,taskId);
+            await notifyUsers(cluster,taskId);
         }
 
         if (results.length === 0) {
