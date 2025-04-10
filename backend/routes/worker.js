@@ -286,7 +286,7 @@ router.post('/group-and-assign-reports', authenticateToken, async (req, res) => 
         };
 
         // 2. Get all not-collected reports within strict 20km radius
-        const maxDistance = 20; // Hard-coded 20km radius
+        const maxDistance = 10; // Hard-coded 20km radius
         const reportsResult = await pool.query(`
             SELECT 
                 r.reportid, 
