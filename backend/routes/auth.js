@@ -60,33 +60,42 @@ router.post('/signup', validateSignup, async (req, res) => {
   try {
     await client.query('BEGIN');
 
-    const { name, email, password } = req.body;
+    const { name, email, password, phone, address } = req.body;
 
+    // Validate phone number format (+91 followed by 10 digits)
+    if (!/^\+91 [6-9]\d{9}$/.test(phone)) {
+      throw new Error('Invalid phone number format. Must be +91 followed by 10 digit Indian number');
+    }
+
+    // Check if email or phone already exists
     const existingUser = await client.query(
-      'SELECT * FROM users WHERE email = $1',
-      [email]
+      'SELECT * FROM users WHERE email = $1 OR phone = $2',
+      [email, phone]
     );
 
     if (existingUser.rows.length > 0) {
-      throw new Error('Email already exists');
+      if (existingUser.rows[0].email === email) {
+        throw new Error('Email already exists');
+      } else {
+        throw new Error('Phone number already registered');
+      }
     }
 
-    const hashedPassword = await bcryptjs.hash(password, 10);
+    const hashedPassword = await bcrypt.hash(password, 10);
 
     const newUser = await client.query(
-      'INSERT INTO users (name, email, password, role, status) VALUES ($1, $2, $3, $4, $5) RETURNING userid, name, email',
-      [name, email, hashedPassword, 'user', 'available']
+      `INSERT INTO users 
+       (name, email, password, phone, address, role, status) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7) 
+       RETURNING userid, name, email, phone, address`,
+      [name, email, hashedPassword, phone, address, 'user', 'available']
     );
 
     await client.query('COMMIT');
 
     res.status(201).json({
       message: 'User created successfully',
-      user: {
-        userid: newUser.rows[0].userid,
-        name: newUser.rows[0].name,
-        email: newUser.rows[0].email,
-      },
+      user: newUser.rows[0],
     });
   } catch (error) {
     await client.query('ROLLBACK');
