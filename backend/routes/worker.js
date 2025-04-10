@@ -190,86 +190,86 @@ function haversineDistance(lat1, lon1, lat2, lon2) {
 
 
 // Enhanced K-Means clustering with distance and size constraints
-// function kmeansClustering(points, k) {
-//     if (!points || !Array.isArray(points) || points.length === 0) {
-//         console.error('Invalid or empty points array');
-//         return [];
-//     }
+function kmeansClustering(points, k) {
+    if (!points || !Array.isArray(points) || points.length === 0) {
+        console.error('Invalid or empty points array');
+        return [];
+    }
 
-//     k = Math.min(Math.max(1, k), points.length);
-//     if (k <= 1) return [points];
+    k = Math.min(Math.max(1, k), points.length);
+    if (k <= 1) return [points];
 
-//     const clusters = Array.from({ length: k }, () => []);
-//     points.sort((a, b) => (a.wastetype === 'hazardous' ? -1 : b.wastetype === 'hazardous' ? 1 : 0));
+    const clusters = Array.from({ length: k }, () => []);
+    points.sort((a, b) => (a.wastetype === 'hazardous' ? -1 : b.wastetype === 'hazardous' ? 1 : 0));
 
-//     try {
-//         const data = points.map(p => [p.lat, p.lng]);
-//         const centroids = [];
-//         for (let i = 0; i < k; i++) centroids.push(data[i % data.length]); // Simple init (could use K-Means++ if time allows)
+    try {
+        const data = points.map(p => [p.lat, p.lng]);
+        const centroids = [];
+        for (let i = 0; i < k; i++) centroids.push(data[i % data.length]); // Simple init (could use K-Means++ if time allows)
 
-//         let changed = true;
-//         let iterations = 0;
-//         const maxIterations = 100;
+        let changed = true;
+        let iterations = 0;
+        const maxIterations = 100;
 
-//         while (changed && iterations < maxIterations) {
-//             iterations++;
-//             changed = false;
-//             clusters.forEach(cluster => cluster.length = 0);
+        while (changed && iterations < maxIterations) {
+            iterations++;
+            changed = false;
+            clusters.forEach(cluster => cluster.length = 0);
 
-//             points.forEach(point => {
-//                 const pointCoords = [point.lat, point.lng];
-//                 let minDistance = Infinity;
-//                 let closestIdx = 0;
-//                 centroids.forEach((centroid, i) => {
-//                     const dist = haversineDistance(pointCoords[0], pointCoords[1], centroid[0], centroid[1]);
-//                     if (dist < minDistance) {
-//                         minDistance = dist;
-//                         closestIdx = i;
-//                     }
-//                 });
-//                 clusters[closestIdx].push(point);
-//             });
+            points.forEach(point => {
+                const pointCoords = [point.lat, point.lng];
+                let minDistance = Infinity;
+                let closestIdx = 0;
+                centroids.forEach((centroid, i) => {
+                    const dist = haversineDistance(pointCoords[0], pointCoords[1], centroid[0], centroid[1]);
+                    if (dist < minDistance) {
+                        minDistance = dist;
+                        closestIdx = i;
+                    }
+                });
+                clusters[closestIdx].push(point);
+            });
 
-//             centroids.forEach((centroid, i) => {
-//                 if (clusters[i].length > 0) {
-//                     const newLat = clusters[i].reduce((sum, p) => sum + p.lat, 0) / clusters[i].length;
-//                     const newLng = clusters[i].reduce((sum, p) => sum + p.lng, 0) / clusters[i].length;
-//                     if (haversineDistance(centroid[0], centroid[1], newLat, newLng) > 0.01) changed = true;
-//                     centroid[0] = newLat;
-//                     centroid[1] = newLng;
-//                 }
-//             });
-//         }
+            centroids.forEach((centroid, i) => {
+                if (clusters[i].length > 0) {
+                    const newLat = clusters[i].reduce((sum, p) => sum + p.lat, 0) / clusters[i].length;
+                    const newLng = clusters[i].reduce((sum, p) => sum + p.lng, 0) / clusters[i].length;
+                    if (haversineDistance(centroid[0], centroid[1], newLat, newLng) > 0.01) changed = true;
+                    centroid[0] = newLat;
+                    centroid[1] = newLng;
+                }
+            });
+        }
 
-//         // Refine clusters: split if > 1 km diameter or > 15 reports
-//         const maxDiameter = 1; // 1 km
-//         const maxReports = 15;
-//         const refinedClusters = [];
-//         clusters.forEach(cluster => {
-//             if (cluster.length > maxReports || calculateClusterDiameter(cluster) > maxDiameter) {
-//                 const subK = Math.ceil(cluster.length / maxReports);
-//                 const subClusters = kmeansClustering(cluster, subK); // Recursive split
-//                 refinedClusters.push(...subClusters);
-//             } else {
-//                 refinedClusters.push(cluster);
-//             }
-//         });
+        // Refine clusters: split if > 1 km diameter or > 15 reports
+        const maxDiameter = 1; // 1 km
+        const maxReports = 15;
+        const refinedClusters = [];
+        clusters.forEach(cluster => {
+            if (cluster.length > maxReports || calculateClusterDiameter(cluster) > maxDiameter) {
+                const subK = Math.ceil(cluster.length / maxReports);
+                const subClusters = kmeansClustering(cluster, subK); // Recursive split
+                refinedClusters.push(...subClusters);
+            } else {
+                refinedClusters.push(cluster);
+            }
+        });
 
-//         console.log('=== Clustering Results ===');
-//         refinedClusters.forEach((c, i) => {
-//             console.log('Cluster ${i + 1}: ${c.length} reports, Diameter: ${calculateClusterDiameter(c).toFixed(2)} km');
-//         });
-//         return refinedClusters.filter(c => c.length > 0);
-//     } catch (error) {
-//         console.error('Clustering error:', error);
-//         return points.map(p => [p]);
-//     }
-// }
+        console.log('=== Clustering Results ===');
+        refinedClusters.forEach((c, i) => {
+            console.log('Cluster ${i + 1}: ${c.length} reports, Diameter: ${calculateClusterDiameter(c).toFixed(2)} km');
+        });
+        return refinedClusters.filter(c => c.length > 0);
+    } catch (error) {
+        console.error('Clustering error:', error);
+        return points.map(p => [p]);
+    }
+}
 
 // Updated group-and-assign-reports endpoint with 20km radius constraint
 router.post('/group-and-assign-reports', authenticateToken, async (req, res) => {
     try {
-        // 1. Verify worker location exists
+        // 1. First verify worker location exists
         const workerCheck = await pool.query(
             `SELECT ST_X(location::geometry) as lng, ST_Y(location::geometry) as lat 
              FROM users WHERE userid = $1`,
@@ -280,19 +280,16 @@ router.post('/group-and-assign-reports', authenticateToken, async (req, res) => 
             return res.status(400).json({ error: 'Worker location not set' });
         }
 
-        const workerLocation = {
-            lat: workerCheck.rows[0].lat,
-            lng: workerCheck.rows[0].lng
-        };
-
-        // 2. Get all not-collected reports within strict 20km radius
-        const maxDistance = 10; // Hard-coded 20km radius
+        // 2. Get all not-collected reports within 20km radius
+        const maxDistance = 20; // km
         const reportsResult = await pool.query(`
             SELECT 
                 r.reportid, 
                 r.wastetype,
+                r.userid,
                 ST_X(r.location::geometry) AS lng,
                 ST_Y(r.location::geometry) AS lat,
+                r.datetime,
                 ST_Distance(
                     r.location::geography, 
                     (SELECT location FROM users WHERE userid = $1)::geography
@@ -302,67 +299,45 @@ router.post('/group-and-assign-reports', authenticateToken, async (req, res) => 
             AND ST_DWithin(
                 r.location::geography, 
                 (SELECT location FROM users WHERE userid = $1)::geography,
-                $2 * 1000  -- 20km in meters
+                $2 * 1000
             )
             ORDER BY distance_km ASC
             LIMIT 100`, 
             [req.user.userid, maxDistance]
         );
 
-        // 3. Filter and validate reports
-        const reports = reportsResult.rows.filter(report => 
-            report.distance_km <= maxDistance && 
-            isValidCoordinate(report.lat, report.lng)
-        );
-
+        // 3. Cluster reports
+        const reports = reportsResult.rows;
         if (reports.length === 0) {
             return res.json({ message: 'No reports within 20km radius to cluster' });
         }
 
-        // 4. Cluster reports with distance constraints
+        // Calculate optimal cluster count (max 3 reports per cluster)
         const clusterCount = Math.min(
-            Math.ceil(reports.length / 3), // Max 3 reports per cluster
+            Math.ceil(reports.length / 3),
             5 // Max 5 clusters per worker
         );
 
-        const clusters = kmeansClustering(reports, clusterCount, {
-            maxDistanceFromWorker: maxDistance,
-            workerLocation: workerLocation
-        });
-
-        // 5. Filter clusters to ensure all points are within 20km
-        const validClusters = clusters.filter(cluster => 
-            cluster.every(report => report.distance_km <= maxDistance)
-        );
-
-        if (validClusters.length === 0) {
-            return res.json({ message: 'No valid clusters within 20km radius' });
-        }
-
-        // 6. Assign clusters to current worker
-        const assignments = validClusters.map(cluster => ({
+        const clusters = kmeansClustering(reports, clusterCount);
+        
+        // 4. Assign to current worker
+        const assignments = clusters.map(cluster => ({
             cluster,
             worker: {
                 userid: req.user.userid,
-                ...workerLocation
+                lat: workerCheck.rows[0].lat,
+                lng: workerCheck.rows[0].lng
             },
             distance: 0 // Since we're assigning to current worker
         }));
 
-        // 7. Create tasks with optimized routes
+        // 5. Create tasks and send notifications
         const results = [];
         for (const { cluster } of assignments) {
-            const route = solveTSP(cluster, workerLocation);
-
-            // Final validation - ensure all points in route are within 20km
-            if (route.waypoints.some(point => 
-                haversineDistance(
-                    workerLocation.lat, workerLocation.lng,
-                    point.lat, point.lng
-                ) > maxDistance
-            )) {
-                continue; // Skip this cluster if any point is beyond 20km
-            }
+            const route = solveTSP(cluster, { 
+                lat: workerCheck.rows[0].lat, 
+                lng: workerCheck.rows[0].lng 
+            });
 
             const taskResult = await pool.query(`
                 INSERT INTO taskrequests (
@@ -383,29 +358,66 @@ router.post('/group-and-assign-reports', authenticateToken, async (req, res) => 
                 ]
             );
 
+            const taskId = taskResult.rows[0].taskid;
             results.push({
-                taskId: taskResult.rows[0].taskid,
+                taskId: taskId,
                 reportCount: cluster.length,
-                distance: route.totalDistance,
-                maxDistanceInCluster: Math.max(...cluster.map(r => r.distance_km))
+                distance: route.totalDistance
             });
+
+            // Send notifications for this cluster
+            await notifyUsers(cluster, taskId);
         }
 
-        if (results.length === 0) {
-            return res.json({ message: 'No valid tasks created within 20km radius' });
-        }
-
-        res.json({ 
-            success: true, 
-            assignments: results,
-            workerLocation: workerLocation,
-            maxDistance: maxDistance
-        });
+        res.json({ success: true, assignments: results });
     } catch (error) {
         console.error('Assignment error:', error);
         res.status(500).json({ error: error.message });
     }
 });
+
+// Improved notification function with better error handling
+async function notifyUsers(cluster, taskId) {
+    try {
+        const uniqueUserIds = [...new Set(cluster.map(r => r.userid))];
+        
+        for (const userId of uniqueUserIds) {
+            try {
+                // Get user's phone number
+                const userResult = await pool.query(
+                    'SELECT phone FROM users WHERE userid = $1', 
+                    [userId]
+                );
+                
+                if (userResult.rows.length > 0 && userResult.rows[0].phone) {
+                    const phoneNumber = userResult.rows[0].phone;
+                    const userReports = cluster.filter(r => r.userid === userId);
+                    
+                    // Prepare message
+                    const reportTypes = [...new Set(userReports.map(r => r.wastetype))];
+                    const message = `Your garbage report${reportTypes.length > 1 ? 's' : ''} ` +
+                                   `(${reportTypes.join(', ')}) ` +
+                                   `has been assigned for collection. Task ID: ${taskId}`;
+
+                    // Send SMS
+                    await twilioClient.messages.create({
+                        body: message,
+                        from: process.env.TWILIO_PHONE_NUMBER,
+                        to: phoneNumber
+                    });
+                    
+                    console.log(`Notification sent to user ${userId} at ${phoneNumber}`);
+                }
+            } catch (userError) {
+                console.error(`Failed to notify user ${userId}:`, userError);
+                // Continue with other users even if one fails
+            }
+        }
+    } catch (error) {
+        console.error('Error in notification system:', error);
+        // Don't fail the whole request because of notification issues
+    }
+}
 
 // Updated K-Means clustering without hazardous priority
 function kmeansClustering(points, k, options = {}) {
@@ -700,158 +712,23 @@ router.get('/available-workers-locations', authenticateToken, async (req, res) =
     }
 });
 
-// Group and assign reports endpoint
-router.post('/group-and-assign-reports', authenticateToken, async (req, res) => {
-    try {
-        // 1. First verify worker location exists
-        const workerCheck = await pool.query(
-            `SELECT ST_X(location::geometry) as lng, ST_Y(location::geometry) as lat 
-             FROM users WHERE userid = $1`,
-            [req.user.userid]
-        );
-        
-        if (workerCheck.rows.length === 0 || !workerCheck.rows[0].lat) {
-            return res.status(400).json({ error: 'Worker location not set' });
-        }
 
-        // 2. Get all not-collected reports within 20km radius
-        const maxDistance = 20; // km
-        const reportsResult = await pool.query(`
-            SELECT 
-                r.reportid, 
-                r.wastetype,
-                r.userid,
-                ST_X(r.location::geometry) AS lng,
-                ST_Y(r.location::geometry) AS lat,
-                r.datetime,
-                ST_Distance(
-                    r.location::geography, 
-                    (SELECT location FROM users WHERE userid = $1)::geography
-                ) / 1000 AS distance_km
-            FROM garbagereports r
-            WHERE r.status = 'not-collected'
-            AND ST_DWithin(
-                r.location::geography, 
-                (SELECT location FROM users WHERE userid = $1)::geography,
-                $2 * 1000
-            )
-            ORDER BY distance_km ASC
-            LIMIT 100`, 
-            [req.user.userid, maxDistance]
-        );
 
-        // 3. Cluster reports
-        const reports = reportsResult.rows;
-        if (reports.length === 0) {
-            return res.json({ message: 'No reports within 20km radius to cluster' });
-        }
-
-        // Calculate optimal cluster count (max 3 reports per cluster)
-        const clusterCount = Math.min(
-            Math.ceil(reports.length / 3),
-            5 // Max 5 clusters per worker
-        );
-
-        const clusters = kmeansClustering(reports, clusterCount);
-        
-        // 4. Assign to current worker
-        const assignments = clusters.map(cluster => ({
-            cluster,
-            worker: {
-                userid: req.user.userid,
-                lat: workerCheck.rows[0].lat,
-                lng: workerCheck.rows[0].lng
-            },
-            distance: 0 // Since we're assigning to current worker
-        }));
-
-        // 5. Create tasks and send notifications
-        const results = [];
-        for (const { cluster } of assignments) {
-            const route = solveTSP(cluster, { 
-                lat: workerCheck.rows[0].lat, 
-                lng: workerCheck.rows[0].lng 
-            });
-
-            const taskResult = await pool.query(`
-                INSERT INTO taskrequests (
-                    reportids,
-                    assignedworkerid,
-                    status,
-                    starttime,
-                    route,
-                    estimated_distance
-                ) VALUES (
-                    $1, $2, 'assigned', NOW(), $3, $4
-                ) RETURNING taskid`,
-                [
-                    cluster.map(r => r.reportid),
-                    req.user.userid,
-                    route,
-                    route.totalDistance
-                ]
+// Helper functions
+function calculateClusterDiameter(cluster) {
+    let maxDistance = 0;
+    for (let i = 0; i < cluster.length; i++) {
+        for (let j = i + 1; j < cluster.length; j++) {
+            const dist = haversineDistance(
+                cluster[i].lat, cluster[i].lng,
+                cluster[j].lat, cluster[j].lng
             );
-
-            const taskId = taskResult.rows[0].taskid;
-            results.push({
-                taskId: taskId,
-                reportCount: cluster.length,
-                distance: route.totalDistance
-            });
-
-            // Send notifications for this cluster
-            await notifyUsers(cluster, taskId);
+            maxDistance = Math.max(maxDistance, dist);
         }
-
-        res.json({ success: true, assignments: results });
-    } catch (error) {
-        console.error('Assignment error:', error);
-        res.status(500).json({ error: error.message });
     }
-});
-
-// Improved notification function with better error handling
-async function notifyUsers(cluster, taskId) {
-    try {
-        const uniqueUserIds = [...new Set(cluster.map(r => r.userid))];
-        
-        for (const userId of uniqueUserIds) {
-            try {
-                // Get user's phone number
-                const userResult = await pool.query(
-                    'SELECT phone FROM users WHERE userid = $1', 
-                    [userId]
-                );
-                
-                if (userResult.rows.length > 0 && userResult.rows[0].phone) {
-                    const phoneNumber = userResult.rows[0].phone;
-                    const userReports = cluster.filter(r => r.userid === userId);
-                    
-                    // Prepare message
-                    const reportTypes = [...new Set(userReports.map(r => r.wastetype))];
-                    const message = `Your garbage report${reportTypes.length > 1 ? 's' : ''} ` +
-                                   `(${reportTypes.join(', ')}) ` +
-                                   `has been assigned for collection. Task ID: ${taskId}`;
-
-                    // Send SMS
-                    await twilioClient.messages.create({
-                        body: message,
-                        from: process.env.TWILIO_PHONE_NUMBER,
-                        to: phoneNumber
-                    });
-                    
-                    console.log(`Notification sent to user ${userId} at ${phoneNumber}`);
-                }
-            } catch (userError) {
-                console.error(`Failed to notify user ${userId}:`, userError);
-                // Continue with other users even if one fails
-            }
-        }
-    } catch (error) {
-        console.error('Error in notification system:', error);
-        // Don't fail the whole request because of notification issues
-    }
+    return maxDistance;
 }
+
 
 // Task progress update endpoint
 router.post('/update-task-progress', authenticateToken, async (req, res) => {
