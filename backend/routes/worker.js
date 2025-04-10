@@ -364,12 +364,7 @@ function solveTSP(points, worker) {
         };
     }
 
-    // Sort hazardous waste first
-    const sortedPoints = [...points].sort((a, b) => {
-        if (a.wastetype === 'hazardous' && b.wastetype !== 'hazardous') return -1;
-        if (b.wastetype === 'hazardous' && a.wastetype !== 'hazardous') return 1;
-        return 0;
-    });
+
 
     const allPoints = [{ lat: worker.lat, lng: worker.lng }, ...sortedPoints];
     const n = allPoints.length;
@@ -549,7 +544,12 @@ router.post('/group-and-assign-reports', authenticateToken, async (req, res) => 
             return res.status(400).json({ error: 'Worker location not set' });
         }
 
-        // 2. Get all not-collected reports within reasonable distance
+        const workerLocation = {
+            lat: workerCheck.rows[0].lat,
+            lng: workerCheck.rows[0].lng
+        };
+
+        // 2. Get all not-collected reports within 20km radius
         const maxDistance = 20; // km
         const reportsResult = await pool.query(`
             SELECT 
@@ -569,17 +569,15 @@ router.post('/group-and-assign-reports', authenticateToken, async (req, res) => 
                 (SELECT location FROM users WHERE userid = $1)::geography,
                 $2 * 1000
             )
-            ORDER BY 
-                CASE WHEN r.wastetype = 'hazardous' THEN 0 ELSE 1 END,
-                distance_km ASC
+            ORDER BY distance_km ASC
             LIMIT 100`, 
             [req.user.userid, maxDistance]
         );
 
-        // 3. Cluster reports
+        // 3. Cluster reports ensuring all points in cluster are within 20km of worker
         const reports = reportsResult.rows;
         if (reports.length === 0) {
-            return res.json({ message: 'No reports to cluster' });
+            return res.json({ message: 'No reports within 20km radius to cluster' });
         }
 
         // Calculate optimal cluster count (max 3 reports per cluster)
@@ -588,15 +586,27 @@ router.post('/group-and-assign-reports', authenticateToken, async (req, res) => 
             5 // Max 5 clusters per worker
         );
 
-        const clusters = kmeansClustering(reports, clusterCount);
-        
-        // 4. Assign to current worker (since this is triggered on login)
-        const assignments = clusters.map(cluster => ({
+        // Modified clustering function that respects distance constraints
+        const clusters = kmeansClustering(reports, clusterCount, {
+            maxDistanceFromWorker: maxDistance,
+            workerLocation: workerLocation
+        });
+
+        // Filter out any clusters that might have points beyond 20km (safety check)
+        const validClusters = clusters.filter(cluster => 
+            cluster.every(report => report.distance_km <= maxDistance)
+        );
+
+        if (validClusters.length === 0) {
+            return res.json({ message: 'No valid clusters within 20km radius' });
+        }
+
+        // 4. Assign to current worker
+        const assignments = validClusters.map(cluster => ({
             cluster,
             worker: {
                 userid: req.user.userid,
-                lat: workerCheck.rows[0].lat,
-                lng: workerCheck.rows[0].lng
+                ...workerLocation
             },
             distance: 0 // Since we're assigning to current worker
         }));
@@ -604,10 +614,12 @@ router.post('/group-and-assign-reports', authenticateToken, async (req, res) => 
         // 5. Create tasks
         const results = [];
         for (const { cluster } of assignments) {
-            const route = solveTSP(cluster, { 
-                lat: workerCheck.rows[0].lat, 
-                lng: workerCheck.rows[0].lng 
-            });
+            const route = solveTSP(cluster, workerLocation);
+
+            // Additional check that all points in route are within 20km
+            if (route.points.some(point => point.distance > maxDistance)) {
+                continue; // Skip this cluster if any point is beyond 20km
+            }
 
             const taskResult = await pool.query(`
                 INSERT INTO taskrequests (
@@ -631,11 +643,21 @@ router.post('/group-and-assign-reports', authenticateToken, async (req, res) => 
             results.push({
                 taskId: taskResult.rows[0].taskid,
                 reportCount: cluster.length,
-                distance: route.totalDistance
+                distance: route.totalDistance,
+                maxDistanceInCluster: Math.max(...cluster.map(r => r.distance_km))
             });
         }
 
-        res.json({ success: true, assignments: results });
+        if (results.length === 0) {
+            return res.json({ message: 'No valid tasks created within 20km radius' });
+        }
+
+        res.json({ 
+            success: true, 
+            assignments: results,
+            workerLocation: workerLocation,
+            maxDistance: maxDistance
+        });
     } catch (error) {
         console.error('Assignment error:', error);
         res.status(500).json({ error: error.message });
