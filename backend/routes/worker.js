@@ -286,11 +286,12 @@ router.post('/group-and-assign-reports', authenticateToken, async (req, res) => 
         };
 
         // 2. Get all not-collected reports within strict 20km radius
-        const maxDistance = 10; // Hard-coded 20km radius
+        const maxDistance = 10; // Hard-coded 10km radius 
         const reportsResult = await pool.query(`
             SELECT 
                 r.reportid, 
                 r.wastetype,
+                r.userid,  -- Added to include user ID for notifications
                 ST_X(r.location::geometry) AS lng,
                 ST_Y(r.location::geometry) AS lat,
                 ST_Distance(
@@ -383,14 +384,16 @@ router.post('/group-and-assign-reports', authenticateToken, async (req, res) => 
                 ]
             );
 
+            const taskId = taskResult.rows[0].taskid;
+            // Await notification to ensure it completes
+            await notifyUsers(cluster, taskId);
+
             results.push({
-                taskId: taskResult.rows[0].taskid,
+                taskId: taskId,
                 reportCount: cluster.length,
                 distance: route.totalDistance,
                 maxDistanceInCluster: Math.max(...cluster.map(r => r.distance_km))
             });
-            const taskId = taskResult.rows[0].taskid; 
-            await notifyUsers(cluster,taskId);
         }
 
         if (results.length === 0) {
@@ -410,28 +413,49 @@ router.post('/group-and-assign-reports', authenticateToken, async (req, res) => 
 });
 
 async function notifyUsers(cluster, taskId) {
-    const uniqueUserIds = [...new Set(cluster.map(r => r.userid))];
+    const uniqueUserIds = [...new Set(cluster.map(r => r.userid).filter(id => id))]; // Filter out null/undefined
     
+    if (uniqueUserIds.length === 0) {
+        console.warn('No valid user IDs found in cluster for notification');
+        return;
+    }
+
+    const notificationResults = [];
     for (const userId of uniqueUserIds) {
         try {
-            const user = await pool.query(`
-                SELECT phone FROM users WHERE userid = $1
-            `, [userId]);
+            const user = await pool.query(
+                `SELECT phone FROM users WHERE userid = $1`,
+                [userId]
+            );
             
-            if (user.rows[0]?.phone) {
-                const reports = cluster.filter(r => r.userid === userId);
-                const message = `Your reports (${reports.map(r => r.wastetype).join(', ')}) have been assigned. ID: ${taskId}`;
-                
-                await twilioClient.messages.create({
-                    body: message,
-                    from: process.env.TWILIO_PHONE_NUMBER,
-                    to: user.rows[0].phone
-                });
+            if (!user.rows[0]?.phone) {
+                console.warn(`No phone number found for user ${userId}`);
+                notificationResults.push({ userId, status: 'skipped', reason: 'No phone number' });
+                continue;
             }
+
+            const phone = user.rows[0].phone;
+            // Ensure phone number is in E.164 format (e.g., +12345678901)
+            const formattedPhone = phone.startsWith('+') ? phone : `+1${phone}`; // Adjust country code as needed
+
+            const reports = cluster.filter(r => r.userid === userId);
+            const message = `Your reports (${reports.map(r => r.wastetype).join(', ')}) have been assigned. ID: ${taskId}`;
+
+            const smsResult = await twilioClient.messages.create({
+                body: message,
+                from: process.env.TWILIO_PHONE_NUMBER,
+                to: formattedPhone
+            });
+
+            notificationResults.push({ userId, status: 'sent', sid: smsResult.sid });
         } catch (error) {
-            console.error(`Notification failed for user ${userId}:`, error);
+            console.error(`Notification failed for user ${userId}:`, error.message);
+            notificationResults.push({ userId, status: 'failed', error: error.message });
         }
     }
+
+    // Log notification outcomes for debugging
+    console.log('Notification results:', notificationResults);
 }
 
 // Updated K-Means clustering without hazardous priority
