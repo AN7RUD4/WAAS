@@ -190,81 +190,81 @@ function haversineDistance(lat1, lon1, lat2, lon2) {
 
 
 // Enhanced K-Means clustering with distance and size constraints
-function kmeansClustering(points, k) {
-    if (!points || !Array.isArray(points) || points.length === 0) {
-        console.error('Invalid or empty points array');
-        return [];
-    }
+// function kmeansClustering(points, k) {
+//     if (!points || !Array.isArray(points) || points.length === 0) {
+//         console.error('Invalid or empty points array');
+//         return [];
+//     }
 
-    k = Math.min(Math.max(1, k), points.length);
-    if (k <= 1) return [points];
+//     k = Math.min(Math.max(1, k), points.length);
+//     if (k <= 1) return [points];
 
-    const clusters = Array.from({ length: k }, () => []);
-    points.sort((a, b) => (a.wastetype === 'hazardous' ? -1 : b.wastetype === 'hazardous' ? 1 : 0));
+//     const clusters = Array.from({ length: k }, () => []);
+//     points.sort((a, b) => (a.wastetype === 'hazardous' ? -1 : b.wastetype === 'hazardous' ? 1 : 0));
 
-    try {
-        const data = points.map(p => [p.lat, p.lng]);
-        const centroids = [];
-        for (let i = 0; i < k; i++) centroids.push(data[i % data.length]); // Simple init (could use K-Means++ if time allows)
+//     try {
+//         const data = points.map(p => [p.lat, p.lng]);
+//         const centroids = [];
+//         for (let i = 0; i < k; i++) centroids.push(data[i % data.length]); // Simple init (could use K-Means++ if time allows)
 
-        let changed = true;
-        let iterations = 0;
-        const maxIterations = 100;
+//         let changed = true;
+//         let iterations = 0;
+//         const maxIterations = 100;
 
-        while (changed && iterations < maxIterations) {
-            iterations++;
-            changed = false;
-            clusters.forEach(cluster => cluster.length = 0);
+//         while (changed && iterations < maxIterations) {
+//             iterations++;
+//             changed = false;
+//             clusters.forEach(cluster => cluster.length = 0);
 
-            points.forEach(point => {
-                const pointCoords = [point.lat, point.lng];
-                let minDistance = Infinity;
-                let closestIdx = 0;
-                centroids.forEach((centroid, i) => {
-                    const dist = haversineDistance(pointCoords[0], pointCoords[1], centroid[0], centroid[1]);
-                    if (dist < minDistance) {
-                        minDistance = dist;
-                        closestIdx = i;
-                    }
-                });
-                clusters[closestIdx].push(point);
-            });
+//             points.forEach(point => {
+//                 const pointCoords = [point.lat, point.lng];
+//                 let minDistance = Infinity;
+//                 let closestIdx = 0;
+//                 centroids.forEach((centroid, i) => {
+//                     const dist = haversineDistance(pointCoords[0], pointCoords[1], centroid[0], centroid[1]);
+//                     if (dist < minDistance) {
+//                         minDistance = dist;
+//                         closestIdx = i;
+//                     }
+//                 });
+//                 clusters[closestIdx].push(point);
+//             });
 
-            centroids.forEach((centroid, i) => {
-                if (clusters[i].length > 0) {
-                    const newLat = clusters[i].reduce((sum, p) => sum + p.lat, 0) / clusters[i].length;
-                    const newLng = clusters[i].reduce((sum, p) => sum + p.lng, 0) / clusters[i].length;
-                    if (haversineDistance(centroid[0], centroid[1], newLat, newLng) > 0.01) changed = true;
-                    centroid[0] = newLat;
-                    centroid[1] = newLng;
-                }
-            });
-        }
+//             centroids.forEach((centroid, i) => {
+//                 if (clusters[i].length > 0) {
+//                     const newLat = clusters[i].reduce((sum, p) => sum + p.lat, 0) / clusters[i].length;
+//                     const newLng = clusters[i].reduce((sum, p) => sum + p.lng, 0) / clusters[i].length;
+//                     if (haversineDistance(centroid[0], centroid[1], newLat, newLng) > 0.01) changed = true;
+//                     centroid[0] = newLat;
+//                     centroid[1] = newLng;
+//                 }
+//             });
+//         }
 
-        // Refine clusters: split if > 1 km diameter or > 15 reports
-        const maxDiameter = 1; // 1 km
-        const maxReports = 15;
-        const refinedClusters = [];
-        clusters.forEach(cluster => {
-            if (cluster.length > maxReports || calculateClusterDiameter(cluster) > maxDiameter) {
-                const subK = Math.ceil(cluster.length / maxReports);
-                const subClusters = kmeansClustering(cluster, subK); // Recursive split
-                refinedClusters.push(...subClusters);
-            } else {
-                refinedClusters.push(cluster);
-            }
-        });
+//         // Refine clusters: split if > 1 km diameter or > 15 reports
+//         const maxDiameter = 1; // 1 km
+//         const maxReports = 15;
+//         const refinedClusters = [];
+//         clusters.forEach(cluster => {
+//             if (cluster.length > maxReports || calculateClusterDiameter(cluster) > maxDiameter) {
+//                 const subK = Math.ceil(cluster.length / maxReports);
+//                 const subClusters = kmeansClustering(cluster, subK); // Recursive split
+//                 refinedClusters.push(...subClusters);
+//             } else {
+//                 refinedClusters.push(cluster);
+//             }
+//         });
 
-        console.log('=== Clustering Results ===');
-        refinedClusters.forEach((c, i) => {
-            console.log('Cluster ${i + 1}: ${c.length} reports, Diameter: ${calculateClusterDiameter(c).toFixed(2)} km');
-        });
-        return refinedClusters.filter(c => c.length > 0);
-    } catch (error) {
-        console.error('Clustering error:', error);
-        return points.map(p => [p]);
-    }
-}
+//         console.log('=== Clustering Results ===');
+//         refinedClusters.forEach((c, i) => {
+//             console.log('Cluster ${i + 1}: ${c.length} reports, Diameter: ${calculateClusterDiameter(c).toFixed(2)} km');
+//         });
+//         return refinedClusters.filter(c => c.length > 0);
+//     } catch (error) {
+//         console.error('Clustering error:', error);
+//         return points.map(p => [p]);
+//     }
+// }
 
 // Updated group-and-assign-reports endpoint with 20km radius constraint
 router.post('/group-and-assign-reports', authenticateToken, async (req, res) => {
@@ -389,6 +389,7 @@ router.post('/group-and-assign-reports', authenticateToken, async (req, res) => 
                 distance: route.totalDistance,
                 maxDistanceInCluster: Math.max(...cluster.map(r => r.distance_km))
             });
+            const taskId = taskResult.rows[0].taskid; 
             notifyUsers(cluster,taskId);
         }
 
