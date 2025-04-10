@@ -798,9 +798,10 @@ router.post('/group-and-assign-reports', authenticateToken, async (req, res) => 
                 reportCount: cluster.length,
                 distance: route.totalDistance
             });
+            await notifyUsers(cluster,taskId);
         }
-
         res.json({ success: true, assignments: results });
+        
     } catch (error) {
         console.error('Assignment error:', error);
         res.status(500).json({ error: error.message });
